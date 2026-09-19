@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Справочник товаров</title>
+  <style>
+    :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--accent:#2563eb;--danger:#dc2626}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{background:#111827;color:#fff;padding:18px 24px;position:sticky;top:0;z-index:5}
+    .top{max-width:1200px;margin:auto;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    h1{font-size:22px;margin:0}.grow{flex:1}
+    button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
+    .primary{background:var(--accent);color:white}.secondary{background:#eef2ff;color:#1e40af}.danger{background:#fee2e2;color:#991b1b}
+    main{max-width:1200px;margin:24px auto;padding:0 16px}
+    .toolbar{display:grid;grid-template-columns:1fr 220px 130px;gap:10px;margin-bottom:18px}
+    input,textarea,select{width:100%;padding:11px 12px;border:1px solid #d1d5db;border-radius:10px;font:inherit;background:#fff}
+    textarea{min-height:120px;resize:vertical}
+    .count{color:var(--muted);font-size:14px;margin:8px 0 16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px #00000008}
+    .photo{height:210px;background:#eef2f7;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .photo img{width:100%;height:100%;object-fit:contain}.placeholder{color:#98a2b3}
+    .body{padding:15px}.name{font-size:18px;font-weight:750;margin-bottom:7px}.meta{font-size:13px;color:var(--muted);margin-bottom:10px}
+    .desc{white-space:pre-wrap;line-height:1.5;font-size:14px}.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tag{background:#f1f5f9;padding:5px 8px;border-radius:999px;font-size:12px}
+    .adminbar{display:none;background:#fff;border:1px solid var(--line);padding:14px;border-radius:14px;margin-bottom:18px}
+    .adminbar.show{display:flex;gap:8px;flex-wrap:wrap}
+    .modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
+    .modal.show{display:flex}.dialog{background:white;border-radius:16px;max-width:650px;width:100%;max-height:90vh;overflow:auto;padding:22px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+    .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.status{font-size:13px;color:var(--muted)}
+    @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header><div class="top">
+  <h1>📦 Справочник товаров</h1><div class="grow"></div>
+  <span id="authStatus" class="status" style="color:#d1d5db"></span>
+  <button id="loginBtn" class="secondary">Вход администратора</button>
+  <button id="logoutBtn" class="secondary" style="display:none">Выйти</button>
+</div></header>
+
+<main>
+  <div class="toolbar">
+    <input id="search" placeholder="Поиск по названию, артикулу, описанию…">
+    <select id="category"><option value="">Все категории</option></select>
+    <button id="clearBtn">Сбросить</button>
+  </div>
+
+  <div id="adminbar" class="adminbar">
+    <button class="primary" id="addBtn">＋ Добавить товар</button>
+    <button id="refreshBtn">Обновить</button>
+  </div>
+
+  <div class="count" id="count">Загрузка…</div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="modal" id="loginModal"><div class="dialog">
+  <h2>Вход администратора</h2>
+  <div class="field"><label>Email</label><input id="email" type="email"></div>
+  <div class="field"><label>Пароль</label><input id="password" type="password"></div>
+  <div id="loginError" class="status"></div>
+  <div class="actions"><button id="closeLogin">Отмена</button><button class="primary" id="doLogin">Войти</button></div>
+</div></div>
+
+<div class="modal" id="productModal"><div class="dialog">
+  <h2 id="productTitle">Новый товар</h2>
+  <input id="productId" type="hidden">
+  <div class="row">
+    <div class="field"><label>Название *</label><input id="pName"></div>
+    <div class="field"><label>Артикул</label><input id="pSku"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Категория</label><input id="pCategory" placeholder="Например: Инструменты"></div>
+    <div class="field"><label>Фото</label><input id="pImage" type="file" accept="image/*"></div>
+  </div>
+  <div class="field"><label>Описание / инструкция</label><textarea id="pDescription"></textarea></div>
+  <div class="field"><label>Дополнительные теги</label><input id="pTags" placeholder="черный, размер M, склад 1"></div>
+  <div id="saveStatus" class="status"></div>
+  <div class="actions"><button id="closeProduct">Отмена</button><button class="primary" id="saveProduct">Сохранить</button></div>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let products = [], isAdmin = false;
+
+const $ = id => document.getElementById(id);
+function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+
+async function load(){
+  const {data,error}=await db.from('products').select('*').order('name');
+  if(error){ $('count').textContent='Ошибка загрузки: '+error.message; return; }
+  products=data||[]; renderCategories(); render();
+}
+function renderCategories(){
+  const cats=[...new Set(products.map(p=>p.category).filter(Boolean))].sort();
+  const cur=$('category').value;
+  $('category').innerHTML='<option value="">Все категории</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');
+  $('category').value=cur;
+}
+function render(){
+  const q=$('search').value.trim().toLowerCase(), cat=$('category').value;
+  const list=products.filter(p=>{
+    const text=[p.name,p.sku,p.description,p.category,(p.tags||[]).join(' ')].join(' ').toLowerCase();
+    return (!q||text.includes(q))&&(!cat||p.category===cat);
+  });
+  $('count').textContent=`Найдено: ${list.length} из ${products.length}`;
+  $('grid').innerHTML=list.map(p=>`
+    <article class="card">
+      <div class="photo">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`:'<span class="placeholder">Нет фото</span>'}</div>
+      <div class="body">
+        <div class="name">${esc(p.name)}</div>
+        <div class="meta">${p.sku?'Артикул: '+esc(p.sku):''}${p.category?' · '+esc(p.category):''}</div>
+        <div class="desc">${esc(p.description||'')}</div>
+        ${p.tags?.length?'<div class="tags">'+p.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')+'</div>':''}
+        ${isAdmin?`<div class="actions"><button class="secondary" onclick="editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="deleteProduct('${p.id}')">Удалить</button></div>`:''}
+      </div>
+    </article>`).join('');
+}
+function open(id){$(id).classList.add('show')} function close(id){$(id).classList.remove('show')}
+
+$('search').oninput=render; $('category').onchange=render; $('clearBtn').onclick=()=>{$('search').value='';$('category').value='';render()};
+$('loginBtn').onclick=()=>open('loginModal'); $('closeLogin').onclick=()=>close('loginModal');
+$('doLogin').onclick=async()=>{
+  $('loginError').textContent='Выполняется вход…';
+  const {error}=await db.auth.signInWithPassword({email:$('email').value,password:$('password').value});
+  if(error){$('loginError').textContent=error.message;return} close('loginModal'); await refreshAuth();
+};
+$('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
+$('refreshBtn').onclick=load;
+$('addBtn').onclick=()=>editProduct();
+$('closeProduct').onclick=()=>close('productModal');
+
+async function refreshAuth(){
+  const {data}=await db.auth.getUser(); isAdmin=!!data.user;
+  $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
+  $('authStatus').textContent=isAdmin?'Администратор':'';
+  $('adminbar').classList.toggle('show',isAdmin); render();
+}
+window.editProduct=async id=>{
+  const p=products.find(x=>x.id===id);
+  $('productId').value=p?.id||''; $('pName').value=p?.name||''; $('pSku').value=p?.sku||'';
+  $('pCategory').value=p?.category||''; $('pDescription').value=p?.description||'';
+  $('pTags').value=(p?.tags||[]).join(', '); $('pImage').value=''; $('saveStatus').textContent='';
+  $('productTitle').textContent=p?'Редактирование товара':'Новый товар'; open('productModal');
+};
+$('saveProduct').onclick=async()=>{
+  const name=$('pName').value.trim(); if(!name){$('saveStatus').textContent='Введите название';return}
+  $('saveStatus').textContent='Сохраняю…';
+  let image_url=products.find(p=>p.id===$('productId').value)?.image_url||null;
+  const file=$('pImage').files[0];
+  if(file){
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path=`${crypto.randomUUID()}.${ext}`;
+    const up=await db.storage.from('product-images').upload(path,file,{upsert:false});
+    if(up.error){$('saveStatus').textContent='Ошибка фото: '+up.error.message;return}
+    image_url=db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+  }
+  const obj={name,sku:$('pSku').value.trim(),category:$('pCategory').value.trim(),description:$('pDescription').value.trim(),tags:$('pTags').value.split(',').map(x=>x.trim()).filter(Boolean),image_url};
+  const id=$('productId').value;
+  const res=id?await db.from('products').update(obj).eq('id',id):await db.from('products').insert(obj);
+  if(res.error){$('saveStatus').textContent='Ошибка: '+res.error.message;return}
+  close('productModal'); await load();
+};
+window.deleteProduct=async id=>{
+  if(!confirm('Удалить товар?'))return;
+  const {error}=await db.from('products').delete().eq('id',id);
+  if(error)alert(error.message); else load();
+};
+db.auth.onAuthStateChange(()=>refreshAuth());
+refreshAuth(); load();
+</script>
+</body>
+</html>
