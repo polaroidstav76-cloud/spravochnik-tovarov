@@ -18,7 +18,7 @@
     textarea{min-height:120px;resize:vertical}
     .count{color:var(--muted);font-size:14px;margin:8px 0 16px}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px #00000008}
+    .card{cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px #00000008}
     .photo{height:210px;background:#eef2f7;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .photo img{width:100%;height:100%;object-fit:contain}.placeholder{color:#98a2b3}
     .body{padding:15px}.name{font-size:18px;font-weight:750;margin-bottom:7px}.meta{font-size:13px;color:var(--muted);margin-bottom:10px}
@@ -27,7 +27,8 @@
     .adminbar.show{display:flex;gap:8px;flex-wrap:wrap}
     .modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
     .modal.show{display:flex}.dialog{background:white;border-radius:16px;max-width:650px;width:100%;max-height:90vh;overflow:auto;padding:22px}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}
+    .blocks{display:flex;flex-direction:column;gap:10px}.block{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc}.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.block-type{font-size:12px;font-weight:800;color:var(--muted)}.block textarea{min-height:90px}.block img{max-width:100%;max-height:220px;display:block;margin:6px auto;border-radius:8px}.block-actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 10px;font-size:12px}.instruction{line-height:1.6}.instruction img{max-width:100%;height:auto;display:block;margin:12px 0;border-radius:10px}.instruction-text{white-space:pre-wrap;margin:0 0 10px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
     .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.status{font-size:13px;color:var(--muted)}
     @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
   </style>
@@ -64,6 +65,12 @@
   <div class="actions"><button id="closeLogin">Отмена</button><button class="primary" id="doLogin">Войти</button></div>
 </div></div>
 
+<div class="modal" id="viewModal"><div class="dialog">
+  <h2 id="viewTitle">Товар</h2>
+  <div id="viewContent"></div>
+  <div class="actions"><button id="closeView">Закрыть</button></div>
+</div></div>
+
 <div class="modal" id="productModal"><div class="dialog">
   <h2 id="productTitle">Новый товар</h2>
   <input id="productId" type="hidden">
@@ -75,7 +82,14 @@
     <div class="field"><label>Категория</label><input id="pCategory" placeholder="Например: Инструменты"></div>
     <div class="field"><label>Фото</label><input id="pImage" type="file" accept="image/*"></div>
   </div>
-  <div class="field"><label>Описание / инструкция</label><textarea id="pDescription"></textarea></div>
+  <div class="field"><label>Инструкция</label>
+    <div class="block-actions" style="margin-bottom:10px">
+      <button type="button" id="addTextBlock" class="secondary small">＋ Добавить текст</button>
+      <button type="button" id="addImageBlock" class="secondary small">＋ Добавить изображение</button>
+    </div>
+    <div id="editorBlocks" class="blocks"></div>
+    <div class="status" style="margin-top:8px">Блоки можно перемещать вверх/вниз и располагать в любом порядке.</div>
+  </div>
   <div class="field"><label>Дополнительные теги</label><input id="pTags" placeholder="черный, размер M, склад 1"></div>
   <div id="saveStatus" class="status"></div>
   <div class="actions"><button id="closeProduct">Отмена</button><button class="primary" id="saveProduct">Сохранить</button></div>
@@ -89,7 +103,35 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let products = [], isAdmin = false;
 
 const $ = id => document.getElementById(id);
-function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+let editorBlocks=[];
+function parseBlocks(raw){
+  if(!raw) return [];
+  try{
+    const x=JSON.parse(raw);
+    if(Array.isArray(x) && x.every(b=>b && typeof b==='object' && ['text','image'].includes(b.type))) return x;
+  }catch(e){}
+  return [{type:'text',text:String(raw)}];
+}
+function getInstructionText(raw){return parseBlocks(raw).filter(b=>b.type==='text').map(b=>b.text||'').join(' ');}
+function renderInstruction(raw){
+  const blocks=parseBlocks(raw);
+  if(!blocks.length) return '<div class="desc">Описание отсутствует</div>';
+  return '<div class="instruction">'+blocks.map(b=>b.type==='image' ? (b.url?`<img src="${esc(b.url)}" alt="Скриншот инструкции">`:'') : `<p class="instruction-text">${esc(b.text||'')}</p>`).join('')+'</div>';
+}
+function renderEditorBlocks(){
+  const el=$('editorBlocks');
+  if(!editorBlocks.length){el.innerHTML='<div class="status">Добавьте первый блок: текст или изображение.</div>';return;}
+  el.innerHTML=editorBlocks.map((b,i)=>{
+    if(b.type==='text') return `<div class="block"><div class="block-head"><span class="block-type">ТЕКСТ</span><div class="block-actions"><button type="button" class="small" onclick="moveBlock(${i},-1)">↑</button><button type="button" class="small" onclick="moveBlock(${i},1)">↓</button><button type="button" class="danger small" onclick="removeBlock(${i})">Удалить</button></div></div><textarea oninput="editorBlocks[${i}].text=this.value" placeholder="Введите текст инструкции...">${esc(b.text||'')}</textarea></div>`;
+    return `<div class="block"><div class="block-head"><span class="block-type">ИЗОБРАЖЕНИЕ</span><div class="block-actions"><button type="button" class="small" onclick="moveBlock(${i},-1)">↑</button><button type="button" class="small" onclick="moveBlock(${i},1)">↓</button><button type="button" class="danger small" onclick="removeBlock(${i})">Удалить</button></div></div>${b.url?`<img src="${esc(b.url)}" alt="Предпросмотр">`:''}<input type="file" accept="image/*" onchange="selectBlockImage(${i},this)"><div class="status">${b.fileName?'Выбрано: '+esc(b.fileName):(b.url?'Текущее изображение':'Выберите изображение')}</div></div>`;
+  }).join('');
+}
+window.moveBlock=(i,d)=>{const j=i+d;if(j<0||j>=editorBlocks.length)return;[editorBlocks[i],editorBlocks[j]]=[editorBlocks[j],editorBlocks[i]];renderEditorBlocks()};
+window.removeBlock=i=>{editorBlocks.splice(i,1);renderEditorBlocks()};
+window.selectBlockImage=(i,input)=>{const f=input.files[0];if(!f)return;editorBlocks[i].file=f;editorBlocks[i].fileName=f.name;renderEditorBlocks()};
+function addTextBlock(){editorBlocks.push({type:'text',text:''});renderEditorBlocks()}
+function addImageBlock(){editorBlocks.push({type:'image',url:'',file:null,fileName:''});renderEditorBlocks()}
 
 async function load(){
   const {data,error}=await db.from('products').select('*').order('name');
@@ -110,18 +152,29 @@ function render(){
   });
   $('count').textContent=`Найдено: ${list.length} из ${products.length}`;
   $('grid').innerHTML=list.map(p=>`
-    <article class="card">
+    <article class="card" onclick="viewProduct('${p.id}')">
       <div class="photo">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`:'<span class="placeholder">Нет фото</span>'}</div>
       <div class="body">
         <div class="name">${esc(p.name)}</div>
         <div class="meta">${p.sku?'Артикул: '+esc(p.sku):''}${p.category?' · '+esc(p.category):''}</div>
-        <div class="desc">${esc(p.description||'')}</div>
+        <div class="desc">${esc(getInstructionText(p.description))}</div>
         ${p.tags?.length?'<div class="tags">'+p.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')+'</div>':''}
-        ${isAdmin?`<div class="actions"><button class="secondary" onclick="editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="deleteProduct('${p.id}')">Удалить</button></div>`:''}
+        ${isAdmin?`<div class="actions"><button class="secondary" onclick="event.stopPropagation();editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="event.stopPropagation();deleteProduct('${p.id}')">Удалить</button></div>`:''}
       </div>
     </article>`).join('');
 }
 function open(id){$(id).classList.add('show')} function close(id){$(id).classList.remove('show')}
+window.viewProduct=id=>{
+  const p=products.find(x=>x.id===id); if(!p)return;
+  $('viewTitle').textContent=p.name||'Товар';
+  $('viewContent').innerHTML=`
+    ${p.image_url?`<div class="photo" style="height:320px;margin-bottom:16px"><img src="${esc(p.image_url)}" alt="${esc(p.name)}"></div>`:''}
+    <div class="meta">${p.sku?'Артикул: '+esc(p.sku):''}${p.category?' · '+esc(p.category):''}</div>
+    ${renderInstruction(p.description)}
+    ${p.tags?.length?'<div class="tags">'+p.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')+'</div>':''}`;
+  open('viewModal');
+};
+$('closeView').onclick=()=>close('viewModal');
 
 $('search').oninput=render; $('category').onchange=render; $('clearBtn').onclick=()=>{$('search').value='';$('category').value='';render()};
 $('loginBtn').onclick=()=>open('loginModal'); $('closeLogin').onclick=()=>close('loginModal');
@@ -144,10 +197,13 @@ async function refreshAuth(){
 window.editProduct=async id=>{
   const p=products.find(x=>x.id===id);
   $('productId').value=p?.id||''; $('pName').value=p?.name||''; $('pSku').value=p?.sku||'';
-  $('pCategory').value=p?.category||''; $('pDescription').value=p?.description||'';
+  $('pCategory').value=p?.category||'';
   $('pTags').value=(p?.tags||[]).join(', '); $('pImage').value=''; $('saveStatus').textContent='';
-  $('productTitle').textContent=p?'Редактирование товара':'Новый товар'; open('productModal');
+  editorBlocks=parseBlocks(p?.description||'').map(b=>({...b,file:null,fileName:''}));
+  $('productTitle').textContent=p?'Редактирование товара':'Новый товар';
+  renderEditorBlocks(); open('productModal');
 };
+$('addTextBlock').onclick=addTextBlock; $('addImageBlock').onclick=addImageBlock;
 $('saveProduct').onclick=async()=>{
   const name=$('pName').value.trim(); if(!name){$('saveStatus').textContent='Введите название';return}
   $('saveStatus').textContent='Сохраняю…';
@@ -160,7 +216,18 @@ $('saveProduct').onclick=async()=>{
     if(up.error){$('saveStatus').textContent='Ошибка фото: '+up.error.message;return}
     image_url=db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
   }
-  const obj={name,sku:$('pSku').value.trim(),category:$('pCategory').value.trim(),description:$('pDescription').value.trim(),tags:$('pTags').value.split(',').map(x=>x.trim()).filter(Boolean),image_url};
+  for(const b of editorBlocks){
+    if(b.type==='image' && b.file){
+      const ext=(b.file.name.split('.').pop()||'jpg').toLowerCase();
+      const path=`${crypto.randomUUID()}.${ext}`;
+      const up=await db.storage.from('product-images').upload(path,b.file,{upsert:false});
+      if(up.error){$('saveStatus').textContent='Ошибка изображения: '+up.error.message;return}
+      b.url=db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+      b.file=null;
+    }
+  }
+  const cleanBlocks=editorBlocks.map(b=>b.type==='text'?{type:'text',text:b.text||''}:{type:'image',url:b.url||''}).filter(b=>b.type==='text'?(b.text.trim()!==''):b.url);
+  const obj={name,sku:$('pSku').value.trim(),category:$('pCategory').value.trim(),description:JSON.stringify(cleanBlocks),tags:$('pTags').value.split(',').map(x=>x.trim()).filter(Boolean),image_url};
   const id=$('productId').value;
   const res=id?await db.from('products').update(obj).eq('id',id):await db.from('products').insert(obj);
   if(res.error){$('saveStatus').textContent='Ошибка: '+res.error.message;return}
