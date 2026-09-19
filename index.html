@@ -30,6 +30,7 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}
     .blocks{display:flex;flex-direction:column;gap:10px}.block{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc}.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.block-type{font-size:12px;font-weight:800;color:var(--muted)}.block textarea{min-height:90px}.rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.rich-toolbar button{padding:6px 9px;font-size:12px}.rich-text{min-height:90px;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff;outline:none;line-height:1.5}.rich-text:focus{border-color:var(--accent);box-shadow:0 0 0 2px #2563eb22}.rich-text h2{font-size:1.4em;margin:.4em 0}.rich-text h3{font-size:1.2em;margin:.4em 0}.rich-text p{margin:.4em 0}.block img{max-width:100%;max-height:220px;display:block;margin:6px auto;border-radius:8px}.block-actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 10px;font-size:12px}.instruction{line-height:1.6}.instruction img{max-width:100%;height:auto;display:block;margin:12px 0;border-radius:10px}.instruction-text{white-space:pre-wrap;margin:0 0 10px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
     .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.status{font-size:13px;color:var(--muted)}
+    .calc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 20px;box-shadow:0 2px 8px #00000008}.calc-card h2{margin:0 0 6px;font-size:20px}.calc-row{margin-top:14px}.calc-actions{justify-content:flex-start;margin-top:4px}.calc-result{margin-top:14px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);padding:14px;line-height:1.6;min-height:20px}.calc-result:empty{display:none}.calc-total{font-size:22px;font-weight:800;margin-top:4px}.calc-min{color:var(--muted);font-size:13px}
     @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
   </style>
 </head>
@@ -52,6 +53,21 @@
     <button class="primary" id="addBtn">＋ Добавить товар</button>
     <button id="refreshBtn">Обновить</button><button id="testsBtn" class="secondary">📝 Тест</button>
   </div>
+
+  <section class="calc-card" aria-labelledby="calcTitle">
+    <div class="calc-head">
+      <div>
+        <h2 id="calcTitle">Калькулятор стоимости</h2>
+        <div class="status">Размер указывается в сантиметрах. Цена вводится за 1 м² и одновременно является минимальной стоимостью заказа.</div>
+      </div>
+    </div>
+    <div class="row calc-row">
+      <div class="field"><label for="calcSize">Размер, см</label><input id="calcSize" placeholder="Например: 132×80" inputmode="text"></div>
+      <div class="field"><label for="calcPrice">Цена материала, ₽/м²</label><input id="calcPrice" type="number" min="0" step="0.01" placeholder="Например: 650"></div>
+    </div>
+    <div class="actions calc-actions"><button id="calcBtn" class="primary">Рассчитать</button></div>
+    <div id="calcResult" class="calc-result" aria-live="polite"></div>
+  </section>
 
   <div class="count" id="count">Загрузка…</div><div style="margin-bottom:16px"><button id="openTraineeTests" class="secondary">📝 Пройти тест</button></div>
   <div class="grid" id="grid"></div>
@@ -213,6 +229,26 @@ $('doLogin').onclick=async()=>{
 };
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
 $('refreshBtn').onclick=load; $('testsBtn').onclick=openTestAdmin; $('openTraineeTests').onclick=openTraineeTests; $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
+
+function parseCalcSize(value){
+  const m=String(value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
+  if(!m) return null;
+  const widthCm=Number(m[1]), heightCm=Number(m[2]);
+  if(!(widthCm>0) || !(heightCm>0) || !Number.isFinite(widthCm) || !Number.isFinite(heightCm)) return null;
+  return {widthCm,heightCm};
+}
+function money(v){return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)+' ₽'}
+$('calcBtn').onclick=()=>{
+  const size=parseCalcSize($('calcSize').value);
+  const price=Number(String($('calcPrice').value).replace(',','.'));
+  if(!size){$('calcResult').innerHTML='<b>Введите размер в формате 132×80 см.</b>';return}
+  if(!(price>0) || !Number.isFinite(price)){$('calcResult').innerHTML='<b>Введите цену материала за 1 м².</b>';return}
+  const widthM=size.widthCm/100, heightM=size.heightCm/100, area=widthM*heightM, calculated=area*price, total=Math.max(calculated,price);
+  const minApplied=calculated<price;
+  $('calcResult').innerHTML=`<div>Размер: <b>${size.widthCm} × ${size.heightCm} см</b> → ${widthM.toFixed(2)} × ${heightM.toFixed(2)} м</div><div>Площадь: <b>${area.toFixed(4)} м²</b></div><div>Расчёт по площади: <b>${money(calculated)}</b></div><div class="calc-total">Стоимость заказа: ${money(total)}</div>${minApplied?`<div class="calc-min">Применена минимальная стоимость заказа: ${money(price)}</div>`:''}`;
+};
+$('calcSize').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
+$('calcPrice').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
 $('addBtn').onclick=()=>editProduct();
 $('closeProduct').onclick=()=>close('productModal');
 
