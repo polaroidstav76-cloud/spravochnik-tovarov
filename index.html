@@ -50,10 +50,10 @@
 
   <div id="adminbar" class="adminbar">
     <button class="primary" id="addBtn">＋ Добавить товар</button>
-    <button id="refreshBtn">Обновить</button>
+    <button id="refreshBtn">Обновить</button><button id="testsBtn" class="secondary">📝 Тест</button>
   </div>
 
-  <div class="count" id="count">Загрузка…</div>
+  <div class="count" id="count">Загрузка…</div><div style="margin-bottom:16px"><button id="openTraineeTests" class="secondary">📝 Пройти тест</button></div>
   <div class="grid" id="grid"></div>
 </main>
 
@@ -95,6 +95,8 @@
   <div class="actions"><button id="closeProduct">Отмена</button><button class="primary" id="saveProduct">Сохранить</button></div>
 </div></div>
 
+<div class="modal" id="testModal"><div class="dialog"><h2 id="testTitle">Тест</h2><div id="testIntro" class="status"></div><div class="field"><label>ФИО стажёра</label><input id="traineeName"></div><div id="testQuestions"></div><div id="testStatus" class="status"></div><div class="actions"><button id="closeTest">Закрыть</button><button class="primary" id="submitTest">Отправить ответы</button></div></div></div>
+<div class="modal" id="testAdminModal"><div class="dialog"><h2>Тестирование — администратор</h2><div id="adminTests"></div><hr><h3>Создать тест</h3><input id="newTestName" placeholder="Название теста"><div id="adminQuestionEditor"></div><button id="addQuestion" class="secondary small">＋ Добавить вопрос</button><div class="actions"><button id="closeTestAdmin">Закрыть</button><button class="primary" id="saveTest">Сохранить тест</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -114,10 +116,15 @@ function parseBlocks(raw){
   return [{type:'text',text:String(raw)}];
 }
 function getInstructionText(raw){return parseBlocks(raw).filter(b=>b.type==='text').map(b=>b.text||'').join(' ');}
+function linkifyRichHtml(s=''){
+  return String(s).replace(/(?<!["'=])(https?:\/\/[^\s<]+)/g, m=>{
+    const clean=m.replace(/[),.;!?]+$/,''); return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>`;
+  });
+}
 function renderInstruction(raw){
   const blocks=parseBlocks(raw);
   if(!blocks.length) return '<div class="desc">Описание отсутствует</div>';
-  return '<div class="instruction">'+blocks.map(b=>b.type==='image' ? (b.url?`<img src="${esc(b.url)}" alt="Скриншот инструкции">`:'') : `<div class="instruction-text">${b.html || esc(b.text||'')}</div>`).join('')+'</div>';
+  return '<div class="instruction">'+blocks.map(b=>b.type==='image' ? (b.url?`<img src="${esc(b.url)}" alt="Скриншот инструкции">`:'') : `<div class="instruction-text">${linkifyRichHtml(b.html || esc(b.text||''))}</div>`).join('')+'</div>';
 }
 function richTextToolbar(i){
   return `<div class="rich-toolbar">
@@ -139,7 +146,7 @@ function renderEditorBlocks(){
   const el=$('editorBlocks');
   if(!editorBlocks.length){el.innerHTML='<div class="status">Добавьте первый блок: текст или изображение.</div>';return;}
   el.innerHTML=editorBlocks.map((b,i)=>{
-    if(b.type==='text') return `<div class="block"><div class="block-head"><span class="block-type">ТЕКСТ</span><div class="block-actions"><button type="button" class="small" onclick="moveBlock(${i},-1)">↑</button><button type="button" class="small" onclick="moveBlock(${i},1)">↓</button><button type="button" class="danger small" onclick="removeBlock(${i})">Удалить</button></div></div>${richTextToolbar(i)}<div class="rich-text" contenteditable="true" data-block="${i}" oninput="editorBlocks[${i}].html=this.innerHTML" onblur="editorBlocks[${i}].html=this.innerHTML">${b.html || esc(b.text||'')}</div></div>`;
+    if(b.type==='text') return `<div class="block"><div class="block-head"><span class="block-type">ТЕКСТ</span><div class="block-actions"><button type="button" class="small" onclick="moveBlock(${i},-1)">↑</button><button type="button" class="small" onclick="moveBlock(${i},1)">↓</button><button type="button" class="danger small" onclick="removeBlock(${i})">Удалить</button></div></div>${richTextToolbar(i)}<div class="rich-text" contenteditable="true" data-block="${i}" oninput="editorBlocks[${i}].html=this.innerHTML" onblur="editorBlocks[${i}].html=this.innerHTML">${linkifyRichHtml(b.html || esc(b.text||''))}</div></div>`;
     return `<div class="block"><div class="block-head"><span class="block-type">ИЗОБРАЖЕНИЕ</span><div class="block-actions"><button type="button" class="small" onclick="moveBlock(${i},-1)">↑</button><button type="button" class="small" onclick="moveBlock(${i},1)">↓</button><button type="button" class="danger small" onclick="removeBlock(${i})">Удалить</button></div></div>${b.url?`<img src="${esc(b.url)}" alt="Предпросмотр">`:''}<input type="file" accept="image/*" onchange="selectBlockImage(${i},this)"><div class="status">${b.fileName?'Выбрано: '+esc(b.fileName):(b.url?'Текущее изображение':'Выберите изображение')}</div></div>`;
   }).join('');
 }
@@ -180,8 +187,6 @@ function render(){
       <div class="body">
         <div class="name">${esc(p.name)}</div>
         <div class="meta">${p.sku?'Артикул: '+esc(p.sku):''}${p.category?' · '+esc(p.category):''}</div>
-        <div class="desc">${esc(getInstructionText(p.description))}</div>
-        ${p.tags?.length?'<div class="tags">'+p.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')+'</div>':''}
         ${isAdmin?`<div class="actions"><button class="secondary" onclick="event.stopPropagation();editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="event.stopPropagation();deleteProduct('${p.id}')">Удалить</button></div>`:''}
       </div>
     </article>`).join('');
@@ -207,15 +212,30 @@ $('doLogin').onclick=async()=>{
   if(error){$('loginError').textContent=error.message;return} close('loginModal'); await refreshAuth();
 };
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
-$('refreshBtn').onclick=load;
+$('refreshBtn').onclick=load; $('testsBtn').onclick=openTestAdmin; $('openTraineeTests').onclick=openTraineeTests; $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
 $('addBtn').onclick=()=>editProduct();
 $('closeProduct').onclick=()=>close('productModal');
+
+
+let activeTest=null;
+const norm=s=>String(s||'').toLowerCase().trim().replace(/ё/g,'е').replace(/\s+/g,' ').replace(/[.,!?;:()[\]{}"«»]/g,'');
+const match=(a,k)=>String(k||'').split(';').map(norm).filter(Boolean).some(x=>norm(a)===x||norm(a).includes(x));
+async function getTests(){const r=await db.from('tests').select('*').order('created_at',{ascending:false});return r.data||[]}
+async function openTraineeTests(){const ts=await getTests();$('testIntro').innerHTML=ts.length?ts.map(t=>`<div class="block"><b>${esc(t.name)}</b><br><button class="primary small" onclick="startTest('${t.id}')">Начать</button></div>`).join(''):'Тестов пока нет';$('testQuestions').innerHTML='';$('traineeName').value='';$('submitTest').style.display='none';open('testModal')}
+window.startTest=async id=>{const t=(await db.from('tests').select('*').eq('id',id).single()).data;const qs=(await db.from('test_questions').select('*').eq('test_id',id).order('sort_order')).data||[];activeTest={...t,questions:qs};$('testTitle').textContent=t.name;$('testIntro').textContent=`Вопросов: ${qs.length}. Результат не показывается стажёру.`;$('testQuestions').innerHTML=qs.map((q,i)=>`<div class="field"><label>${i+1}. ${esc(q.question)}</label><textarea id="a_${q.id}"></textarea></div>`).join('');$('submitTest').style.display='inline-block'};
+$('submitTest').onclick=async()=>{if(!activeTest)return;const name=$('traineeName').value.trim();if(!name){$('testStatus').textContent='Введите ФИО';return}const ans=activeTest.questions.map(q=>({q,a:$('a_'+q.id).value.trim()}));const score=Math.round(ans.filter(x=>match(x.a,x.q.correct_answer)).length*100/Math.max(1,ans.length));const r=await db.from('test_attempts').insert({test_id:activeTest.id,trainee_name:name,score,stage:activeTest.stage||1,status:'completed'}).select().single();if(r.error){$('testStatus').textContent='Ошибка: '+r.error.message;return}await db.from('test_answers').insert(ans.map(x=>({attempt_id:r.data.id,question_id:x.q.id,answer:x.a,is_correct:match(x.a,x.q.correct_answer)})));$('testStatus').textContent='Ответы приняты. Результат доступен только администратору.';$('submitTest').style.display='none'};
+let qrows=[];
+function addQ(){const d=document.createElement('div');d.className='block';d.innerHTML='<textarea class="qq" placeholder="Вопрос"></textarea><input class="qa" placeholder="Правильный ответ (варианты через ;)"><input class="qc" placeholder="Категория"><input class="qp" placeholder="Товар / артикул"><button type="button" class="danger small" onclick="this.parentElement.remove()">Удалить</button>';$('adminQuestionEditor').appendChild(d)}
+async function openTestAdmin(){if(!isAdmin){open('loginModal');return}$('adminQuestionEditor').innerHTML='';addQ();const ts=await getTests();const aa=(await db.from('test_attempts').select('*').order('created_at',{ascending:false}).limit(100)).data||[];$('adminTests').innerHTML=ts.map(t=>`<div class="block"><b>${esc(t.name)}</b></div>`).join('')+'<h3>Результаты</h3>'+aa.map(a=>`<div class="block"><b>${esc(a.trainee_name)}</b> — ${a.score}% — ${new Date(a.created_at).toLocaleString('ru-RU')}<br><button class="secondary small" onclick="showAttempt('${a.id}')">Вопросы и ответы</button></div>`).join('')||'<div class="status">Нет данных</div>';open('testAdminModal')}
+window.showAttempt=async id=>{const a=(await db.from('test_attempts').select('*').eq('id',id).single()).data;const an=(await db.from('test_answers').select('*').eq('attempt_id',id)).data||[];const qs=(await db.from('test_questions').select('*').in('id',an.map(x=>x.question_id))).data||[];const m=Object.fromEntries(qs.map(q=>[q.id,q]));const wrong=an.filter(x=>!x.is_correct);const hours=a.score<60?8:a.score<80?4:a.score<90?2:0;const cats=[...new Set(wrong.map(x=>m[x.question_id]?.category).filter(Boolean))];$('adminTests').innerHTML=`<h3>${esc(a.trainee_name)} — ${a.score}%</h3><p>Дополнительная стажировка: примерно <b>${hours} ч.</b><br>Повторить: ${cats.length?cats.map(esc).join(', '):'существенных слабых категорий не выявлено'}</p>`+an.map(x=>`<div class="block"><b>Вопрос:</b> ${esc(m[x.question_id]?.question||'')}<br><b>Ответ:</b> ${esc(x.answer||'')}<br><b>Правильный:</b> ${esc(m[x.question_id]?.correct_answer||'')}<br>${x.is_correct?'Правильно':'Неправильно'}</div>`).join('')+`<button class="secondary" onclick="openTestAdmin()">Назад</button>`}
+$('addQuestion').onclick=addQ;
+$('saveTest').onclick=async()=>{const name=$('newTestName').value.trim();const qs=[...$('adminQuestionEditor').children].map((d,i)=>({question:d.querySelector('.qq').value.trim(),correct_answer:d.querySelector('.qa').value.trim(),category:d.querySelector('.qc').value.trim(),product_name:d.querySelector('.qp').value.trim(),sort_order:i})).filter(x=>x.question&&x.correct_answer);if(!name||!qs.length){alert('Введите название и вопросы');return}const t=(await db.from('tests').insert({name,stage:1}).select().single()).data;await db.from('test_questions').insert(qs.map(q=>({...q,test_id:t.id})));alert('Тест создан');openTestAdmin()};
 
 async function refreshAuth(){
   const {data}=await db.auth.getUser(); isAdmin=!!data.user;
   $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=isAdmin?'Администратор':'';
-  $('adminbar').classList.toggle('show',isAdmin); render();
+  $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; render();
 }
 window.editProduct=async id=>{
   const p=products.find(x=>x.id===id);
