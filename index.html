@@ -210,6 +210,15 @@
   <div class="field"><label>Последние 4 цифры номера (если несколько совпадений — введите полный номер)</label><input id="clubLookup" placeholder="Например: 4567" inputmode="tel"></div>
   <div class="actions" style="justify-content:flex-start"><button id="clubLookupBtn" class="secondary">🔎 Информация о клиенте</button></div>
   <div id="clubCustomerResults"></div>
+  <hr>
+  <h3>🧮 Рассчитать максимум списания</h3>
+  <div class="status">Введите сумму заказа — программа покажет максимальное количество баллов, которое можно использовать по правилу 30%.</div>
+  <div class="row">
+    <div class="field"><label>Сумма заказа, ₽</label><input id="clubRedeemCalcAmount" type="number" min="0" step="0.01" placeholder="500"></div>
+    <div class="field"><label>Максимум баллов к списанию, ₽</label><input id="clubRedeemCalcResult" readonly placeholder="150,00 ₽"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="clubRedeemCalcBtn" class="secondary">Рассчитать</button></div>
+  <div id="clubRedeemCalcStatus" class="status"></div>
   <div class="actions"><button id="closeClub">Закрыть</button></div>
 </div></div>
 
@@ -370,6 +379,7 @@ $('doLogin').onclick=async()=>{
 };
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
 $('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
+$('clubRedeemCalcBtn').onclick=()=>{const amount=Number($('clubRedeemCalcAmount').value);if(!(amount>0)){ $('clubRedeemCalcResult').value=''; $('clubRedeemCalcStatus').textContent='Введите сумму заказа больше 0 ₽.'; return; } const max=Math.round(amount*0.30*100)/100; $('clubRedeemCalcResult').value=loyaltyMoney(max); $('clubRedeemCalcStatus').textContent='Максимально можно списать 30% от суммы заказа.';};
 
 function parseCalcSize(value){
   const m=String(value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
