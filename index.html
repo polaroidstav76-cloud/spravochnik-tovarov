@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Справочник товаров</title>
+  <title>ПОЛАРОИД</title>
   <style>
     :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--accent:#2563eb;--danger:#dc2626}
     *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -40,11 +40,38 @@
 @media(max-width:950px){.sales-workspace{grid-template-columns:1fr;height:calc(100vh - 120px);overflow:auto}.sales-workspace-left{border-right:0;border-bottom:1px solid #dbe4ef;max-height:260px}.sales-home-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-item-row{grid-template-columns:1fr 80px 110px 110px 34px}}
 @media(max-width:700px){.sales-grid,.report-grid,.sale-meta-grid,.sale-payment-grid{grid-template-columns:1fr}.sales-home-actions{grid-template-columns:1fr}.sales-item-row{grid-template-columns:1fr 1fr}.sales-item-row .sales-line-total{grid-column:1/-1}}
     @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
-  </style>
+  
+/* Modern POLAROID visual refresh */
+:root{--bg:#f3f6fb;--card:#ffffff;--text:#172033;--muted:#64748b;--line:#e2e8f0;--accent:#2563eb;--accent2:#1d4ed8;--danger:#dc2626;--success:#16a34a;--shadow:0 10px 30px rgba(15,23,42,.08)}
+body{background:linear-gradient(180deg,#eef4ff 0,#f7f9fc 220px,#f3f6fb 100%);color:var(--text)}
+header{background:rgba(15,23,42,.94);backdrop-filter:blur(14px);box-shadow:0 4px 20px rgba(15,23,42,.16);padding:14px 24px}
+header .top{max-width:1320px}
+header h1{font-size:24px;letter-spacing:.04em;font-weight:850}
+main{max-width:1320px;margin:28px auto;padding:0 20px}
+.toolbar{background:rgba(255,255,255,.82);padding:12px;border:1px solid rgba(226,232,240,.9);border-radius:18px;box-shadow:var(--shadow);grid-template-columns:1fr 240px 130px}
+input,textarea,select{border-color:#d7dee9;box-shadow:0 1px 2px rgba(15,23,42,.03);transition:border-color .15s,box-shadow .15s,background .15s}
+input:focus,textarea:focus,select:focus{outline:none;border-color:#60a5fa;box-shadow:0 0 0 4px rgba(37,99,235,.10)}
+button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(15,23,42,.10)}button:active{transform:translateY(0)}
+.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 5px 14px rgba(37,99,235,.22)}
+.secondary{background:#eef4ff;color:#1d4ed8}
+.card,.calc-card,.adminbar{box-shadow:var(--shadow);border-color:#e2e8f0}
+.card{transition:transform .15s,box-shadow .15s}.card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(15,23,42,.11)}
+.modal{background:rgba(15,23,42,.58);backdrop-filter:blur(5px)}
+.dialog{border:1px solid rgba(226,232,240,.95);box-shadow:0 24px 70px rgba(15,23,42,.22);border-radius:20px}
+.sales-home{border-radius:20px;box-shadow:var(--shadow)}
+.sales-home-head{background:linear-gradient(135deg,#0f4c81,#2563eb);padding:18px 20px}
+.sales-home-actions button{border:1px solid #dbe4ef;background:#fff;color:#1e293b}.sales-home-actions .primary{color:#fff;border-color:transparent}
+.sales-sale-dialog{height:calc(100vh - 32px);max-height:calc(100vh - 32px);display:flex;flex-direction:column}
+.sales-sale-dialog>.sales-home-head{flex:0 0 auto;border-radius:14px;margin-bottom:12px}
+.sales-sale-dialog>.sales-workspace{flex:1 1 auto;min-height:0;height:auto;margin:0}
+.sales-workspace-left{background:#f8fafc;border-radius:14px}.sales-workspace-right{background:#fff;border-radius:14px}
+.sale-save-bar{padding:14px 0 0}.sale-save-bar .primary{min-width:220px}
+
+</style>
 </head>
 <body>
 <header><div class="top">
-  <h1>📦 Справочник товаров</h1><div class="grow"></div>
+  <h1>ПОЛАРОИД</h1><div class="grow"></div>
   <span id="authStatus" class="status" style="color:#d1d5db"></span>
   <button id="loginBtn" class="secondary">Вход администратора</button>
   <button id="logoutBtn" class="secondary" style="display:none">Выйти</button>
@@ -1011,12 +1038,12 @@ $('saveSale').onclick=async()=>{
   const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice)}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}
   $('saveSale').disabled=true;$('saleStatus').textContent='Оформляю продажу…';
   const r=await db.rpc('sales_create_sale',{p_shift_id:salesSession.shiftId,p_payment_method:$('salePayment').value,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber||null});
-  $('saveSale').disabled=false;if(r.error){$('saleStatus').textContent='Ошибка: '+r.error.message;return}const orderNo=r.data;$('saleOrderPreview').textContent='№ '+orderNo;window.currentSaleOrderNumber=null;$('saleStatus').textContent=`Продажа №${orderNo} оформлена. ${$('saleClubEnabled').checked?'Клубная карта обновлена.':''}`;setTimeout(()=>close('saleModal'),700);
+  $('saveSale').disabled=false;if(r.error){$('saleStatus').textContent='Ошибка: '+r.error.message;return}const orderNo=r.data;$('saleOrderPreview').textContent='№ '+orderNo;window.currentSaleOrderNumber=null;$('saleStatus').textContent=`Продажа №${orderNo} оформлена. ${$('saleClubEnabled').checked?'Клубная карта обновлена.':''}`;setTimeout(()=>{close('saleModal');setTimeout(()=>$('salesBtn').click(),120);},700);
 };
 function dateRangeUTC(dateStr){const start=new Date(dateStr+'T00:00:00');const end=new Date(start);end.setDate(end.getDate()+1);return{start,end}}
 async function loadSalesForRange(from,to,branchId=null){let q=db.from('sales').select('*,sales_branches(name),sales_employees(name)').gte('created_at',from.toISOString()).lt('created_at',to.toISOString()).order('created_at',{ascending:false});if(branchId)q=q.eq('branch_id',branchId);const r=await q;if(r.error)throw r.error;const sales=r.data||[],ids=sales.map(x=>x.id);let items=[];if(ids.length){const ir=await db.from('sale_items').select('*').in('sale_id',ids);if(ir.error)throw ir.error;items=ir.data||[]}return{sales,items}}
 async function openMovement(){const d=salesTodayISO();$('movementDate').value=$('movementDate').value||d;await renderMovement();open('salesMovementModal')}
-async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);try{const{sales,items}=await loadSalesForRange(start,end,salesSession?.branchId||null),valid=sales.filter(x=>x.status==='completed'),total=valid.reduce((a,x)=>a+Number(x.total),0);$('movementSummary').textContent=`Продаж: ${valid.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;$('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>№ заказа</th><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Чек</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id);return `<tr><td><b>№${x.order_number||x.id}</b></td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${SALES_PAYMENT_LABELS[x.payment_method]||x.payment_method}</td><td>${salesMoney(x.total)}${Number(x.loyalty_points_used)>0?`<div class="status">−${salesMoney(x.loyalty_points_used)} баллами</div>`:''}</td><td>${x.payment_method==='link'?(x.receipt_issued===true?'✓ пробит':'⚠ не отмечен'):'—'}</td><td>${x.status==='returned'?'↩ Возврат':'Продажа'}</td><td>${x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button>`:''}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>'}catch(e){$('movementSummary').textContent='Ошибка: '+e.message}}
+async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);try{const{sales,items}=await loadSalesForRange(start,end,salesSession?.branchId||null),valid=sales.filter(x=>x.status==='completed'),total=valid.reduce((a,x)=>a+Number(x.total),0);$('movementSummary').textContent=`Продаж: ${valid.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;$('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>№ заказа</th><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Комментарий</th><th>Чек</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id);return `<tr><td><b>№${x.order_number||x.id}</b></td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${SALES_PAYMENT_LABELS[x.payment_method]||x.payment_method}</td><td>${salesMoney(x.total)}${Number(x.loyalty_points_used)>0?`<div class="status">−${salesMoney(x.loyalty_points_used)} баллами</div>`:''}</td><td>${esc(x.comment||'—')}</td><td>${x.payment_method==='link'?(x.receipt_issued===true?'✓ пробит':'⚠ не отмечен'):'—'}</td><td>${x.status==='returned'?'↩ Возврат':'Продажа'}</td><td>${x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button>`:''}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>'}catch(e){$('movementSummary').textContent='Ошибка: '+e.message}}
 window.returnSale=async id=>{if(!salesSession?.shiftId)return;if(!confirm('Оформить полный возврат этой продажи?'))return;const comment=prompt('Комментарий к возврату:')||'';const r=await db.rpc('sales_return_sale',{p_sale_id:id,p_shift_id:salesSession.shiftId,p_comment:comment});if(r.error){alert(r.error.message);return}await renderMovement()};
 $('movementRefresh').onclick=renderMovement;$('movementDate').onchange=renderMovement;$('salesMovementBtn').onclick=openMovement;$('closeMovement').onclick=()=>close('salesMovementModal');
 async function buildShiftReport(shiftId){
@@ -1035,7 +1062,7 @@ $('addCatalogBtn').onclick=async()=>{const type=$('catalogType').value,name=$('c
 window.deleteSalesCatalog=async id=>{if(!confirm('Удалить товар/услугу из продаж? Старые продажи сохранятся.'))return;const r=await db.from('sales_catalog').delete().eq('id',id);if(r.error)alert(r.error.message);else loadSalesSetup()};
 
 db.auth.onAuthStateChange(()=>refreshAuth());
-refreshAuth(); load(); loadPriceRules(); loadSalesSetup().then(()=>{updateSalesSessionUI(); if(!salesSession?.shiftId && salesBranches.length && salesEmployees.length){setTimeout(()=>openSalesWorkspace(),350);}}); updateSalesSessionUI();
+refreshAuth(); load(); loadPriceRules(); loadSalesSetup().then(()=>{updateSalesSessionUI();}); updateSalesSessionUI();
 </script>
 </body>
 </html>
