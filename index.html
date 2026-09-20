@@ -971,7 +971,7 @@ function renderSalesEmployeeOptions(){
 function updateSalesSessionUI(){
   const active=!!salesSession?.shiftId;
   $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Смена начата ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
-  $('salesBtn').disabled=!active;$('shiftReportBtn').disabled=!active;$('closeShiftBtn').disabled=!active;
+  $('salesBtn').disabled=false;$('shiftReportBtn').disabled=!active;$('closeShiftBtn').disabled=!active;
   $('salesSelectBtn').textContent=active?'Сменить филиал / сотрудника':'Выбрать филиал и кассира';
 }
 async function renderSalesCatalogPrice(){
