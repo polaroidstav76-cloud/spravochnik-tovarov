@@ -162,6 +162,7 @@
     <div class="field"><label>Размер листа, см</label><input id="lrSheetSize" placeholder="30×42"></div>
   </div>
   <div class="row">
+    <div class="field"><label>Ламинация</label><select id="lrSides"><option value="single">Односторонняя</option><option value="double">Двусторонняя</option></select></div>
     <div class="field"><label>От листов</label><input id="lrMinSheets" type="number" min="1" step="1" value="1"></div>
     <div class="field"><label>Розница, ₽/лист</label><input id="lrRetail" type="number" min="0" step="0.01"></div>
   </div>
@@ -437,7 +438,7 @@ $('sheetCalcBtn').onclick=async()=>{
   const cutRule=cutting?serviceRuleFor('cutting',sheet.w,sheet.h,sheets):null;
   const diffPrice=diff?servicePrice(diffRule,'different_images',sheet.w,sheet.h,sheets):0;
   const cutPrice=cutting?servicePrice(cutRule,'cutting',sheet.w,sheet.h,sheets):0;
-  const lamRule=lamination?priceRuleFor(laminationPriceRules,sheet.w,sheet.h,sheets,laminationMaterial):null;
+  const lamRule=lamination?priceRuleFor(laminationPriceRules.filter(r=>r.sides===sides),sheet.w,sheet.h,sheets,laminationMaterial):null;
   const lamPrice=lamination?priceMode(lamRule,sheets):0;
 
   if(diff && diffRule===null){out.innerHTML=`<b>Для услуги «Разные картинки» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
@@ -460,7 +461,7 @@ $('sheetCalcBtn').onclick=async()=>{
   <div>Печать + материал «${esc(material)}»: <b>${money(printPrice)} / лист</b> (${wholesaleUsed?'опт':'розница'}, ${tierText}) → ${money(printTotal)}</div>
   ${diff?`<div>Разные картинки: <b>${money(diffPrice)} / лист</b> (${diffRule&&Number(diffRule.wholesale_price)>0?'опт':'розница'}) → ${money(diffTotal)}</div>`:''}
   ${cutting?`<div>Резка листов: <b>${money(cutPrice)} / лист</b> (${cutRule&&Number(cutRule.wholesale_price)>0?'опт':'розница'}) → ${money(cutTotal)}</div>`:''}
-  ${lamination?`<div>Ламинация «${esc(laminationMaterial)}»: <b>${money(lamPrice)} / лист</b> (${lamRule&&Number(lamRule.wholesale_price)>0?'опт':'розница'}, от ${lamRule.min_sheets} листов) → ${money(lamTotal)}</div>`:''}
+  ${lamination?`<div>Ламинация «${esc(laminationMaterial)}» (${sides==='double'?'двусторонняя':'односторонняя'}): <b>${money(lamPrice)} / лист</b> (${lamRule&&Number(lamRule.wholesale_price)>0?'опт':'розница'}, от ${lamRule.min_sheets} листов) → ${money(lamTotal)}</div>`:''}
   <div>Количество карточек: <b>${qty}</b></div>
   <div>Стоимость 1 карточки: <b>${money(perCard)}</b></div>
   <div class="calc-total">Итого: ${money(total)}</div>`;
@@ -486,7 +487,7 @@ function renderPriceRules(){
       <td>${r._type==='print'?'Печать':(r._type==='lamination'?'Ламинация':'Услуга')}</td>
       <td>${r._type==='print'?esc(r.material_name||'—'):'—'}</td>
       <td>${r.sheet_width_cm}×${r.sheet_height_cm}</td>
-      <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?'Материал ламинации':'Услуга: '+serviceLabel(r.service_type))}</td>
+      <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?('Ламинация: '+priceLabelSides(r.sides)):'Услуга: '+serviceLabel(r.service_type))}</td>
       <td>${r.min_sheets}</td>
       <td>${money(r.retail_price)}</td>
       <td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td>
@@ -541,10 +542,11 @@ $('addLamRule').onclick=async()=>{
   const min=Number($('lrMinSheets').value);
   const retail=Number($('lrRetail').value);
   const wholesale=Number($('lrWholesale').value);
+  const sides=$('lrSides').value;
   if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
-  const r=await db.from('sheet_lamination_price_rules').insert({material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
+  const r=await db.from('sheet_lamination_price_rules').insert({material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
+  $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrSides').value='single'; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
   $('priceStatus').textContent='Правило ламинации добавлено.'; await loadPriceRules(); renderPriceRules();
 };
 $('addServiceRule').onclick=async()=>{
