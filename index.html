@@ -65,7 +65,11 @@
       <div class="field"><label for="calcSize">Размер, см</label><input id="calcSize" placeholder="Например: 132×80" inputmode="text"></div>
       <div class="field"><label for="calcPrice">Цена материала, ₽/м²</label><input id="calcPrice" type="number" min="0" step="0.01" placeholder="Например: 650"></div>
     </div>
-    <div class="actions calc-actions"><button id="calcBtn" class="primary">Рассчитать</button></div>
+    <div class="check-row"><label><input id="calcGrommets" type="checkbox"> Люверсы</label></div>
+    <div class="field" style="margin-top:10px">
+    <label><input id="calcLugs" type="checkbox"> Люверсы</label>
+  </div>
+  <div class="actions calc-actions"><button id="calcBtn" class="primary">Рассчитать</button></div>
     <div id="calcResult" class="calc-result" aria-live="polite"></div>
   </section>
 
@@ -84,7 +88,9 @@
     <div class="check-row">
       <label><input id="differentImages" type="checkbox"> Разные картинки (только если абсолютно все карточки разные)</label>
       <label><input id="sheetCutting" type="checkbox"> Резка листов сотрудником</label>
+      <label><input id="sheetLamination" type="checkbox"> Ламинация</label>
     </div>
+    <div class="field" id="laminationMaterialWrap" style="display:none"><label for="laminationMaterial">Материал ламинации</label><select id="laminationMaterial"><option value="">Выберите материал ламинации</option></select></div>
     <div class="actions calc-actions"><button id="sheetCalcBtn" class="primary">Рассчитать</button></div>
     <div id="sheetCalcResult" class="calc-result" aria-live="polite"></div>
   </section>
@@ -151,6 +157,22 @@
     <div class="field"><label>Опт, ₽/лист</label><input id="prWholesale" type="number" min="0" step="0.01"></div>
   </div>
   <div class="actions" style="justify-content:flex-start"><button id="addPrintRule" class="secondary">＋ Добавить правило печати</button></div>
+
+  <h3>Ламинация</h3>
+  <div class="status">Ламинация задаётся отдельным правилом: материал, размер листа, порог тиража и цена розницы/опта. Стоимость считается за лист.</div>
+  <div class="row">
+    <div class="field"><label>Материал ламинации</label><input id="lrMaterial" placeholder="Сахарная ламинация"></div>
+    <div class="field"><label>Размер листа, см</label><input id="lrSheetSize" placeholder="30×42"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>От листов</label><input id="lrMinSheets" type="number" min="1" step="1" value="1"></div>
+    <div class="field"><label>Розница, ₽/лист</label><input id="lrRetail" type="number" min="0" step="0.01"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Опт, ₽/лист</label><input id="lrWholesale" type="number" min="0" step="0.01"></div>
+    <div class="field"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="addLamRule" class="secondary">＋ Добавить правило ламинации</button></div>
 
   <h3>Услуги: «Разные картинки» и «Резка»</h3>
   <div class="status">Стоимость услуги считается за лист. Для каждой услуги можно задать свои пороги и цены розницы/опта.</div>
@@ -305,13 +327,21 @@ $('calcBtn').onclick=()=>{
   if(!(price>0) || !Number.isFinite(price)){$('calcResult').innerHTML='<b>Введите цену материала за 1 м².</b>';return}
   const widthM=size.widthCm/100, heightM=size.heightCm/100, area=widthM*heightM, calculated=area*price, total=Math.max(calculated,price);
   const minApplied=calculated<price;
-  $('calcResult').innerHTML=`<div>Размер: <b>${size.widthCm} × ${size.heightCm} см</b> → ${widthM.toFixed(2)} × ${heightM.toFixed(2)} м</div><div>Площадь: <b>${area.toFixed(4)} м²</b></div><div>Расчёт по площади: <b>${money(calculated)}</b></div><div class="calc-total">Стоимость заказа: ${money(total)}</div>${minApplied?`<div class="calc-min">Применена минимальная стоимость заказа: ${money(price)}</div>`:''}`;
+  const grommets=$('calcGrommets').checked ? (Math.floor(size.widthCm/30)*2 + Math.floor(size.heightCm/30)*2) : 0;
+  $('calcResult').innerHTML=`<div>Размер: <b>${size.widthCm} × ${size.heightCm} см</b> → ${widthM.toFixed(2)} × ${heightM.toFixed(2)} м</div><div>Площадь: <b>${area.toFixed(4)} м²</b></div><div>Расчёт по площади: <b>${money(calculated)}</b></div>${$('calcGrommets').checked?`<div>Люверсы: <b>${Math.floor(size.widthCm/30)} + ${Math.floor(size.widthCm/30)} + ${Math.floor(size.heightCm/30)} + ${Math.floor(size.heightCm/30)} = ${grommets} шт.</b></div>`:''}<div class="calc-total">Стоимость заказа: ${money(total)}</div>${minApplied?`<div class="calc-min">Применена минимальная стоимость заказа: ${money(price)}</div>`:''}`;
 };
 $('calcSize').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
 
 $('calcPrice').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
+$('sheetLamination')?.addEventListener('change',()=>{
+  const wrap=$('sheetLaminationWrap');
+  if(wrap) wrap.style.display=$('sheetLamination').checked?'block':'none';
+  if($('sheetLamination').checked && !$('sheetLaminationMaterial').value) populateLaminationMaterials();
+});
+loadLaminationPriceRules();
 
-let printPriceRules=[], servicePriceRules=[], materialPriceRules=[];
+
+let printPriceRules=[], servicePriceRules=[], laminationPriceRules=[];
 function normSheet(a,b){a=Number(a);b=Number(b);return a<=b?{w:a,h:b}:{w:b,h:a}}
 function parsePair(value){
   const m=String(value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
@@ -334,16 +364,16 @@ function priceMode(rule,sheets){
   return Number(rule.wholesale_price)>0 ? Number(rule.wholesale_price) : Number(rule.retail_price);
 }
 async function loadPriceRules(){
-  const [p,sr,mr]=await Promise.all([
+  const [p,sr,lr]=await Promise.all([
     db.from('sheet_print_price_rules').select('*').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets'),
     db.from('sheet_service_price_rules').select('*').order('service_type').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets'),
-    db.from('sheet_material_price_rules').select('*').order('material_name').order('sheet_width_cm').order('sheet_height_cm')
+    db.from('sheet_lamination_price_rules').select('*').order('material_name').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets')
   ]);
-  printPriceRules=p.data||[]; servicePriceRules=sr.data||[]; materialPriceRules=mr.data||[];
+  printPriceRules=p.data||[]; servicePriceRules=sr.data||[]; laminationPriceRules=lr.data||[];
   if(p.error) console.warn(p.error.message);
   if(sr.error) console.warn(sr.error.message);
-  if(mr.error) console.warn(mr.error.message);
-  renderMaterialOptions();
+  if(lr.error) console.warn(lr.error.message);
+  renderMaterialOptions(); renderLaminationOptions();
 }
 function serviceRuleFor(type,w,h,sheets){
   const k=sheetKey(w,h);
@@ -361,6 +391,14 @@ function renderMaterialOptions(){
   el.innerHTML='<option value="">Выберите материал</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
   if(names.includes(current))el.value=current;
 }
+function renderLaminationOptions(){
+  const el=$('laminationMaterial'); if(!el)return;
+  const current=el.value;
+  const names=[...new Set(laminationPriceRules.map(r=>r.material_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  el.innerHTML='<option value="">Выберите материал ламинации</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if(names.includes(current))el.value=current;
+}
+$('sheetLamination').onchange=()=>{ $('laminationMaterialWrap').style.display=$('sheetLamination').checked?'block':'none'; };
 function fitCount(cardW,cardH,sheetW,sheetH){
   const usableW=sheetW-2, usableH=sheetH-2;
   if(usableW<=0||usableH<=0)return null;
@@ -373,12 +411,14 @@ $('sheetCalcBtn').onclick=async()=>{
   await loadPriceRules();
   const card=parsePair($('cardSize').value), sheet=parsePair($('sheetSize').value),
         qty=Number($('cardQty').value), sides=$('cardSides').value,
-        material=$('cardMaterial').value;
+        material=$('cardMaterial').value, lamination=$('sheetLamination').checked,
+        laminationMaterial=$('laminationMaterial').value;
   const out=$('sheetCalcResult');
   if(!card){out.innerHTML='<b>Введите размер карточки, например 5×7.</b>';return}
   if(!sheet){out.innerHTML='<b>Введите размер листа, например 30×42.</b>';return}
   if(!(qty>0)||!Number.isFinite(qty)){out.innerHTML='<b>Введите количество карточек.</b>';return}
   if(!material){out.innerHTML='<b>Выберите материал.</b>';return}
+  if(lamination && !laminationMaterial){out.innerHTML='<b>Выберите материал ламинации.</b>';return}
 
   const fit=fitCount(card.w,card.h,sheet.w,sheet.h);
   if(!fit){out.innerHTML='<b>Карточка не помещается на лист с учётом поля 1 см с каждой стороны.</b>';return}
@@ -401,14 +441,18 @@ $('sheetCalcBtn').onclick=async()=>{
   const cutRule=cutting?serviceRuleFor('cutting',sheet.w,sheet.h,sheets):null;
   const diffPrice=diff?servicePrice(diffRule,'different_images',sheet.w,sheet.h,sheets):0;
   const cutPrice=cutting?servicePrice(cutRule,'cutting',sheet.w,sheet.h,sheets):0;
+  const lamRule=lamination?priceRuleFor(laminationPriceRules,sheet.w,sheet.h,sheets,laminationMaterial):null;
+  const lamPrice=lamination?priceMode(lamRule,sheets):0;
 
   if(diff && diffRule===null){out.innerHTML=`<b>Для услуги «Разные картинки» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
   if(cutting && cutRule===null){out.innerHTML=`<b>Для услуги «Резка» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
+  if(lamination && lamRule===null){out.innerHTML=`<b>Для ламинации «${esc(laminationMaterial)}» нет цены для листа ${sheet.w}×${sheet.h} см и ${sheets} листов.</b>`;return}
 
   const printTotal=sheets*printPrice;
   const diffTotal=sheets*diffPrice;
   const cutTotal=sheets*cutPrice;
-  const total=printTotal+diffTotal+cutTotal;
+  const lamTotal=sheets*lamPrice;
+  const total=printTotal+diffTotal+cutTotal+lamTotal;
   const perCard=total/qty;
   const wholesaleUsed=Number(pr.wholesale_price)>0;
   const tierText=`от ${pr.min_sheets} листов`;
@@ -420,6 +464,7 @@ $('sheetCalcBtn').onclick=async()=>{
   <div>Печать + материал «${esc(material)}»: <b>${money(printPrice)} / лист</b> (${wholesaleUsed?'опт':'розница'}, ${tierText}) → ${money(printTotal)}</div>
   ${diff?`<div>Разные картинки: <b>${money(diffPrice)} / лист</b> (${diffRule&&Number(diffRule.wholesale_price)>0?'опт':'розница'}) → ${money(diffTotal)}</div>`:''}
   ${cutting?`<div>Резка листов: <b>${money(cutPrice)} / лист</b> (${cutRule&&Number(cutRule.wholesale_price)>0?'опт':'розница'}) → ${money(cutTotal)}</div>`:''}
+  ${lamination?`<div>Ламинация «${esc(laminationMaterial)}»: <b>${money(lamPrice)} / лист</b> (${lamRule&&Number(lamRule.wholesale_price)>0?'опт':'розница'}, от ${lamRule.min_sheets} листов) → ${money(lamTotal)}</div>`:''}
   <div>Количество карточек: <b>${qty}</b></div>
   <div>Стоимость 1 карточки: <b>${money(perCard)}</b></div>
   <div class="calc-total">Итого: ${money(total)}</div>`;
@@ -432,7 +477,7 @@ async function openPriceAdmin(){
 function priceLabelSides(v){return v==='double'?'Двусторонняя':'Односторонняя'}
 function serviceLabel(v){return v==='cutting'?'Резка листов':'Разные картинки'}
 function renderPriceRules(){
-  const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...servicePriceRules.map(r=>({...r,_type:'service'}))]
+  const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...laminationPriceRules.map(r=>({...r,_type:'lamination'})),...servicePriceRules.map(r=>({...r,_type:'service'}))]
     .sort((a,b)=>String(a._type).localeCompare(b._type)
       ||String(a.material_name||'').localeCompare(String(b.material_name||''),'ru')
       ||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm
@@ -442,10 +487,10 @@ function renderPriceRules(){
     <th>Тип</th><th>Материал</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th>
   </tr></thead><tbody>`+
     rows.map(r=>`<tr>
-      <td>${r._type==='print'?'Печать':'Услуга'}</td>
+      <td>${r._type==='print'?'Печать':(r._type==='lamination'?'Ламинация':'Услуга')}</td>
       <td>${r._type==='print'?esc(r.material_name||'—'):'—'}</td>
       <td>${r.sheet_width_cm}×${r.sheet_height_cm}</td>
-      <td>${r._type==='print'?priceLabelSides(r.sides):serviceLabel(r.service_type)}</td>
+      <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?'Материал ламинации':'Услуга: '+serviceLabel(r.service_type))}</td>
       <td>${r.min_sheets}</td>
       <td>${money(r.retail_price)}</td>
       <td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td>
@@ -456,7 +501,7 @@ function renderPriceRules(){
 }
 window.deletePriceRule=async(type,id)=>{
   if(!confirm('Удалить это правило цены?'))return;
-  const table=type==='print'?'sheet_print_price_rules':'sheet_service_price_rules';
+  const table=type==='print'?'sheet_print_price_rules':(type==='lamination'?'sheet_lamination_price_rules':'sheet_service_price_rules');
   const r=await db.from(table).delete().eq('id',id);
   if(r.error){alert(r.error.message);return}
   await loadPriceRules();renderPriceRules();
@@ -494,6 +539,18 @@ $('addPrintRule').onclick=async()=>{
   renderPriceRules();
 };
 
+$('addLamRule').onclick=async()=>{
+  const name=$('lrMaterial').value.trim();
+  const sh=parsePair($('lrSheetSize').value);
+  const min=Number($('lrMinSheets').value);
+  const retail=Number($('lrRetail').value);
+  const wholesale=Number($('lrWholesale').value);
+  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
+  const r=await db.from('sheet_lamination_price_rules').insert({material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
+  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
+  $('priceStatus').textContent='Правило ламинации добавлено.'; await loadPriceRules(); renderPriceRules();
+};
 $('addServiceRule').onclick=async()=>{
   const sh=parsePair($('srSheetSize').value), min=Number($('srMinSheets').value), retail=Number($('srRetail').value), wholesale=Number($('srWholesale').value);
   if(!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
@@ -542,6 +599,7 @@ $('saveTest').onclick=async()=>{
 };
 
 async function refreshAuth(){
+  $('laminationAdminBlock') && ($('laminationAdminBlock').style.display = !!currentUser ? 'block' : 'none');
   const {data}=await db.auth.getUser(); isAdmin=!!data.user;
   $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=isAdmin?'Администратор':'';
@@ -593,6 +651,52 @@ window.deleteProduct=async id=>{
 };
 db.auth.onAuthStateChange(()=>refreshAuth());
 refreshAuth(); load(); loadPriceRules();
+
+async function loadLaminationAdminRules(){
+  const box=$('laminationAdminBlock');
+  if(!box) return;
+  const {data,error}=await db.from('sheet_lamination_price_rules').select('*').order('material_name').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets');
+  if(error){$('lamStatus').textContent='Ошибка загрузки: '+error.message;return}
+  $('lamRulesList').innerHTML=(data||[]).map(r=>`<div class="block" style="margin-top:8px"><b>${esc(r.material_name)}</b> — ${r.sheet_width_cm}×${r.sheet_height_cm} см, от ${r.min_sheets} листов: розница ${money(r.retail_price)}, опт ${money(r.wholesale_price)} <button class="danger small" onclick="deleteLaminationRule(${r.id})">Удалить</button></div>`).join('') || '<div class="status">Правил пока нет.</div>';
+}
+window.deleteLaminationRule=async id=>{
+  const r=await db.from('sheet_lamination_price_rules').delete().eq('id',id);
+  if(r.error){$('lamStatus').textContent='Ошибка удаления: '+r.error.message;return}
+  await loadLaminationPriceRules(); await loadLaminationAdminRules();
+};
+$('lamSave')?.addEventListener('click',async()=>{
+  const material=$('lamMat').value.trim();
+  const s=parseCalcSize($('lamSize').value);
+  const min=Number($('lamMin').value);
+  const retail=Number(String($('lamRetail').value).replace(',','.'));
+  const wholesale=Number(String($('lamWholesale').value).replace(',','.'));
+  if(!material||!s||!(min>=1)||retail<0||wholesale<0){$('lamStatus').textContent='Заполните материал, размер и цены.';return}
+  const r=await db.from('sheet_lamination_price_rules').insert({material_name:material,sheet_width_cm:s.widthCm,sheet_height_cm:s.heightCm,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
+  if(r.error){$('lamStatus').textContent='Ошибка: '+r.error.message;return}
+  $('lamStatus').textContent='Правило сохранено.';
+  await loadLaminationPriceRules(); await loadLaminationAdminRules();
+});
+
 </script>
+
+<div id="laminationAdminBlock" class="calc-card" style="margin-top:16px;display:none">
+  <h3>Правила ламинации</h3>
+  <div class="status">Материал, размер листа, порог количества, розничная и оптовая цена.</div>
+  <div class="row">
+    <div class="field"><label>Материал</label><input id="lamMat" placeholder="Например: Голографическая"></div>
+    <div class="field"><label>Размер листа, см</label><input id="lamSize" placeholder="30×42"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>От, листов</label><input id="lamMin" type="number" min="1" value="1"></div>
+    <div class="field"><label>Розница, ₽/лист</label><input id="lamRetail" type="number" min="0" step="0.01"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Опт, ₽/лист</label><input id="lamWholesale" type="number" min="0" step="0.01"></div>
+  </div>
+  <div class="actions"><button id="lamSave" class="primary">Сохранить правило ламинации</button></div>
+  <div id="lamStatus" class="status"></div>
+  <div id="lamRulesList"></div>
+</div>
+
 </body>
 </html>
