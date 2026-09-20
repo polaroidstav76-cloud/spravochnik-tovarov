@@ -30,7 +30,7 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}
     .blocks{display:flex;flex-direction:column;gap:10px}.block{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc}.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.block-type{font-size:12px;font-weight:800;color:var(--muted)}.block textarea{min-height:90px}.rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.rich-toolbar button{padding:6px 9px;font-size:12px}.rich-text{min-height:90px;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff;outline:none;line-height:1.5}.rich-text:focus{border-color:var(--accent);box-shadow:0 0 0 2px #2563eb22}.rich-text h2{font-size:1.4em;margin:.4em 0}.rich-text h3{font-size:1.2em;margin:.4em 0}.rich-text p{margin:.4em 0}.block img{max-width:100%;max-height:220px;display:block;margin:6px auto;border-radius:8px}.block-actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 10px;font-size:12px}.instruction{line-height:1.6}.instruction img{max-width:100%;height:auto;display:block;margin:12px 0;border-radius:10px}.instruction-text{white-space:pre-wrap;margin:0 0 10px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
     .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.status{font-size:13px;color:var(--muted)}
-    .calc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 20px;box-shadow:0 2px 8px #00000008}.calc-card h2{margin:0 0 6px;font-size:20px}.calc-row{margin-top:14px}.calc-actions{justify-content:flex-start;margin-top:4px}.calc-result{margin-top:14px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);padding:14px;line-height:1.6;min-height:20px}.calc-result:empty{display:none}.calc-total{font-size:22px;font-weight:800;margin-top:4px}.calc-min{color:var(--muted);font-size:13px}.check-row{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:10px}.check-row label{display:inline-flex;align-items:center;gap:5px;font-weight:600;white-space:normal}.check-row input{width:16px;height:16px;margin:0;flex:0 0 16px}.price-admin{margin-top:14px}.price-table{width:100%;border-collapse:collapse;font-size:13px}.price-table th,.price-table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:middle}.price-table th{background:#f8fafc}.price-table input,.price-table select{padding:7px 8px}.price-row-actions{display:flex;gap:5px;flex-wrap:wrap}
+    .calc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 20px;box-shadow:0 2px 8px #00000008}.calc-card h2{margin:0 0 6px;font-size:20px}.calc-row{margin-top:14px}.calc-actions{justify-content:flex-start;margin-top:4px}.calc-result{margin-top:14px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);padding:14px;line-height:1.6;min-height:20px}.calc-result:empty{display:none}.calc-total{font-size:22px;font-weight:800;margin-top:4px}.calc-min{color:var(--muted);font-size:13px}.check-row{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:10px}.check-row label{display:inline-flex;align-items:center;gap:5px;font-weight:600;white-space:normal}.check-row input{width:16px;height:16px;margin:0;flex:0 0 16px}.price-admin{margin-top:14px}.price-table{width:100%;border-collapse:collapse;font-size:13px}.price-table th,.price-table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:middle}.price-table th{background:#f8fafc}.price-table input,.price-table select{padding:7px 8px}.price-row-actions{display:flex;gap:5px;flex-wrap:wrap}.loyalty-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin-top:12px}.loyalty-balance{font-size:22px;font-weight:800}.loyalty-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.loyalty-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.loyalty-pending{color:#92400e;font-size:13px}.customer-table{width:100%;border-collapse:collapse;font-size:13px}.customer-table th,.customer-table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}.customer-table th{background:#f8fafc}@media(max-width:700px){.loyalty-grid{grid-template-columns:1fr}}
     @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
   </style>
 </head>
@@ -51,8 +51,10 @@
 
   <div id="adminbar" class="adminbar">
     <button class="primary" id="addBtn">＋ Добавить товар</button>
-    <button id="refreshBtn">Обновить</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button>
+    <button id="refreshBtn">Обновить</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button><button id="customersBtn" class="secondary">👥 Клиенты</button>
   </div>
+
+  <section class="calc-card" aria-labelledby="clubTitle" style="margin-bottom:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 id="clubTitle">Клубная карта</h2><div class="status">5% от покупки начисляются на следующие сутки. Баллы не сгорают. При оплате баллами можно списать до 30% суммы заказа.</div></div><button id="clubBtn" class="primary">💳 Клубная карта</button></div></section>
 
   <section class="calc-card" aria-labelledby="calcTitle">
     <div class="calc-head">
@@ -153,7 +155,7 @@
     <div class="field"><label>Розница, ₽/лист</label><input id="prRetail" type="number" min="0" step="0.01"></div>
     <div class="field"><label>Опт, ₽/лист</label><input id="prWholesale" type="number" min="0" step="0.01"></div>
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="addPrintRule" class="secondary">＋ Добавить правило печати</button></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addPrintRule" class="secondary">＋ Добавить правило печати</button><button id="cancelPrintEdit" class="small" style="display:none">Отмена редактирования</button></div>
 
   <h3>Ламинация</h3>
   <div class="status">Ламинация задаётся отдельным правилом: материал, размер листа, порог тиража и цена розницы/опта. Стоимость считается за лист.</div>
@@ -170,7 +172,7 @@
     <div class="field"><label>Опт, ₽/лист</label><input id="lrWholesale" type="number" min="0" step="0.01"></div>
     <div class="field"></div>
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="addLamRule" class="secondary">＋ Добавить правило ламинации</button></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addLamRule" class="secondary">＋ Добавить правило ламинации</button><button id="cancelLamEdit" class="small" style="display:none">Отмена редактирования</button></div>
 
   <h3>Услуги: «Разные картинки» и «Резка»</h3>
   <div class="status">Стоимость услуги считается за лист. Для каждой услуги можно задать свои пороги и цены розницы/опта.</div>
@@ -186,9 +188,67 @@
     <div class="field"><label>Опт, ₽/лист</label><input id="srWholesale" type="number" min="0" step="0.01"></div>
     <div class="field"></div>
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="addServiceRule" class="secondary">＋ Добавить правило услуги</button></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addServiceRule" class="secondary">＋ Добавить правило услуги</button><button id="cancelServiceEdit" class="small" style="display:none">Отмена редактирования</button></div>
   <div id="priceStatus" class="status" style="margin-top:10px"></div>
   <div class="actions"><button id="closePriceAdmin">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="clubModal"><div class="dialog" style="max-width:850px">
+  <h2>💳 Клубная карта</h2>
+  <div class="row">
+    <div class="field"><label>Имя клиента *</label><input id="clubName" placeholder="Имя клиента"></div>
+    <div class="field"><label>Номер клиента *</label><input id="clubPhone" placeholder="Например: 89991234567" inputmode="tel"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Сумма покупки, ₽ *</label><input id="clubAmount" type="number" min="0" step="0.01" placeholder="5000"></div>
+    <div class="field"><label>Комментарий</label><input id="clubComment" placeholder="Например: первый заказ"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="clubAddPurchase" class="primary">Начислить 5%</button></div>
+  <div id="clubPurchaseStatus" class="status"></div>
+  <hr>
+  <h3>Информация о клиенте</h3>
+  <div class="field"><label>Последние 4 цифры номера (если несколько совпадений — введите полный номер)</label><input id="clubLookup" placeholder="Например: 4567" inputmode="tel"></div>
+  <div class="actions" style="justify-content:flex-start"><button id="clubLookupBtn" class="secondary">🔎 Информация о клиенте</button></div>
+  <div id="clubCustomerResults"></div>
+  <div class="actions"><button id="closeClub">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="customersModal"><div class="dialog" style="max-width:1100px">
+  <h2>👥 Клиенты — администратор</h2>
+  <div class="row"><div class="field"><label>Поиск</label><input id="customerAdminSearch" placeholder="Имя или последние цифры номера"></div><div class="field" style="display:flex;align-items:flex-end"><button id="customerAdminRefresh" class="secondary">Обновить список</button></div></div>
+  <div id="customerAdminStatus" class="status"></div>
+  <div id="customerAdminRows" class="price-admin"></div>
+  <hr>
+  <h3>🎁 Подарки за количество заказов</h3>
+  <div class="status">Например: 5 заказов → «Скидка 10%», 10 заказов → «Подарок — кружка». При достижении порога событие автоматически попадёт в историю клиента.</div>
+  <div class="row">
+    <div class="field"><label>За каждый N-й заказ</label><input id="giftOrderCount" type="number" min="1" step="1" placeholder="5"></div>
+    <div class="field"><label>Подарок</label><input id="giftName" placeholder="Например: кружка в подарок"></div>
+  </div>
+  <input id="giftRuleId" type="hidden">
+  <div class="actions" style="justify-content:flex-start"><button id="saveGiftRule" class="secondary">＋ Добавить правило</button><button id="cancelGiftEdit" class="small" style="display:none">Отмена редактирования</button></div>
+  <div id="giftRulesStatus" class="status"></div>
+  <div id="giftRulesRows" class="price-admin"></div>
+  <div class="actions"><button id="closeCustomers">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="loyaltyHistoryModal"><div class="dialog" style="max-width:950px">
+  <h2>📜 История клиента</h2>
+  <div id="loyaltyHistoryTitle" class="status"></div>
+  <div id="loyaltyHistoryRows" class="price-admin"></div>
+  <div class="actions"><button id="closeLoyaltyHistory">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="customerEditModal"><div class="dialog" style="max-width:650px">
+  <h2>Редактирование клиента</h2>
+  <input id="customerEditId" type="hidden">
+  <div class="field"><label>Имя</label><input id="customerEditName"></div>
+  <div class="field"><label>Номер</label><input id="customerEditPhone" inputmode="tel"></div>
+  <div class="field"><label>Комментарий</label><textarea id="customerEditComment"></textarea></div>
+  <div class="field"><label>Изменение баллов</label><input id="customerEditPoints" type="number" step="0.01" placeholder="Например: 100 или -50"><div class="status">Положительное число добавит баллы, отрицательное — спишет их вручную.</div></div>
+  <div class="field"><label>Причина изменения баллов</label><input id="customerEditPointsComment" placeholder="Например: корректировка по чеку"></div>
+  <div id="customerEditStatus" class="status"></div>
+  <div class="actions"><button id="closeCustomerEdit">Отмена</button><button id="saveCustomerEdit" class="primary">Сохранить</button></div>
 </div></div>
 
 <div class="modal" id="testModal"><div class="dialog"><h2 id="testTitle">Тест</h2><div id="testIntro" class="status"></div><div class="field"><label>ФИО стажёра</label><input id="traineeName"></div><div id="testQuestions"></div><div id="testStatus" class="status"></div><div class="actions"><button id="closeTest">Закрыть</button><button class="primary" id="submitTest">Отправить ответы</button></div></div></div>
@@ -199,6 +259,7 @@
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let products = [], isAdmin = false;
+let priceEdit = {type:null,id:null};
 
 const $ = id => document.getElementById(id);
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
@@ -308,7 +369,7 @@ $('doLogin').onclick=async()=>{
   if(error){$('loginError').textContent=error.message;return} close('loginModal'); await refreshAuth();
 };
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
-$('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('testsBtn').onclick=openTestAdmin; $('openTraineeTests').onclick=openTraineeTests; $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
+$('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
 
 function parseCalcSize(value){
   const m=String(value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
@@ -485,17 +546,34 @@ function renderPriceRules(){
   </tr></thead><tbody>`+
     rows.map(r=>`<tr>
       <td>${r._type==='print'?'Печать':(r._type==='lamination'?'Ламинация':'Услуга')}</td>
-      <td>${r._type==='print'?esc(r.material_name||'—'):'—'}</td>
+      <td>${esc(r.material_name||'—')}</td>
       <td>${r.sheet_width_cm}×${r.sheet_height_cm}</td>
       <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?('Ламинация: '+priceLabelSides(r.sides)):'Услуга: '+serviceLabel(r.service_type))}</td>
       <td>${r.min_sheets}</td>
       <td>${money(r.retail_price)}</td>
       <td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td>
-      <td><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></td>
+      <td><div class="price-row-actions"><button class="secondary small" onclick="editPriceRule('${r._type}','${r.id}')">Изменить</button><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></div></td>
     </tr>`).join('')+'</tbody></table>':'<div class="status">Правил печати/услуг пока нет.</div>';
 
   $('priceRows').innerHTML=html;
 }
+function resetPriceEdit(){
+  priceEdit={type:null,id:null};
+  $('cancelPrintEdit').style.display='none'; $('cancelLamEdit').style.display='none'; $('cancelServiceEdit').style.display='none';
+  $('addPrintRule').textContent='＋ Добавить правило печати'; $('addLamRule').textContent='＋ Добавить правило ламинации'; $('addServiceRule').textContent='＋ Добавить правило услуги';
+}
+window.editPriceRule=(type,id)=>{
+  const source=type==='print'?printPriceRules:(type==='lamination'?laminationPriceRules:servicePriceRules);
+  const r=source.find(x=>String(x.id)===String(id)); if(!r)return;
+  resetPriceEdit(); priceEdit={type,id:String(id)};
+  if(type==='print'){ $('prMaterial').value=r.material_name||''; $('prSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('prSides').value=r.sides||'single'; $('prMinSheets').value=r.min_sheets; $('prRetail').value=r.retail_price; $('prWholesale').value=r.wholesale_price||0; $('addPrintRule').textContent='Сохранить изменения'; $('cancelPrintEdit').style.display='inline-block'; }
+  if(type==='lamination'){ $('lrMaterial').value=r.material_name||''; $('lrSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('lrSides').value=r.sides||'single'; $('lrMinSheets').value=r.min_sheets; $('lrRetail').value=r.retail_price; $('lrWholesale').value=r.wholesale_price||0; $('addLamRule').textContent='Сохранить изменения'; $('cancelLamEdit').style.display='inline-block'; }
+  if(type==='service'){ $('srSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('srService').value=r.service_type; $('srMinSheets').value=r.min_sheets; $('srRetail').value=r.retail_price; $('srWholesale').value=r.wholesale_price||0; $('addServiceRule').textContent='Сохранить изменения'; $('cancelServiceEdit').style.display='inline-block'; }
+};
+$('cancelPrintEdit').onclick=()=>{resetPriceEdit();$('prMaterial').value='';$('prSheetSize').value='';$('prMinSheets').value='1';$('prRetail').value='';$('prWholesale').value='';};
+$('cancelLamEdit').onclick=()=>{resetPriceEdit();$('lrMaterial').value='';$('lrSheetSize').value='';$('lrSides').value='single';$('lrMinSheets').value='1';$('lrRetail').value='';$('lrWholesale').value='';};
+$('cancelServiceEdit').onclick=()=>{resetPriceEdit();$('srSheetSize').value='';$('srMinSheets').value='1';$('srRetail').value='';$('srWholesale').value='';};
+
 window.deletePriceRule=async(type,id)=>{
   if(!confirm('Удалить это правило цены?'))return;
   const table=type==='print'?'sheet_print_price_rules':(type==='lamination'?'sheet_lamination_price_rules':'sheet_service_price_rules');
@@ -515,15 +593,8 @@ $('addPrintRule').onclick=async()=>{
     return;
   }
 
-  const r=await db.from('sheet_print_price_rules').insert({
-    material_name:name,
-    sheet_width_cm:sh.w,
-    sheet_height_cm:sh.h,
-    sides:$('prSides').value,
-    min_sheets:min,
-    retail_price:retail,
-    wholesale_price:wholesale
-  });
+  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides:$('prSides').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='print' ? await db.from('sheet_print_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_print_price_rules').insert(payload);
 
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
   $('prMaterial').value='';
@@ -531,7 +602,7 @@ $('addPrintRule').onclick=async()=>{
   $('prMinSheets').value='1';
   $('prRetail').value='';
   $('prWholesale').value='';
-  $('priceStatus').textContent='Правило печати добавлено.';
+  resetPriceEdit(); $('priceStatus').textContent='Правило печати сохранено.';
   await loadPriceRules();
   renderPriceRules();
 };
@@ -544,17 +615,19 @@ $('addLamRule').onclick=async()=>{
   const wholesale=Number($('lrWholesale').value);
   const sides=$('lrSides').value;
   if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
-  const r=await db.from('sheet_lamination_price_rules').insert({material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
+  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='lamination' ? await db.from('sheet_lamination_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_lamination_price_rules').insert(payload);
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
   $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrSides').value='single'; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
-  $('priceStatus').textContent='Правило ламинации добавлено.'; await loadPriceRules(); renderPriceRules();
+  resetPriceEdit(); $('priceStatus').textContent='Правило ламинации сохранено.'; await loadPriceRules(); renderPriceRules();
 };
 $('addServiceRule').onclick=async()=>{
   const sh=parsePair($('srSheetSize').value), min=Number($('srMinSheets').value), retail=Number($('srRetail').value), wholesale=Number($('srWholesale').value);
   if(!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
-  const r=await db.from('sheet_service_price_rules').insert({sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
+  const payload={sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='service' ? await db.from('sheet_service_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_service_price_rules').insert(payload);
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  $('priceStatus').textContent='Правило услуги добавлено.';await loadPriceRules();renderPriceRules();
+  resetPriceEdit(); $('priceStatus').textContent='Правило услуги сохранено.';await loadPriceRules();renderPriceRules();
 };
 $('closePriceAdmin').onclick=()=>close('priceModal');
 
@@ -596,11 +669,136 @@ $('saveTest').onclick=async()=>{
   openTestAdmin();
 };
 
+
+function normalizePhone(v){return String(v||'').replace(/\D/g,'')}
+function loyaltyMoney(v){return money(Number(v||0))}
+function renderLoyaltyCustomer(c){
+  const maxRedeem=Math.floor(Number(c.balance)*100)/100;
+  return `<div class="loyalty-card">
+    <div><b>${esc(c.customer_name)}</b></div>
+    <div class="status">Номер: ${esc(c.customer_phone)}</div>
+    <div class="loyalty-grid">
+      <div><div class="status">Доступные баллы</div><div class="loyalty-balance">${loyaltyMoney(c.balance)}</div></div>
+      <div><div class="status">Заказов</div><div class="loyalty-balance">${c.order_count}</div></div>
+    </div>
+    ${Number(c.pending_points)>0?`<div class="loyalty-pending" style="margin-top:8px">Ожидают начисления: ${loyaltyMoney(c.pending_points)} (начислятся через 24 часа).</div>`:''}
+    ${c.customer_comment?`<div style="margin-top:10px"><b>Комментарий:</b> ${esc(c.customer_comment)}</div>`:''}
+    <div class="loyalty-actions">
+      <button class="secondary small" onclick="showRedeemForm('${c.customer_id}',${Number(c.balance)})">💳 Списать баллы</button><button class="secondary small" onclick="showLoyaltyHistory('${c.customer_id}')">📜 История</button>
+    </div>
+    <div id="redeem_${c.customer_id}" style="display:none"></div>
+  </div>`;
+}
+window.showRedeemForm=(id,balance)=>{
+  const el=$('redeem_'+id); if(!el)return;
+  el.style.display='block';
+  el.innerHTML=`<div class="block" style="margin-top:10px"><div class="row"><div class="field"><label>Сумма следующего заказа, ₽</label><input id="redeemAmount_${id}" type="number" min="0" step="0.01" placeholder="500"></div><div class="field"><label>Сколько можно списать</label><input id="redeemLimit_${id}" readonly></div></div><div class="field"><label>Списать баллов</label><input id="redeemPoints_${id}" type="number" min="0" step="0.01" placeholder="До 30% заказа"></div><div id="redeemStatus_${id}" class="status"></div><div class="actions" style="justify-content:flex-start"><button class="secondary small" onclick="calcRedeemLimit('${id}',${Number(balance)})">Рассчитать максимум</button><button class="primary small" onclick="redeemPoints('${id}')">Списать</button></div></div>`;
+}
+window.calcRedeemLimit=(id,balance)=>{
+  const amount=Number($('redeemAmount_'+id).value); const limit=Math.min(Number(balance),Math.round(amount*0.30*100)/100);
+  $('redeemLimit_'+id).value=amount>0?loyaltyMoney(limit):'';
+  $('redeemPoints_'+id).value=amount>0?limit:'';
+}
+window.redeemPoints=async(id)=>{
+  const amount=Number($('redeemAmount_'+id).value); const points=Number($('redeemPoints_'+id).value); const st=$('redeemStatus_'+id);
+  if(!(amount>0)){st.textContent='Введите сумму заказа.';return}
+  if(!(points>0)){st.textContent='Введите количество баллов.';return}
+  const r=await db.rpc('loyalty_redeem',{p_customer_id:id,p_order_amount:amount,p_points:points,p_comment:'Списание баллов'});
+  if(r.error){st.textContent='Ошибка: '+r.error.message;return}
+  st.textContent='Списано. Новый баланс: '+loyaltyMoney(r.data);
+  await lookupLoyalty();
+}
+async function lookupLoyalty(){
+  const q=normalizePhone($('clubLookup').value); const box=$('clubCustomerResults');
+  if(q.length<4){box.innerHTML='<div class="status">Введите последние 4 цифры номера. Если найдено несколько клиентов — введите полный номер.</div>';return}
+  const r=await db.rpc('loyalty_find_customers',{p_query:q});
+  if(r.error){box.innerHTML='<div class="status">Ошибка: '+esc(r.error.message)+'</div>';return}
+  let rows=r.data||[];
+  if(q.length>4) rows=rows.filter(x=>normalizePhone(x.customer_phone)===q);
+  if(!rows.length){box.innerHTML='<div class="status">Клиент не найден.</div>';return}
+  if(q.length===4 && rows.length>1){box.innerHTML='<div class="loyalty-card"><b>Найдено несколько клиентов.</b><div class="status" style="margin-top:6px">Введите полный номер клиента.</div></div>';return}
+  box.innerHTML=rows.map(renderLoyaltyCustomer).join('');
+}
+$('clubLookupBtn').onclick=lookupLoyalty;
+$('clubLookup').addEventListener('keydown',e=>{if(e.key==='Enter')lookupLoyalty()});
+$('clubAddPurchase').onclick=async()=>{
+  const name=$('clubName').value.trim(), phone=normalizePhone($('clubPhone').value), amount=Number($('clubAmount').value), comment=$('clubComment').value.trim(), st=$('clubPurchaseStatus');
+  if(!name){st.textContent='Введите имя клиента.';return}
+  if(phone.length<4){st.textContent='Введите номер клиента.';return}
+  if(!(amount>0)){st.textContent='Введите сумму покупки.';return}
+  st.textContent='Сохраняю…';
+  const r=await db.rpc('loyalty_add_purchase',{p_name:name,p_phone:phone,p_amount:amount,p_comment:comment||null});
+  if(r.error){st.textContent='Ошибка: '+r.error.message;return}
+  const x=r.data?.[0];
+  st.textContent=`Покупка сохранена. Начислено ${loyaltyMoney(x?.points_added||0)}. Баллы станут доступны через 24 часа.`;
+  $('clubAmount').value=''; $('clubComment').value=''; $('clubLookup').value=phone;
+  await lookupLoyalty();
+};
+window.showLoyaltyHistory=async(id)=>{
+  const r=await db.rpc('loyalty_get_history',{p_customer_id:id});
+  if(r.error){alert(r.error.message);return}
+  const rows=r.data||[]; const c=rows[0];
+  $('loyaltyHistoryTitle').textContent=c?`${c.customer_name} — ${c.customer_phone}`:'История клиента';
+  $('loyaltyHistoryRows').innerHTML=rows.length?`<table class="customer-table"><thead><tr><th>Дата</th><th>Операция</th><th>Сумма заказа</th><th>Баллы</th><th>Комментарий</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.operation_label)}</td><td>${x.order_amount>0?money(x.order_amount):'—'}</td><td><b>${Number(x.points)>=0?'+':''}${loyaltyMoney(x.points)}</b>${x.available_at && new Date(x.available_at)>new Date()?'<div class="loyalty-pending">ожидают</div>':''}</td><td>${esc(x.comment||'')}</td></tr>`).join('')}</tbody></table>`:'<div class="status">Операций пока нет.</div>';
+  open('loyaltyHistoryModal');
+};
+$('closeLoyaltyHistory').onclick=()=>close('loyaltyHistoryModal');
+async function loadGiftRules(){
+  if(!isAdmin)return; const r=await db.from('loyalty_gift_rules').select('*').order('order_count');
+  if(r.error){$('giftRulesStatus').textContent='Ошибка: '+r.error.message;return}
+  const rows=r.data||[]; $('giftRulesRows').innerHTML=rows.length?`<table class="customer-table"><thead><tr><th>Заказ</th><th>Подарок</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x.order_count}</td><td>${esc(x.gift_name)}</td><td><button class="secondary small" onclick="editGiftRule('${x.id}')">Изменить</button> <button class="danger small" onclick="deleteGiftRule('${x.id}')">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Правил подарков пока нет.</div>';
+}
+window.editGiftRule=async(id)=>{const r=await db.from('loyalty_gift_rules').select('*').eq('id',id).single();if(r.error)return alert(r.error.message);$('giftRuleId').value=r.data.id;$('giftOrderCount').value=r.data.order_count;$('giftName').value=r.data.gift_name;$('saveGiftRule').textContent='Сохранить правило';$('cancelGiftEdit').style.display='inline-block';};
+window.deleteGiftRule=async(id)=>{if(!confirm('Удалить правило подарка?'))return;const r=await db.from('loyalty_gift_rules').delete().eq('id',id);if(r.error)alert(r.error.message);else loadGiftRules();};
+$('saveGiftRule').onclick=async()=>{const id=$('giftRuleId').value, n=Number($('giftOrderCount').value), name=$('giftName').value.trim();if(!(n>=1)||!name){$('giftRulesStatus').textContent='Укажите номер заказа и подарок.';return}const payload={order_count:n,gift_name:name};const r=id?await db.from('loyalty_gift_rules').update(payload).eq('id',id):await db.from('loyalty_gift_rules').insert(payload);if(r.error){$('giftRulesStatus').textContent='Ошибка: '+r.error.message;return}$('giftRuleId').value='';$('giftOrderCount').value='';$('giftName').value='';$('saveGiftRule').textContent='＋ Добавить правило';$('cancelGiftEdit').style.display='none';$('giftRulesStatus').textContent='Правило сохранено.';loadGiftRules();};
+$('cancelGiftEdit').onclick=()=>{$('giftRuleId').value='';$('giftOrderCount').value='';$('giftName').value='';$('saveGiftRule').textContent='＋ Добавить правило';$('cancelGiftEdit').style.display='none';};
+
+$('closeClub').onclick=()=>close('clubModal');
+$('closeCustomers').onclick=()=>close('customersModal');
+$('closeCustomerEdit').onclick=()=>close('customerEditModal');
+async function loadCustomerAdminRows(){
+  if(!isAdmin)return;
+  const q=$('customerAdminSearch').value.trim();
+  let query=db.from('loyalty_customers').select('*').order('name');
+  if(q){query=query.or(`name.ilike.%${q}%,phone.ilike.%${normalizePhone(q)}%`)}
+  const r=await query;
+  if(r.error){$('customerAdminStatus').textContent='Ошибка: '+r.error.message;return}
+  const cs=r.data||[];
+  const ids=cs.map(x=>x.id);
+  let tx=[];
+  if(ids.length){const tr=await db.from('loyalty_transactions').select('customer_id,transaction_type,points,available_at').in('customer_id',ids);tx=tr.data||[]}
+  const rows=cs.map(c=>{const mine=tx.filter(t=>t.customer_id===c.id);const balance=mine.filter(t=>new Date(t.available_at)<=new Date()).reduce((a,t)=>a+Number(t.points||0),0);const pending=mine.filter(t=>new Date(t.available_at)>new Date()).reduce((a,t)=>a+Number(t.points||0),0);const orders=mine.filter(t=>t.transaction_type==='purchase').length;return {...c,balance,pending,orders};});
+  $('customerAdminStatus').textContent=`Клиентов: ${rows.length}`;
+  $('customerAdminRows').innerHTML=rows.length?`<table class="customer-table"><thead><tr><th>Имя</th><th>Номер</th><th>Баллы</th><th>Заказов</th><th>Комментарий</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone)}</td><td><b>${loyaltyMoney(c.balance)}</b>${c.pending>0?`<div class="loyalty-pending">+${loyaltyMoney(c.pending)} ожидают</div>`:''}</td><td>${c.orders}</td><td>${esc(c.comment||'')}</td><td><button class="secondary small" onclick='editCustomerAdmin(${JSON.stringify(c.id)})'>Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Клиентов пока нет.</div>';
+}
+window.editCustomerAdmin=async(id)=>{
+  if(!isAdmin)return;
+  const r=await db.from('loyalty_customers').select('*').eq('id',id).single(); if(r.error||!r.data){alert(r.error?.message||'Клиент не найден');return}
+  const b=await db.rpc('loyalty_get_customer',{p_customer_id:id}); const c=b.data?.[0];
+  $('customerEditId').value=id; $('customerEditName').value=r.data.name; $('customerEditPhone').value=r.data.phone; $('customerEditComment').value=r.data.comment||''; $('customerEditPoints').value=''; $('customerEditPointsComment').value=''; $('customerEditStatus').textContent=`Текущий баланс: ${loyaltyMoney(c?.balance||0)}`; open('customerEditModal');
+};
+$('saveCustomerEdit').onclick=async()=>{
+  const id=$('customerEditId').value, name=$('customerEditName').value.trim(), phone=normalizePhone($('customerEditPhone').value), comment=$('customerEditComment').value.trim(), pointsRaw=$('customerEditPoints').value.trim(), points=pointsRaw===''?0:Number(pointsRaw), st=$('customerEditStatus');
+  if(!name||phone.length<4){st.textContent='Проверьте имя и номер.';return}
+  if(pointsRaw!==''&&!Number.isFinite(points)){st.textContent='Некорректное изменение баллов.';return}
+  st.textContent='Сохраняю…';
+  const u=await db.rpc('loyalty_admin_update_customer',{p_customer_id:id,p_name:name,p_phone:phone,p_comment:comment||null});
+  if(u.error){st.textContent='Ошибка: '+u.error.message;return}
+  if(pointsRaw!==''){
+    const a=await db.rpc('loyalty_admin_adjust_points',{p_customer_id:id,p_points:points,p_comment:$('customerEditPointsComment').value.trim()||'Ручная корректировка администратором'});
+    if(a.error){st.textContent='Данные сохранены, но баллы не изменены: '+a.error.message;return}
+  }
+  st.textContent='Сохранено.'; await loadCustomerAdminRows(); setTimeout(()=>close('customerEditModal'),400);
+};
+$('customerAdminRefresh').onclick=loadCustomerAdminRows;
+$('customerAdminSearch').addEventListener('input',()=>loadCustomerAdminRows());
+async function openCustomersAdmin(){if(!isAdmin){open('loginModal');return}await loadCustomerAdminRows();await loadGiftRules();open('customersModal')}
+
 async function refreshAuth(){
   const {data}=await db.auth.getUser(); isAdmin=!!data.user;
   $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=isAdmin?'Администратор':'';
-  $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; render();
+  $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; render();
 }
 window.editProduct=async id=>{
   const p=products.find(x=>x.id===id);
