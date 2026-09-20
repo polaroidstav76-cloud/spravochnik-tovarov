@@ -65,10 +65,7 @@
       <div class="field"><label for="calcSize">Размер, см</label><input id="calcSize" placeholder="Например: 132×80" inputmode="text"></div>
       <div class="field"><label for="calcPrice">Цена материала, ₽/м²</label><input id="calcPrice" type="number" min="0" step="0.01" placeholder="Например: 650"></div>
     </div>
-    <div class="check-row"><label><input id="calcGrommets" type="checkbox"> Люверсы</label></div>
-    <div class="field" style="margin-top:10px">
-    <label><input id="calcLugs" type="checkbox"> Люверсы</label>
-  </div>
+    <div class="field" style="margin-top:10px"><label><input id="calcGrommets" type="checkbox"> Люверсы</label></div>
   <div class="actions calc-actions"><button id="calcBtn" class="primary">Рассчитать</button></div>
     <div id="calcResult" class="calc-result" aria-live="polite"></div>
   </section>
@@ -328,7 +325,8 @@ $('calcBtn').onclick=()=>{
   const widthM=size.widthCm/100, heightM=size.heightCm/100, area=widthM*heightM, calculated=area*price, total=Math.max(calculated,price);
   const minApplied=calculated<price;
   const grommets=$('calcGrommets').checked ? (Math.floor(size.widthCm/30)*2 + Math.floor(size.heightCm/30)*2) : 0;
-  $('calcResult').innerHTML=`<div>Размер: <b>${size.widthCm} × ${size.heightCm} см</b> → ${widthM.toFixed(2)} × ${heightM.toFixed(2)} м</div><div>Площадь: <b>${area.toFixed(4)} м²</b></div><div>Расчёт по площади: <b>${money(calculated)}</b></div>${$('calcGrommets').checked?`<div>Люверсы: <b>${Math.floor(size.widthCm/30)} + ${Math.floor(size.widthCm/30)} + ${Math.floor(size.heightCm/30)} + ${Math.floor(size.heightCm/30)} = ${grommets} шт.</b></div>`:''}<div class="calc-total">Стоимость заказа: ${money(total)}</div>${minApplied?`<div class="calc-min">Применена минимальная стоимость заказа: ${money(price)}</div>`:''}`;
+  const grommetTotal=grommets*20;
+  $('calcResult').innerHTML=`<div>Размер: <b>${size.widthCm} × ${size.heightCm} см</b> → ${widthM.toFixed(2)} × ${heightM.toFixed(2)} м</div><div>Площадь: <b>${area.toFixed(4)} м²</b></div><div>Расчёт по площади: <b>${money(calculated)}</b></div>${$('calcGrommets').checked?`<div>Люверсы: <b>${grommets} шт.</b> × 20 ₽ = <b>${money(grommetTotal)}</b></div>`:''}<div class="calc-total">Стоимость заказа: ${money(total+grommetTotal)}</div>${minApplied?`<div class="calc-min">Применена минимальная стоимость заказа: ${money(price)}</div>`:''}`;
 };
 $('calcSize').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
 
@@ -599,7 +597,6 @@ $('saveTest').onclick=async()=>{
 };
 
 async function refreshAuth(){
-  $('laminationAdminBlock') && ($('laminationAdminBlock').style.display = !!currentUser ? 'block' : 'none');
   const {data}=await db.auth.getUser(); isAdmin=!!data.user;
   $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=isAdmin?'Администратор':'';
