@@ -31,6 +31,18 @@
     .blocks{display:flex;flex-direction:column;gap:10px}.block{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc}.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.block-type{font-size:12px;font-weight:800;color:var(--muted)}.block textarea{min-height:90px}.rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.rich-toolbar button{padding:6px 9px;font-size:12px}.rich-text{min-height:90px;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff;outline:none;line-height:1.5}.rich-text:focus{border-color:var(--accent);box-shadow:0 0 0 2px #2563eb22}.rich-text h2{font-size:1.4em;margin:.4em 0}.rich-text h3{font-size:1.2em;margin:.4em 0}.rich-text p{margin:.4em 0}.block img{max-width:100%;max-height:220px;display:block;margin:6px auto;border-radius:8px}.block-actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 10px;font-size:12px}.instruction{line-height:1.6}.instruction img{max-width:100%;height:auto;display:block;margin:12px 0;border-radius:10px}.instruction-text{white-space:pre-wrap;margin:0 0 10px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
     .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.status{font-size:13px;color:var(--muted)}
     .calc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 20px;box-shadow:0 2px 8px #00000008}.calc-card h2{margin:0 0 6px;font-size:20px}.calc-row{margin-top:14px}.calc-actions{justify-content:flex-start;margin-top:4px}.calc-result{margin-top:14px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);padding:14px;line-height:1.6;min-height:20px}.calc-result:empty{display:none}.calc-total{font-size:22px;font-weight:800;margin-top:4px}.calc-min{color:var(--muted);font-size:13px}.check-row{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:10px}.check-row label{display:inline-flex;align-items:center;gap:5px;font-weight:600;white-space:normal}.check-row input{width:16px;height:16px;margin:0;flex:0 0 16px}.price-admin{margin-top:14px}.price-table{width:100%;border-collapse:collapse;font-size:13px}.price-table th,.price-table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:middle}.price-table th{background:#f8fafc}.price-table input,.price-table select{padding:7px 8px}.price-row-actions{display:flex;gap:5px;flex-wrap:wrap}.loyalty-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin-top:12px}.loyalty-balance{font-size:22px;font-weight:800}.loyalty-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.loyalty-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.loyalty-pending{color:#92400e;font-size:13px}.customer-table{width:100%;border-collapse:collapse;font-size:13px}.customer-table th,.customer-table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}.customer-table th{background:#f8fafc}@media(max-width:700px){.loyalty-grid{grid-template-columns:1fr}}
+
+.sales-session{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 20px;box-shadow:0 2px 8px #00000008}
+.sales-session-main{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.sales-session-badge{font-weight:800}
+.sales-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sales-items{display:flex;flex-direction:column;gap:8px}
+.sales-item-row{display:grid;grid-template-columns:2fr .8fr 1fr auto;gap:8px;align-items:end;border:1px solid var(--line);padding:10px;border-radius:12px;background:#f8fafc}
+.sales-total{font-size:22px;font-weight:800;text-align:right;margin-top:10px}
+.report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.report-card{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px}
+.report-card b{font-size:20px}
+@media(max-width:700px){.sales-grid,.report-grid{grid-template-columns:1fr}.sales-item-row{grid-template-columns:1fr 1fr}.sales-item-row .sales-line-total{grid-column:1/-1}.sales-item-row button{grid-column:1/-1}}
     @media(max-width:700px){.toolbar{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
   </style>
 </head>
@@ -51,10 +63,27 @@
 
   <div id="adminbar" class="adminbar">
     <button class="primary" id="addBtn">＋ Добавить товар</button>
-    <button id="refreshBtn">Обновить</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button><button id="customersBtn" class="secondary">👥 Клиенты</button>
+    <button id="refreshBtn">Обновить</button><button id="salesAdminBtn" class="secondary">🛒 Продажи</button><button id="reportsBtn" class="secondary">📊 Отчёты</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button><button id="customersBtn" class="secondary">👥 Клиенты</button>
   </div>
 
-  <section class="calc-card" aria-labelledby="clubTitle" style="margin-bottom:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 id="clubTitle">Клубная карта</h2><div class="status">5% от покупки начисляются на следующие сутки. Баллы не сгорают. При оплате баллами можно списать до 30% суммы заказа.</div></div><button id="clubBtn" class="primary">💳 Клубная карта</button></div></section>
+  
+<section class="sales-session" aria-labelledby="salesSessionTitle">
+  <div class="sales-session-main">
+    <div>
+      <div id="salesSessionTitle" class="sales-session-badge">🧾 Рабочая смена</div>
+      <div id="salesSessionStatus" class="status">Филиал и кассир ещё не выбраны.</div>
+    </div>
+    <div class="actions" style="margin-top:0">
+      <button id="salesSelectBtn" class="secondary">Выбрать филиал и кассира</button>
+      <button id="salesBtn" class="primary">🛒 Продажа</button>
+      <button id="salesMovementBtn" class="secondary">🔄 Продажи за сегодня</button>
+      <button id="shiftReportBtn" class="secondary">📊 Отчёт за смену</button>
+      <button id="closeShiftBtn" class="danger">Завершить смену</button>
+    </div>
+  </div>
+</section>
+
+<section class="calc-card" aria-labelledby="clubTitle" style="margin-bottom:20px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 id="clubTitle">Клубная карта</h2><div class="status">5% от покупки начисляются на следующие сутки. Баллы не сгорают. При оплате баллами можно списать до 30% суммы заказа.</div></div><button id="clubBtn" class="primary">💳 Клубная карта</button></div></section>
 
   <section class="calc-card" aria-labelledby="calcTitle">
     <div class="calc-head">
@@ -262,6 +291,84 @@
 
 <div class="modal" id="testModal"><div class="dialog"><h2 id="testTitle">Тест</h2><div id="testIntro" class="status"></div><div class="field"><label>ФИО стажёра</label><input id="traineeName"></div><div id="testQuestions"></div><div id="testStatus" class="status"></div><div class="actions"><button id="closeTest">Закрыть</button><button class="primary" id="submitTest">Отправить ответы</button></div></div></div>
 <div class="modal" id="testAdminModal"><div class="dialog"><h2>Тестирование — администратор</h2><div id="adminTests"></div><hr><h3>Создать тест</h3><input id="newTestName" placeholder="Название теста"><div id="adminQuestionEditor"></div><button id="addQuestion" class="secondary small">＋ Добавить вопрос</button><div class="actions"><button id="closeTestAdmin">Закрыть</button><button class="primary" id="saveTest">Сохранить тест</button></div></div></div>
+
+<div class="modal" id="salesWorkspaceModal"><div class="dialog" style="max-width:650px">
+  <h2>🧾 Рабочее место</h2>
+  <div class="status">Сначала выберите филиал, затем своё имя. После этого программа создаст смену.</div>
+  <div class="sales-grid" style="margin-top:14px">
+    <div class="field"><label>Филиал</label><select id="salesBranchSelect"></select></div>
+    <div class="field"><label>Сотрудник / кассир</label><select id="salesEmployeeSelect"></select></div>
+  </div>
+  <div id="salesWorkspaceStatus" class="status"></div>
+  <div class="actions"><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
+</div></div>
+
+<div class="modal" id="saleModal"><div class="dialog" style="max-width:900px">
+  <h2>🛒 Новая продажа</h2>
+  <div id="saleSessionInfo" class="status"></div>
+  <div id="saleItems" class="sales-items" style="margin-top:14px"></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addSaleItemBtn" class="secondary">＋ Добавить позицию</button></div>
+  <div class="sales-grid">
+    <div class="field"><label>Способ оплаты *</label><select id="salePayment">
+      <option value="cash">Наличные</option><option value="card">Банковская карта</option><option value="qr">QR-код</option><option value="link">Ссылка</option><option value="bank_account">Расчётный счёт</option><option value="transfer">Перевод</option>
+    </select></div>
+    <div class="field"><label>Комментарий</label><input id="saleComment" placeholder="Комментарий к продаже"></div>
+  </div>
+  <div id="saleTotal" class="sales-total">0,00 ₽</div>
+  <div id="saleStatus" class="status"></div>
+  <div class="actions"><button id="closeSale">Отмена</button><button id="saveSale" class="primary">Оформить продажу</button></div>
+</div></div>
+
+<div class="modal" id="salesMovementModal"><div class="dialog" style="max-width:1100px">
+  <h2>🔄 Продажи за день</h2>
+  <div class="row">
+    <div class="field"><label>Дата</label><input id="movementDate" type="date"></div>
+    <div class="field" style="display:flex;align-items:flex-end"><button id="movementRefresh" class="secondary">Обновить</button></div>
+  </div>
+  <div id="movementSummary" class="status"></div>
+  <div id="movementRows" class="price-admin"></div>
+  <div class="actions"><button id="closeMovement">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="shiftReportModal"><div class="dialog" style="max-width:1050px">
+  <h2>📊 Отчёт за смену</h2>
+  <div id="shiftReportContent"></div>
+  <div class="actions"><button id="closeShiftReport">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="reportsModal"><div class="dialog" style="max-width:1150px">
+  <h2>📊 Отчёты</h2>
+  <div class="sales-grid">
+    <div class="field"><label>Период с</label><input id="reportFrom" type="date"></div>
+    <div class="field"><label>Период по</label><input id="reportTo" type="date"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="buildReportBtn" class="primary">Сформировать отчёт</button></div>
+  <div id="reportContent"></div>
+  <div class="actions"><button id="closeReports">Закрыть</button></div>
+</div></div>
+
+<div class="modal" id="salesAdminModal"><div class="dialog" style="max-width:1150px">
+  <h2>🛒 Продажи — настройка</h2>
+  <div class="status">Здесь администратор задаёт филиалы, кассиров и товары/услуги, которые доступны в продаже.</div>
+  <hr>
+  <h3>Филиалы</h3>
+  <div class="row"><div class="field"><label>Название филиала</label><input id="branchName" placeholder="Например: Филиал Центр"></div><div class="field" style="display:flex;align-items:flex-end"><button id="addBranchBtn" class="secondary">＋ Добавить филиал</button></div></div>
+  <div id="branchesAdminRows" class="price-admin"></div>
+  <hr>
+  <h3>Сотрудники / кассиры</h3>
+  <div class="row"><div class="field"><label>Филиал</label><select id="employeeBranch"></select></div><div class="field"><label>Имя сотрудника</label><input id="employeeName" placeholder="Например: Иван"></div></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addEmployeeBtn" class="secondary">＋ Добавить сотрудника</button></div>
+  <div id="employeesAdminRows" class="price-admin"></div>
+  <hr>
+  <h3>Товары и услуги для продаж</h3>
+  <div class="row"><div class="field"><label>Тип</label><select id="catalogType"><option value="product">Товар</option><option value="service">Услуга</option></select></div><div class="field"><label>Название</label><input id="catalogName" placeholder="Например: Ретушь"></div></div>
+  <div class="row"><div class="field"><label>Артикул</label><input id="catalogSku"></div><div class="field"><label>Цена, ₽</label><input id="catalogPrice" type="number" min="0" step="0.01"></div></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addCatalogBtn" class="secondary">＋ Добавить</button></div>
+  <div id="catalogAdminRows" class="price-admin"></div>
+  <div id="salesAdminStatus" class="status"></div>
+  <div class="actions"><button id="closeSalesAdmin">Закрыть</button></div>
+</div></div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -378,7 +485,7 @@ $('doLogin').onclick=async()=>{
   if(error){$('loginError').textContent=error.message;return} close('loginModal'); await refreshAuth();
 };
 $('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
-$('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
+$('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('reportsBtn').onclick=openReports; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
 $('clubRedeemCalcBtn').onclick=()=>{const amount=Number($('clubRedeemCalcAmount').value);if(!(amount>0)){ $('clubRedeemCalcResult').value=''; $('clubRedeemCalcStatus').textContent='Введите сумму заказа больше 0 ₽.'; return; } const max=Math.round(amount*0.30*100)/100; $('clubRedeemCalcResult').value=loyaltyMoney(max); $('clubRedeemCalcStatus').textContent='Максимально можно списать 30% от суммы заказа.';};
 
 function parseCalcSize(value){
@@ -808,7 +915,7 @@ async function refreshAuth(){
   const {data}=await db.auth.getUser(); isAdmin=!!data.user;
   $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=isAdmin?'Администратор':'';
-  $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; render();
+  $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; $('salesAdminBtn').style.display=isAdmin?'inline-block':'none'; $('reportsBtn').style.display=isAdmin?'inline-block':'none'; render();
 }
 window.editProduct=async id=>{
   const p=products.find(x=>x.id===id);
@@ -854,8 +961,214 @@ window.deleteProduct=async id=>{
   const {error}=await db.from('products').delete().eq('id',id);
   if(error)alert(error.message); else load();
 };
+
+// ===== МОДУЛЬ ПРОДАЖ =====
+const SALES_PAYMENT_LABELS={cash:'Наличные',card:'Банковская карта',qr:'QR-код',link:'Ссылка',bank_account:'Расчётный счёт',transfer:'Перевод'};
+let salesBranches=[], salesEmployees=[], salesCatalog=[], saleDraft=[];
+let salesSession=JSON.parse(localStorage.getItem('salesSession')||'null');
+
+function salesTodayISO(d=new Date()){
+  const x=new Date(d.getTime()-d.getTimezoneOffset()*60000); return x.toISOString().slice(0,10);
+}
+function salesMoney(v){return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v||0))+' ₽';}
+async function loadSalesSetup(){
+  const [b,e,c]=await Promise.all([
+    db.from('sales_branches').select('*').eq('is_active',true).order('name'),
+    db.from('sales_employees').select('*').eq('is_active',true).order('name'),
+    db.from('sales_catalog').select('*').eq('is_active',true).order('item_type').order('name')
+  ]);
+  if(b.error||e.error||c.error){console.warn('Sales setup load error',b.error||e.error||c.error);return;}
+  salesBranches=b.data||[]; salesEmployees=e.data||[]; salesCatalog=c.data||[];
+  renderSalesWorkspaceOptions(); renderSalesAdmin();
+}
+function renderSalesWorkspaceOptions(){
+  $('salesBranchSelect').innerHTML=salesBranches.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('') || '<option value="">Нет филиалов</option>';
+  const branchId=Number($('salesBranchSelect').value||salesSession?.branchId||0);
+  if(branchId) $('salesBranchSelect').value=String(branchId);
+  renderSalesEmployeeOptions();
+}
+function renderSalesEmployeeOptions(){
+  const branchId=Number($('salesBranchSelect').value||0);
+  const list=salesEmployees.filter(x=>Number(x.branch_id)===branchId);
+  $('salesEmployeeSelect').innerHTML=list.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('') || '<option value="">Нет сотрудников — добавьте в настройках продаж</option>';
+  if(salesSession?.employeeId && list.some(x=>Number(x.id)===Number(salesSession.employeeId))) $('salesEmployeeSelect').value=String(salesSession.employeeId);
+}
+function updateSalesSessionUI(){
+  const active=!!salesSession?.shiftId;
+  $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Смена начата ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
+  $('salesBtn').disabled=!active; $('shiftReportBtn').disabled=!active; $('closeShiftBtn').disabled=!active;
+  $('salesSelectBtn').textContent=active?'Сменить сотрудника':'Выбрать филиал и кассира';
+}
+async function openSalesWorkspace(){
+  await loadSalesSetup();
+  if(!salesBranches.length){alert('Сначала администратору нужно настроить филиалы.');return;}
+  renderSalesWorkspaceOptions();
+  $('salesWorkspaceStatus').textContent='';
+  open('salesWorkspaceModal');
+}
+$('salesBranchSelect').onchange=renderSalesEmployeeOptions;
+$('salesSelectBtn').onclick=openSalesWorkspace;
+$('closeSalesWorkspace').onclick=()=>close('salesWorkspaceModal');
+$('startShiftBtn').onclick=async()=>{
+  const branchId=Number($('salesBranchSelect').value), employeeId=Number($('salesEmployeeSelect').value);
+  const branch=salesBranches.find(x=>Number(x.id)===branchId), emp=salesEmployees.find(x=>Number(x.id)===employeeId);
+  if(!branch||!emp){$('salesWorkspaceStatus').textContent='Выберите филиал и сотрудника.';return;}
+  if(salesSession?.shiftId){
+    const closeOld=await db.from('sales_shifts').update({status:'closed',ended_at:new Date().toISOString()}).eq('id',salesSession.shiftId).eq('status','open');
+    if(closeOld.error){$('salesWorkspaceStatus').textContent='Не удалось закрыть предыдущую смену: '+closeOld.error.message;return;}
+  }
+  const r=await db.from('sales_shifts').insert({branch_id:branchId,employee_id:employeeId}).select().single();
+  if(r.error){$('salesWorkspaceStatus').textContent='Ошибка создания смены: '+r.error.message;return;}
+  salesSession={shiftId:r.data.id,branchId,branchName:branch.name,employeeId,employeeName:emp.name,startedAt:r.data.started_at};
+  localStorage.setItem('salesSession',JSON.stringify(salesSession));
+  updateSalesSessionUI(); close('salesWorkspaceModal');
+};
+$('closeShiftBtn').onclick=async()=>{
+  if(!salesSession?.shiftId)return;
+  if(!confirm('Завершить текущую смену?'))return;
+  const r=await db.from('sales_shifts').update({status:'closed',ended_at:new Date().toISOString()}).eq('id',salesSession.shiftId).eq('status','open');
+  if(r.error){alert(r.error.message);return;}
+  await buildShiftReport(salesSession.shiftId);
+  salesSession=null; localStorage.removeItem('salesSession'); updateSalesSessionUI();
+};
+function saleRowHtml(i){
+  const p=saleDraft[i], opts=salesCatalog.map(x=>`<option value="${x.id}" data-price="${Number(x.price||0)}" ${Number(x.id)===Number(p.catalogId)?'selected':''}>${esc(x.item_type==='service'?'Услуга: ':'Товар: ')}${esc(x.name)} — ${salesMoney(x.price)}</option>`).join('');
+  return `<div class="sales-item-row">
+    <div class="field"><label>Товар / услуга</label><select onchange="saleDraft[${i}].catalogId=Number(this.value);saleDraft[${i}].unitPrice=Number(this.options[this.selectedIndex].dataset.price||0);renderSaleDraft()">${opts}</select></div>
+    <div class="field"><label>Количество</label><input type="number" min="0.001" step="0.001" value="${p.quantity}" oninput="saleDraft[${i}].quantity=Number(this.value)||0;updateSaleTotal()"></div>
+    <div class="field"><label>Цена, ₽</label><input type="number" min="0" step="0.01" value="${p.unitPrice}" oninput="saleDraft[${i}].unitPrice=Number(this.value)||0;updateSaleTotal()"></div>
+    <button class="danger small" onclick="saleDraft.splice(${i},1);renderSaleDraft()">Удалить</button>
+    <div class="sales-line-total" style="grid-column:1/-1;font-weight:700">Сумма: ${salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))}</div>
+  </div>`;
+}
+window.updateSaleTotal=()=>{const total=saleDraft.reduce((a,x)=>a+(Number(x.quantity)||0)*(Number(x.unitPrice)||0),0);$('saleTotal').textContent=salesMoney(total);};
+window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Добавьте товар или услугу.</div>';updateSaleTotal();};
+$('addSaleItemBtn').onclick=()=>{
+  if(!salesCatalog.length){alert('Сначала добавьте товары/услуги в настройках продаж.');return;}
+  const x=salesCatalog[0]; saleDraft.push({catalogId:x.id,quantity:1,unitPrice:Number(x.price||0)}); renderSaleDraft();
+};
+$('closeSale').onclick=()=>close('saleModal');
+$('salesBtn').onclick=async()=>{
+  if(!salesSession?.shiftId){await openSalesWorkspace();return;}
+  await loadSalesSetup(); saleDraft=[]; $('salePayment').value='cash'; $('saleComment').value=''; $('saleStatus').textContent=''; $('saleSessionInfo').textContent=`${salesSession.branchName} · ${salesSession.employeeName}`;
+  open('saleModal'); if(salesCatalog.length){const x=salesCatalog[0];saleDraft=[{catalogId:x.id,quantity:1,unitPrice:Number(x.price||0)}];} renderSaleDraft();
+};
+$('saveSale').onclick=async()=>{
+  if(!salesSession?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return;}
+  if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return;}
+  const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice)}));
+  if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return;}
+  $('saveSale').disabled=true;$('saleStatus').textContent='Оформляю продажу…';
+  const r=await db.rpc('sales_create_sale',{p_shift_id:salesSession.shiftId,p_payment_method:$('salePayment').value,p_comment:$('saleComment').value.trim()||null,p_items:items});
+  $('saveSale').disabled=false;
+  if(r.error){$('saleStatus').textContent='Ошибка: '+r.error.message;return;}
+  $('saleStatus').textContent='Продажа оформлена №'+r.data;
+  setTimeout(()=>close('saleModal'),500);
+};
+function dateRangeUTC(dateStr){
+  const start=new Date(dateStr+'T00:00:00'); const end=new Date(start); end.setDate(end.getDate()+1); return {start,end};
+}
+async function loadSalesForRange(from,to,branchId=null){
+  let q=db.from('sales').select('*, sales_branches(name), sales_employees(name)').gte('created_at',from.toISOString()).lt('created_at',to.toISOString()).order('created_at',{ascending:false});
+  if(branchId)q=q.eq('branch_id',branchId);
+  const r=await q; if(r.error)throw r.error;
+  const sales=r.data||[];
+  const ids=sales.map(x=>x.id);
+  let items=[]; if(ids.length){const ir=await db.from('sale_items').select('*').in('sale_id',ids);if(ir.error)throw ir.error;items=ir.data||[];}
+  return {sales,items};
+}
+async function openMovement(){
+  const d=salesTodayISO();$('movementDate').value=$('movementDate').value||d; await renderMovement(); open('salesMovementModal');
+}
+async function renderMovement(){
+  const d=$('movementDate').value||salesTodayISO(); const {start,end}=dateRangeUTC(d);
+  try{
+    const {sales,items}=await loadSalesForRange(start,end,salesSession?.branchId||null);
+    const valid=sales.filter(x=>x.status==='completed');
+    const total=valid.reduce((a,x)=>a+Number(x.total),0);
+    $('movementSummary').textContent=`Продаж: ${valid.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;
+    $('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id);return `<tr><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${SALES_PAYMENT_LABELS[x.payment_method]||x.payment_method}</td><td>${salesMoney(x.total)}</td><td>${x.status==='returned'?'↩ Возврат':'Продажа'}</td><td>${x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button>`:''}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>';
+  }catch(e){$('movementSummary').textContent='Ошибка: '+e.message;}
+}
+window.returnSale=async(id)=>{
+  if(!salesSession?.shiftId)return;
+  if(!confirm('Оформить полный возврат этой продажи?'))return;
+  const comment=prompt('Комментарий к возврату:')||'';
+  const r=await db.rpc('sales_return_sale',{p_sale_id:id,p_shift_id:salesSession.shiftId,p_comment:comment});
+  if(r.error){alert(r.error.message);return;}
+  await renderMovement();
+};
+$('movementRefresh').onclick=renderMovement; $('movementDate').onchange=renderMovement; $('salesMovementBtn').onclick=openMovement; $('closeMovement').onclick=()=>close('salesMovementModal');
+
+async function buildShiftReport(shiftId){
+  const sr=await db.from('sales_shifts').select('*, sales_branches(name), sales_employees(name)').eq('id',shiftId).single();
+  if(sr.error){$('shiftReportContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return;}
+  const sh=sr.data; const {data:sales=[],error}=await db.from('sales').select('*').eq('shift_id',shiftId).order('created_at');
+  if(error){$('shiftReportContent').innerHTML='<div class="status">'+esc(error.message)+'</div>';return;}
+  const ids=sales.map(x=>x.id); let items=[]; if(ids.length){const ir=await db.from('sale_items').select('*').in('sale_id',ids);items=ir.data||[];}
+  const returns=await db.from('sales_returns').select('*').eq('shift_id',shiftId);
+  const retTotal=(returns.data||[]).reduce((a,x)=>a+Number(x.amount||0),0);
+  const gross=sales.filter(x=>x.status==='completed').reduce((a,x)=>a+Number(x.total||0),0);
+  const net=gross-retTotal;
+  const byPay={}; Object.keys(SALES_PAYMENT_LABELS).forEach(k=>byPay[k]=0);
+  sales.filter(x=>x.status==='completed').forEach(x=>byPay[x.payment_method]=(byPay[x.payment_method]||0)+Number(x.total||0));
+  const serviceMap={}; items.filter(i=>sales.find(s=>s.id===i.sale_id)?.status==='completed' && i.item_type==='service').forEach(i=>{serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity||0);});
+  const productMap={}; items.filter(i=>sales.find(s=>s.id===i.sale_id)?.status==='completed').forEach(i=>{productMap[i.item_name]=(productMap[i.item_name]||0)+Number(i.quantity||0);});
+  const saleCount=sales.filter(x=>x.status==='completed').length;
+  $('shiftReportContent').innerHTML=`<div class="status">${esc(sh.sales_branches?.name||'')} · ${esc(sh.sales_employees?.name||'')} · ${new Date(sh.started_at).toLocaleString('ru-RU')} — ${sh.ended_at?new Date(sh.ended_at).toLocaleString('ru-RU'):'сейчас'}</div>
+  <div class="report-grid" style="margin-top:12px"><div class="report-card">Выручка<br><b>${salesMoney(net)}</b></div><div class="report-card">Продаж<br><b>${saleCount}</b></div><div class="report-card">Средний чек<br><b>${salesMoney(saleCount?gross/saleCount:0)}</b></div></div>
+  <h3>Оплата</h3><table class="customer-table"><tbody>${Object.entries(SALES_PAYMENT_LABELS).map(([k,v])=>`<tr><td>${v}</td><td><b>${salesMoney(byPay[k])}</b></td></tr>`).join('')}<tr><td>Возвраты</td><td><b>−${salesMoney(retTotal)}</b></td></tr><tr><td><b>Итого</b></td><td><b>${salesMoney(net)}</b></td></tr></tbody></table>
+  <h3>Услуги</h3>${Object.keys(serviceMap).length?'<table class="customer-table"><tbody>'+Object.entries(serviceMap).map(([n,q])=>`<tr><td>${esc(n)}</td><td>${q}</td></tr>`).join('')+'</tbody></table>':'<div class="status">Услуг не продано.</div>'}
+  <h3>Проданные позиции</h3><div class="status">${Object.entries(productMap).map(([n,q])=>`${esc(n)} — ${q}`).join(' · ')||'Нет данных'}</div>`;
+  open('shiftReportModal');
+}
+$('shiftReportBtn').onclick=()=>salesSession?.shiftId?buildShiftReport(salesSession.shiftId):openSalesWorkspace();
+$('closeShiftReport').onclick=()=>close('shiftReportModal');
+
+async function openReports(){
+  if(!isAdmin){open('loginModal');return;}
+  const now=salesTodayISO(); $('reportFrom').value=$('reportFrom').value||now; $('reportTo').value=$('reportTo').value||now;
+  open('reportsModal'); await buildAdminReport();
+}
+async function buildAdminReport(){
+  const from=$('reportFrom').value,to=$('reportTo').value; if(!from||!to)return;
+  const start=new Date(from+'T00:00:00'), end=new Date(to+'T00:00:00'); end.setDate(end.getDate()+1);
+  try{
+    const {sales,items}=await loadSalesForRange(start,end);
+    const branches=Object.fromEntries(salesBranches.map(b=>[b.id,b.name]));
+    const completed=sales.filter(x=>x.status==='completed'); const returns=await db.from('sales_returns').select('*').gte('created_at',start.toISOString()).lt('created_at',end.toISOString());
+    const retTotal=(returns.data||[]).reduce((a,x)=>a+Number(x.amount||0),0);
+    const gross=completed.reduce((a,x)=>a+Number(x.total||0),0); const net=gross-retTotal;
+    const byBranch={}; const byEmployee={}; const byPay={}; Object.keys(SALES_PAYMENT_LABELS).forEach(k=>byPay[k]=0);
+    completed.forEach(x=>{byBranch[x.branch_id]=(byBranch[x.branch_id]||0)+Number(x.total);byEmployee[x.employee_id]=(byEmployee[x.employee_id]||0)+Number(x.total);byPay[x.payment_method]=(byPay[x.payment_method]||0)+Number(x.total);});
+    const serviceMap={}; items.filter(i=>i.item_type==='service' && completed.some(s=>s.id===i.sale_id)).forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity));
+    $('reportContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Выручка<br><b>${salesMoney(net)}</b></div><div class="report-card">Продаж<br><b>${completed.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div>
+    <h3>По филиалам</h3><table class="customer-table"><thead><tr><th>Филиал</th><th>Выручка</th></tr></thead><tbody>${Object.entries(byBranch).map(([id,v])=>`<tr><td>${esc(branches[id]||id)}</td><td>${salesMoney(v)}</td></tr>`).join('')||'<tr><td colspan="2">Нет продаж</td></tr>'}</tbody></table>
+    <h3>По кассирам</h3><table class="customer-table"><thead><tr><th>Кассир</th><th>Выручка</th></tr></thead><tbody>${Object.entries(byEmployee).map(([id,v])=>{const emp=salesEmployees.find(e=>Number(e.id)===Number(id));return `<tr><td>${esc(emp?.name||id)}</td><td>${salesMoney(v)}</td></tr>`}).join('')||'<tr><td colspan="2">Нет продаж</td></tr>'}</tbody></table>
+    <h3>По способам оплаты</h3><table class="customer-table"><tbody>${Object.entries(SALES_PAYMENT_LABELS).map(([k,v])=>`<tr><td>${v}</td><td>${salesMoney(byPay[k])}</td></tr>`).join('')}</tbody></table>
+    <h3>Услуги</h3><div class="status">${Object.entries(serviceMap).map(([n,q])=>`${esc(n)} — ${q}`).join(' · ')||'Нет продаж услуг.'}</div>`;
+  }catch(e){$('reportContent').innerHTML='<div class="status">Ошибка: '+esc(e.message)+'</div>';}
+}
+$('buildReportBtn').onclick=buildAdminReport;$('closeReports').onclick=()=>close('reportsModal');
+
+async function renderSalesAdmin(){
+  if(!isAdmin)return;
+  $('employeeBranch').innerHTML=salesBranches.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('branchesAdminRows').innerHTML=salesBranches.map(x=>`<table class="customer-table"><tbody><tr><td>${esc(x.name)}</td><td><button class="danger small" onclick="deleteSalesBranch(${x.id})">Удалить</button></td></tr></tbody></table>`).join('');
+  $('employeesAdminRows').innerHTML=salesEmployees.length?`<table class="customer-table"><thead><tr><th>Филиал</th><th>Сотрудник</th><th></th></tr></thead><tbody>${salesEmployees.map(e=>`<tr><td>${esc(salesBranches.find(b=>Number(b.id)===Number(e.branch_id))?.name||'')}</td><td>${esc(e.name)}</td><td><button class="danger small" onclick="deleteSalesEmployee(${e.id})">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Сотрудников пока нет.</div>';
+  $('catalogAdminRows').innerHTML=salesCatalog.length?`<table class="customer-table"><thead><tr><th>Тип</th><th>Название</th><th>Артикул</th><th>Цена</th><th></th></tr></thead><tbody>${salesCatalog.map(c=>`<tr><td>${c.item_type==='service'?'Услуга':'Товар'}</td><td>${esc(c.name)}</td><td>${esc(c.sku||'')}</td><td>${salesMoney(c.price)}</td><td><button class="danger small" onclick="deleteSalesCatalog(${c.id})">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Товаров и услуг пока нет.</div>';
+}
+$('salesAdminBtn').onclick=async()=>{if(!isAdmin){open('loginModal');return}await loadSalesSetup();open('salesAdminModal');};
+$('closeSalesAdmin').onclick=()=>close('salesAdminModal');
+$('addBranchBtn').onclick=async()=>{const name=$('branchName').value.trim();if(!name)return;const r=await db.from('sales_branches').insert({name});$('salesAdminStatus').textContent=r.error?'Ошибка: '+r.error.message:'Филиал добавлен.';if(!r.error){$('branchName').value='';await loadSalesSetup();}};
+window.deleteSalesBranch=async id=>{if(!confirm('Удалить филиал? Сотрудники этого филиала тоже будут удалены.'))return;const r=await db.from('sales_branches').delete().eq('id',id);if(r.error)alert(r.error.message);else loadSalesSetup();};
+$('addEmployeeBtn').onclick=async()=>{const branchId=Number($('employeeBranch').value),name=$('employeeName').value.trim();if(!branchId||!name)return;const r=await db.from('sales_employees').insert({branch_id:branchId,name});$('salesAdminStatus').textContent=r.error?'Ошибка: '+r.error.message:'Сотрудник добавлен.';if(!r.error){$('employeeName').value='';await loadSalesSetup();}};
+window.deleteSalesEmployee=async id=>{if(!confirm('Удалить сотрудника?'))return;const r=await db.from('sales_employees').delete().eq('id',id);if(r.error)alert(r.error.message);else loadSalesSetup();};
+$('addCatalogBtn').onclick=async()=>{const type=$('catalogType').value,name=$('catalogName').value.trim(),sku=$('catalogSku').value.trim(),price=Number($('catalogPrice').value);if(!name||!(price>=0)){alert('Укажите название и цену.');return;}const r=await db.from('sales_catalog').insert({item_type:type,name,sku:sku||null,price});$('salesAdminStatus').textContent=r.error?'Ошибка: '+r.error.message:'Позиция добавлена.';if(!r.error){$('catalogName').value='';$('catalogSku').value='';$('catalogPrice').value='';await loadSalesSetup();}};
+window.deleteSalesCatalog=async id=>{if(!confirm('Удалить товар/услугу из продаж? Старые продажи сохранятся.'))return;const r=await db.from('sales_catalog').delete().eq('id',id);if(r.error)alert(r.error.message);else loadSalesSetup();};
+
 db.auth.onAuthStateChange(()=>refreshAuth());
-refreshAuth(); load(); loadPriceRules();
+refreshAuth(); load(); loadPriceRules(); loadSalesSetup().then(()=>{updateSalesSessionUI(); if(!salesSession?.shiftId && salesBranches.length && salesEmployees.length){setTimeout(()=>openSalesWorkspace(),350);}}); updateSalesSessionUI();
 </script>
 </body>
 </html>
