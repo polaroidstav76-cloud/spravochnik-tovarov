@@ -405,7 +405,7 @@ function renderPriceRules(){
   const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...servicePriceRules.map(r=>({...r,_type:'service'}))]
     .sort((a,b)=>String(a._type).localeCompare(b._type)||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm||a.min_sheets-b.min_sheets);
   $('priceRows').innerHTML=rows.length?`<table class="price-table"><thead><tr><th>Тип</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td>${r._type==='print'?'Печать':'Услуга'}</td><td>${r.sheet_width_cm}×${r.sheet_height_cm}</td><td>${r._type==='print'?priceLabelSides(r.sides):serviceLabel(r.service_type)}</td><td>${r.min_sheets}</td><td>${money(r.retail_price)}</td><td>${money(r.wholesale_price)}</td><td><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></td></tr>`).join('')+'</tbody></table>`:'<div class="status">Правил пока нет.</div>';
+    rows.map(r=>`<tr><td>${r._type==='print'?'Печать':'Услуга'}</td><td>${r.sheet_width_cm}×${r.sheet_height_cm}</td><td>${r._type==='print'?priceLabelSides(r.sides):serviceLabel(r.service_type)}</td><td>${r.min_sheets}</td><td>${money(r.retail_price)}</td><td>${money(r.wholesale_price)}</td><td><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></td></tr>`).join('')+'</tbody></table>':'<div class="status">Правил пока нет.</div>';
 }
 window.deletePriceRule=async(type,id)=>{
   if(!confirm('Удалить это правило цены?'))return;
