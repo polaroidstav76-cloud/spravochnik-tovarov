@@ -79,6 +79,7 @@
     <div class="row calc-row">
       <div class="field"><label for="cardQty">Количество карточек, шт.</label><input id="cardQty" type="number" min="1" step="1" placeholder="Например: 1000"></div>
       <div class="field"><label for="cardSides">Печать</label><select id="cardSides"><option value="single">Односторонняя</option><option value="double">Двусторонняя</option></select></div>
+      <div class="field"><label for="cardMaterial">Материал</label><select id="cardMaterial"><option value="">Выберите материал</option></select></div>
     </div>
     <div class="check-row">
       <label><input id="differentImages" type="checkbox"> Разные картинки (только если абсолютно все карточки разные)</label>
@@ -149,6 +150,18 @@
     <div class="field"></div>
   </div>
   <div class="actions" style="justify-content:flex-start"><button id="addPrintRule" class="secondary">＋ Добавить правило печати</button></div>
+
+  <h3>Материалы</h3>
+  <div class="status">Цена материала задаётся отдельно для каждого размера листа. Например: самоклейка 30×42 — 220 ₽/лист, глянец 30×42 — 190 ₽/лист.</div>
+  <div class="row">
+    <div class="field"><label>Название материала</label><input id="mrName" placeholder="Самоклейка"></div>
+    <div class="field"><label>Размер листа, см</label><input id="mrSheetSize" placeholder="30×42"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Цена, ₽/лист</label><input id="mrPrice" type="number" min="0" step="0.01"></div>
+    <div class="field"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="addMaterialRule" class="secondary">＋ Добавить материал</button></div>
 
   <h3>Услуги: «Разные картинки» и «Резка»</h3>
   <div class="status">Стоимость услуги считается за лист. Для каждой услуги можно задать свои пороги и цены розницы/опта.</div>
@@ -309,7 +322,7 @@ $('calcSize').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').cli
 
 $('calcPrice').addEventListener('keydown',e=>{if(e.key==='Enter')$('calcBtn').click()});
 
-let printPriceRules=[], servicePriceRules=[];
+let printPriceRules=[], servicePriceRules=[], materialPriceRules=[];
 function normSheet(a,b){a=Number(a);b=Number(b);return a<=b?{w:a,h:b}:{w:b,h:a}}
 function parsePair(value){
   const m=String(value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
@@ -325,18 +338,21 @@ function priceRuleFor(rules,w,h,minSheets){
 }
 function priceMode(rule,sheets){
   if(!rule)return null;
-  // Wholesale applies from the rule's threshold; retail is used for the base tier.
-  const hasWholesale=Number(rule.wholesale_price)>0;
-  const wholesaleStart=printPriceRules.filter(r=>sheetKey(r.sheet_width_cm,r.sheet_height_cm)===sheetKey(rule.sheet_width_cm,rule.sheet_height_cm))
-    .filter(r=>Number(r.wholesale_price)>0).sort((a,b)=>Number(a.min_sheets)-Number(b.min_sheets))[0];
-  return wholesaleStart && sheets>=Number(wholesaleStart.min_sheets) ? Number(rule.wholesale_price) : Number(rule.retail_price);
+  // Каждая строка с порогом хранит свою оптовую цену.
+  // Например: 1 — розница, 50 — опт 1, 100 — опт 2, 150 — опт 3.
+  return Number(rule.wholesale_price)>0 ? Number(rule.wholesale_price) : Number(rule.retail_price);
 }
 async function loadPriceRules(){
-  const [p,sr]=await Promise.all([
+  const [p,sr,mr]=await Promise.all([
     db.from('sheet_print_price_rules').select('*').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets'),
-    db.from('sheet_service_price_rules').select('*').order('service_type').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets')
+    db.from('sheet_service_price_rules').select('*').order('service_type').order('sheet_width_cm').order('sheet_height_cm').order('min_sheets'),
+    db.from('sheet_material_price_rules').select('*').order('material_name').order('sheet_width_cm').order('sheet_height_cm')
   ]);
-  printPriceRules=p.data||[]; servicePriceRules=sr.data||[];
+  printPriceRules=p.data||[]; servicePriceRules=sr.data||[]; materialPriceRules=mr.data||[];
+  if(p.error) console.warn(p.error.message);
+  if(sr.error) console.warn(sr.error.message);
+  if(mr.error) console.warn(mr.error.message);
+  renderMaterialOptions();
 }
 function serviceRuleFor(type,w,h,sheets){
   const k=sheetKey(w,h);
@@ -345,10 +361,18 @@ function serviceRuleFor(type,w,h,sheets){
 }
 function servicePrice(rule,type,w,h,sheets){
   if(!rule)return null;
-  const all=servicePriceRules.filter(r=>r.service_type===type && sheetKey(r.sheet_width_cm,r.sheet_height_cm)===sheetKey(w,h) && Number(r.wholesale_price)>0)
-    .sort((a,b)=>Number(a.min_sheets)-Number(b.min_sheets));
-  const ws=all[0];
-  return ws && sheets>=Number(ws.min_sheets)?Number(rule.wholesale_price):Number(rule.retail_price);
+  return Number(rule.wholesale_price)>0 ? Number(rule.wholesale_price) : Number(rule.retail_price);
+}
+function materialRuleFor(name,w,h){
+  const k=sheetKey(w,h);
+  return materialPriceRules.find(r=>r.material_name===name && sheetKey(r.sheet_width_cm,r.sheet_height_cm)===k) || null;
+}
+function renderMaterialOptions(){
+  const el=$('cardMaterial'); if(!el)return;
+  const current=el.value;
+  const names=[...new Set(materialPriceRules.map(r=>r.material_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  el.innerHTML='<option value="">Выберите материал</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if(names.includes(current))el.value=current;
 }
 function fitCount(cardW,cardH,sheetW,sheetH){
   const usableW=sheetW-2, usableH=sheetH-2;
@@ -360,12 +384,13 @@ function fitCount(cardW,cardH,sheetW,sheetH){
 }
 $('sheetCalcBtn').onclick=async()=>{
   await loadPriceRules();
-  const card=parsePair($('cardSize').value), sheet=parsePair($('sheetSize').value), qty=Number($('cardQty').value), sides=$('cardSides').value;
+  const card=parsePair($('cardSize').value), sheet=parsePair($('sheetSize').value), qty=Number($('cardQty').value), sides=$('cardSides').value, material=$('cardMaterial').value;
   const out=$('sheetCalcResult');
   if(!card){out.innerHTML='<b>Введите размер карточки, например 5×7.</b>';return}
   if(!sheet){out.innerHTML='<b>Введите размер листа, например 30×42.</b>';return}
   if(!(qty>0)&&Number.isInteger(qty)){out.innerHTML='<b>Введите количество карточек.</b>';return}
   if(!(qty>0)||!Number.isFinite(qty)){out.innerHTML='<b>Введите количество карточек.</b>';return}
+  if(!material){out.innerHTML='<b>Выберите материал.</b>';return}
   const fit=fitCount(card.w,card.h,sheet.w,sheet.h);
   if(!fit){out.innerHTML='<b>Карточка не помещается на лист с учётом поля 1 см с каждой стороны.</b>';return}
   const sheets=Math.ceil(qty/fit.count);
@@ -373,6 +398,10 @@ $('sheetCalcBtn').onclick=async()=>{
   if(!pr){out.innerHTML=`<b>В базе нет цены для листа ${sheet.w}×${sheet.h} см.</b><div class="calc-min">Администратору нужно добавить правило цены.</div>`;return}
   const printPrice=priceMode(pr,sheets);
   if(!(printPrice>=0)){out.innerHTML='<b>В базе указана некорректная цена.</b>';return}
+  const materialRule=materialRuleFor(material,sheet.w,sheet.h);
+  if(!materialRule){out.innerHTML=`<b>Для материала «${esc(material)}» нет цены на лист ${sheet.w}×${sheet.h} см.</b><div class="calc-min">Администратору нужно добавить цену материала.</div>`;return}
+  const materialPrice=Number(materialRule.price_per_sheet);
+  if(!(materialPrice>=0)){out.innerHTML='<b>В базе указана некорректная цена материала.</b>';return}
   const diff=$('differentImages').checked, cutting=$('sheetCutting').checked;
   const diffRule=diff?serviceRuleFor('different_images',sheet.w,sheet.h,sheets):null;
   const cutRule=cutting?serviceRuleFor('cutting',sheet.w,sheet.h,sheets):null;
@@ -380,16 +409,19 @@ $('sheetCalcBtn').onclick=async()=>{
   const cutPrice=cutting?servicePrice(cutRule,'cutting',sheet.w,sheet.h,sheets):0;
   if(diff && diffRule===null){out.innerHTML=`<b>Для услуги «Разные картинки» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
   if(cutting && cutRule===null){out.innerHTML=`<b>Для услуги «Резка» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
-  const printTotal=sheets*printPrice, diffTotal=sheets*diffPrice, cutTotal=sheets*cutPrice, total=printTotal+diffTotal+cutTotal;
+  const materialTotal=sheets*materialPrice, printTotal=sheets*printPrice, diffTotal=sheets*diffPrice, cutTotal=sheets*cutPrice, total=materialTotal+printTotal+diffTotal+cutTotal;
   const perCard=total/qty;
-  const wholesaleUsed=(()=>{const arr=printPriceRules.filter(r=>sheetKey(r.sheet_width_cm,r.sheet_height_cm)===sheetKey(sheet.w,sheet.h)&&Number(r.wholesale_price)>0).sort((a,b)=>a.min_sheets-b.min_sheets);return arr[0]&&sheets>=Number(arr[0].min_sheets)})();
-  out.innerHTML=`<div>Лист: <b>${sheet.w} × ${sheet.h} см</b> (поле 1 см с каждой стороны → рабочая область ${fit.usableW} × ${fit.usableH} см)</div>
+  const wholesaleUsed=Number(pr.wholesale_price)>0;
+  const tierText=`от ${pr.min_sheets} листов`;
+  const serviceTier=(r)=>r&&Number(r.wholesale_price)>0;
+  out.innerHTML=`<div>Материал: <b>${esc(material)}</b></div>
+  <div>Лист: <b>${sheet.w} × ${sheet.h} см</b> (поле 1 см с каждой стороны → рабочая область ${fit.usableW} × ${fit.usableH} см)</div>
   <div>На одном листе: <b>${fit.count} карточек</b>, раскладка <b>${fit.orientation}</b></div>
   <div>Количество листов: <b>${sheets}</b></div>
-  <div>Печать: <b>${money(printPrice)} / лист</b> ${wholesaleUsed?'(оптовая цена)':'(розничная цена)'}</div>
-  ${diff?`<div>Разные картинки: <b>${money(diffPrice)} / лист</b> → ${money(diffTotal)}</div>`:''}
-  ${cutting?`<div>Резка листов: <b>${money(cutPrice)} / лист</b> → ${money(cutTotal)}</div>`:''}
-  <div>Печать: <b>${money(printTotal)}</b></div>
+  <div>Материал: <b>${money(materialPrice)} / лист</b> → ${money(materialTotal)}</div>
+  <div>Печать: <b>${money(printPrice)} / лист</b> (${wholesaleUsed?'опт':'розница'}, ${tierText}) → ${money(printTotal)}</div>
+  ${diff?`<div>Разные картинки: <b>${money(diffPrice)} / лист</b> (${serviceTier(diffRule)?'опт':'розница'}) → ${money(diffTotal)}</div>`:''}
+  ${cutting?`<div>Резка листов: <b>${money(cutPrice)} / лист</b> (${serviceTier(cutRule)?'опт':'розница'}) → ${money(cutTotal)}</div>`:''}
   <div>Количество карточек: <b>${qty}</b></div>
   <div>Стоимость 1 карточки: <b>${money(perCard)}</b></div>
   <div class="calc-total">Итого: ${money(total)}</div>`;
@@ -404,8 +436,11 @@ function serviceLabel(v){return v==='cutting'?'Резка листов':'Раз�
 function renderPriceRules(){
   const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...servicePriceRules.map(r=>({...r,_type:'service'}))]
     .sort((a,b)=>String(a._type).localeCompare(b._type)||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm||a.min_sheets-b.min_sheets);
-  $('priceRows').innerHTML=rows.length?`<table class="price-table"><thead><tr><th>Тип</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td>${r._type==='print'?'Печать':'Услуга'}</td><td>${r.sheet_width_cm}×${r.sheet_height_cm}</td><td>${r._type==='print'?priceLabelSides(r.sides):serviceLabel(r.service_type)}</td><td>${r.min_sheets}</td><td>${money(r.retail_price)}</td><td>${money(r.wholesale_price)}</td><td><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></td></tr>`).join('')+'</tbody></table>':'<div class="status">Правил пока нет.</div>';
+  const html=rows.length?`<table class="price-table"><thead><tr><th>Тип</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th></tr></thead><tbody>`+
+    rows.map(r=>`<tr><td>${r._type==='print'?'Печать':'Услуга'}</td><td>${r.sheet_width_cm}×${r.sheet_height_cm}</td><td>${r._type==='print'?priceLabelSides(r.sides):serviceLabel(r.service_type)}</td><td>${r.min_sheets}</td><td>${money(r.retail_price)}</td><td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td><td><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></td></tr>`).join('')+'</tbody></table>':'<div class="status">Правил печати/услуг пока нет.</div>';
+  const mats=materialPriceRules.slice().sort((a,b)=>String(a.material_name).localeCompare(String(b.material_name),'ru')||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm);
+  const mh=mats.length?`<table class="price-table"><thead><tr><th>Материал</th><th>Лист</th><th>Цена/лист</th><th></th></tr></thead><tbody>`+mats.map(r=>`<tr><td>${esc(r.material_name)}</td><td>${r.sheet_width_cm}×${r.sheet_height_cm}</td><td>${money(r.price_per_sheet)}</td><td><button class="danger small" onclick="deleteMaterialRule('${r.id}')">Удалить</button></td></tr>`).join('')+'</tbody></table>':'<div class="status">Материалы пока не добавлены.</div>';
+  $('priceRows').innerHTML=html+`<h3>Материалы в базе</h3>`+mh;
 }
 window.deletePriceRule=async(type,id)=>{
   if(!confirm('Удалить это правило цены?'))return;
@@ -427,6 +462,19 @@ $('addServiceRule').onclick=async()=>{
   const r=await db.from('sheet_service_price_rules').insert({sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale});
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
   $('priceStatus').textContent='Правило услуги добавлено.';await loadPriceRules();renderPriceRules();
+};
+window.deleteMaterialRule=async id=>{
+  if(!confirm('Удалить цену материала?'))return;
+  const r=await db.from('sheet_material_price_rules').delete().eq('id',id);
+  if(r.error){alert(r.error.message);return}
+  await loadPriceRules();renderPriceRules();
+};
+$('addMaterialRule').onclick=async()=>{
+  const name=$('mrName').value.trim(), sh=parsePair($('mrSheetSize').value), price=Number($('mrPrice').value);
+  if(!name||!sh||!(price>=0)){ $('priceStatus').textContent='Проверьте материал, размер и цену.';return }
+  const r=await db.from('sheet_material_price_rules').insert({material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,price_per_sheet:price});
+  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  $('mrName').value='';$('mrSheetSize').value='';$('mrPrice').value='';$('priceStatus').textContent='Материал добавлен.';await loadPriceRules();renderPriceRules();
 };
 $('closePriceAdmin').onclick=()=>close('priceModal');
 
