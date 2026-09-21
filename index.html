@@ -1015,10 +1015,10 @@ async function checkLinkReceiptsBeforeClose(shiftId){
   const sales=sr.data||[];
   if(!sales.length)return true;
   const ids=sales.map(x=>x.id);
-  const pr=await db.from('sale_payments').select('sale_id,method,amount').in('sale_id',ids);
+  const pr=await db.from('sale_payments').select('sale_id,payment_method,amount').in('sale_id',ids);
   if(pr.error){alert('Не удалось проверить оплаты по ссылке: '+pr.error.message);return false}
   const linkSaleIds=new Set(sales.filter(x=>x.payment_method==='link').map(x=>Number(x.id)));
-  (pr.data||[]).forEach(x=>{if(x.method==='link')linkSaleIds.add(Number(x.sale_id));});
+  (pr.data||[]).forEach(x=>{if(x.payment_method==='link')linkSaleIds.add(Number(x.sale_id));});
   const pending=sales.filter(x=>linkSaleIds.has(Number(x.id)) && x.receipt_issued!==true);
   for(const sale of pending){
     const yes=confirm(`Продажа №${sale.order_number||sale.id} на ${salesMoney(sale.total)} была оплачена по ссылке.\n\nПробил ли сотрудник чек в терминале за эту продажу?\n\nОК — ДА, чек пробит\nОтмена — НЕТ, чек не пробит`);
