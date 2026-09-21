@@ -321,7 +321,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 <div class="modal" id="salesTaskModal"><div class="dialog" style="max-width:650px"><h2>📌 Задания на смену</h2><div id="salesTaskContent"></div><div class="actions"><button id="closeSalesTask" class="secondary">Позже</button><button id="confirmSalesTask" class="primary">Подтвердить выполнение</button></div></div></div>
 <div class="modal" id="salesWorkspaceModal"><div class="dialog" style="max-width:650px">
   <h2>🧾 Рабочее место</h2><div class="status">Выберите филиал, участников смены и кассира этого рабочего места. Сотрудники могут работать в разных филиалах.</div>
-  <div class="sales-grid" style="margin-top:14px"><div class="field"><label>Филиал</label><select id="salesBranchSelect"></select></div><div class="field"><label>Сотрудник</label><select id="salesEmployeeSelect" multiple size="1"></select><label id="salesMultipleWrap" style="display:none;margin-top:8px"><input id="salesMultipleEmployees" type="checkbox" style="width:auto;margin-right:6px"> Несколько сотрудников</label><div id="salesEmployeeHint" class="status">Выберите сотрудника.</div></div></div><div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select></div>
+  <div class="sales-grid" style="margin-top:14px"><div class="field"><label>Филиал</label><select id="salesBranchSelect"></select></div><div class="field"><label>Сотрудники / кассиры</label><select id="salesEmployeeSelect" multiple size="6"></select><div class="status">Можно выбрать несколько сотрудников, удерживая Ctrl. Уже подключённые участники остаются в общей смене.</div></div></div><div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select></div>
   <div class="field"><label for="salesCashierSelect">Кто оформляет продажи на этом рабочем месте</label><select id="salesCashierSelect"></select></div>
   <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
 </div></div>
@@ -1007,26 +1007,28 @@ async function registerSaleClubCard(){
 }
 $('saleRegisterClubBtn').onclick=registerSaleClubCard;
 async function openSalesWorkspace(){await loadSalesSetup();if(!salesBranches.length){alert('Сначала администратору нужно настроить филиалы.');return}renderSalesWorkspaceOptions();$('salesWorkspaceStatus').textContent='';open('salesWorkspaceModal')}
-$('salesBranchSelect').onchange=renderSalesEmployeeOptions;$('salesEmployeeSelect').onchange=updateLeadEmployeeOptions; $('salesMultipleEmployees').onchange=()=>{ if(!$('salesMultipleEmployees').checked){ const opts=[...$('salesEmployeeSelect').selectedOptions]; opts.slice(1).forEach(o=>o.selected=false); } updateLeadEmployeeOptions(); };$('salesSelectBtn').onclick=openSalesWorkspace;$('closeSalesWorkspace').onclick=()=>close('salesWorkspaceModal');
+$('salesBranchSelect').onchange=renderSalesEmployeeOptions;$('salesEmployeeSelect').onchange=updateLeadEmployeeOptions;$('salesSelectBtn').onclick=openSalesWorkspace;$('closeSalesWorkspace').onclick=()=>close('salesWorkspaceModal');
 async function checkLinkReceiptsBeforeClose(shiftId){
-  // Проверяем и обычную оплату «Ссылка», и раздельную оплату, где одним из компонентов была ссылка.
-  const sr=await db.from('sales').select('id,order_number,total,created_at,receipt_issued,comment,payment_method').eq('shift_id',shiftId).eq('status','completed').neq('payment_status','unpaid').order('created_at');
-  if(sr.error){alert('Не удалось проверить продажи перед закрытием смены: '+sr.error.message);return false}
-  const sales=sr.data||[];
-  if(!sales.length)return true;
+  // Проверяем ВСЕ продажи смены: и оплаченные, и отмеченные как не оплаченные.
+  // Для раздельной оплаты дополнительно смотрим sale_payments, где ссылка может быть одной из частей.
+  const r=await db.from('sales').select('id,order_number,total,created_at,receipt_issued,comment,payment_method,status,payment_status').eq('shift_id',shiftId).order('created_at');
+  if(r.error){alert('Не удалось проверить оплаты по ссылке: '+r.error.message);return false}
+  const sales=r.data||[];
   const ids=sales.map(x=>x.id);
-  const pr=await db.from('sale_payments').select('sale_id,payment_method,amount').in('sale_id',ids);
-  if(pr.error){alert('Не удалось проверить оплаты по ссылке: '+pr.error.message);return false}
-  const linkSaleIds=new Set(sales.filter(x=>x.payment_method==='link').map(x=>Number(x.id)));
-  (pr.data||[]).forEach(x=>{if(x.payment_method==='link')linkSaleIds.add(Number(x.sale_id));});
-  const pending=sales.filter(x=>linkSaleIds.has(Number(x.id)) && x.receipt_issued!==true);
+  let payments=[];
+  if(ids.length){
+    const pr=await db.from('sale_payments').select('sale_id,payment_method,amount').in('sale_id',ids);
+    if(pr.error){alert('Не удалось проверить оплаты по ссылке: '+pr.error.message);return false}
+    payments=pr.data||[];
+  }
+  const linkSaleIds=new Set(sales.filter(x=>x.payment_method==='link').map(x=>x.id));
+  payments.filter(x=>x.payment_method==='link').forEach(x=>linkSaleIds.add(x.sale_id));
+  const pending=sales.filter(x=>linkSaleIds.has(x.id)&&x.receipt_issued!==true);
   for(const sale of pending){
-    const yes=confirm(`Продажа №${sale.order_number||sale.id} на ${salesMoney(sale.total)} была оплачена по ссылке.\n\nПробил ли сотрудник чек в терминале за эту продажу?\n\nОК — ДА, чек пробит\nОтмена — НЕТ, чек не пробит`);
+    const yes=confirm(`Продажа №${sale.order_number||sale.id} на ${salesMoney(sale.total)} была оплачена по ссылке.\n\nПробил ли сотрудник чек по этой продаже?\n\nОК — ДА, чек пробит\nОтмена — НЕТ, чек не пробит`);
     const u=await db.from('sales').update({receipt_issued:yes}).eq('id',sale.id);
     if(u.error){alert('Не удалось сохранить отметку по продаже №'+(sale.order_number||sale.id)+': '+u.error.message);return false}
   }
-  const no=sales.filter(x=>linkSaleIds.has(Number(x.id)) && x.receipt_issued!==true);
-  if(no.length)alert(`Внимание: по ${no.length} оплате(ам) по ссылке чек отмечен как НЕ пробит. Эта информация сохранена в продаже.`);
   return true;
 }
 $('closeShiftBtn').onclick=async()=>{if(!salesSession?.shiftId)return;if(!confirm('Завершить текущую смену?'))return;if(!(await checkLinkReceiptsBeforeClose(salesSession.shiftId)))return;const r=await db.from('sales_shifts').update({status:'closed',ended_at:new Date().toISOString()}).eq('id',salesSession.shiftId).eq('status','open');if(r.error){alert(r.error.message);return}await buildShiftReport(salesSession.shiftId);salesSession=null;localStorage.removeItem('salesSession');updateSalesSessionUI()};
@@ -1128,11 +1130,7 @@ function persistSalesSession() {
   localStorage.removeItem('salesSession');
 }
 function selectedWorkspacePeople() {
-  const selected=[...$('salesEmployeeSelect').selectedOptions].map(o=>Number(o.value)).filter(Boolean);
-  const multiple=!!$('salesMultipleEmployees')?.checked;
-  const existing=(workspaceShift?.participants||[]).map(p=>Number(p.personId)).filter(Boolean);
-  if(multiple) return [...new Set(selected.concat(existing))];
-  return selected.length ? [selected[0]] : (existing.length ? [existing[0]] : []);
+  return [...new Set([...$('salesEmployeeSelect').selectedOptions].map(o=>Number(o.value)).filter(Boolean).concat((workspaceShift?.participants||[]).map(p=>p.personId)))];
 }
 function renderSalesWorkspaceOptions() {
   const current = $('salesBranchSelect').value || String(salesSession?.branchId || '');
@@ -1142,16 +1140,6 @@ function renderSalesWorkspaceOptions() {
 function updateLeadEmployeeOptions() {
   const connected=new Set((workspaceShift?.participants||[]).map(p=>p.personId));
   for(const option of $('salesEmployeeSelect').options) if(connected.has(Number(option.value))) option.selected=true;
-  const multiple=!!$('salesMultipleEmployees')?.checked;
-  if(!multiple){
-    const selected=[...$('salesEmployeeSelect').selectedOptions];
-    if(selected.length>1) selected.slice(1).forEach(o=>o.selected=false);
-    $('salesEmployeeSelect').size=1;
-    $('salesEmployeeHint').textContent='Один сотрудник — работает один кассир.';
-  }else{
-    $('salesEmployeeSelect').size=6;
-    $('salesEmployeeHint').textContent='Выберите всех сотрудников этой смены, затем укажите главного по ретуши.';
-  }
   const ids=selectedWorkspacePeople(), existing=workspaceShift?.participants || [];
   const people=ids.map(id=>salesPeople.find(p=>Number(p.id)===id) || {id,name:existing.find(p=>p.personId===id)?.name || 'Сотрудник',is_active:false});
   const cashier=$('salesCashierSelect'), previous=cashier.value;
@@ -1193,11 +1181,6 @@ async function refreshWorkspaceBranch() {
     const selected=new Set([...chosen,...existing]);
     if(!chosen.length && salesSession?.personId) selected.add(Number(salesSession.personId));
     $('salesEmployeeSelect').innerHTML=people.map(p=>`<option value="${p.id}" ${selected.has(Number(p.id))?'selected':''} ${existing.has(Number(p.id))?'disabled':''}>${esc(p.name)}${existing.has(Number(p.id))?' — уже в смене':''}</option>`).join('') || '<option value="">Нет сотрудников</option>';
-    const multiWrap=$('salesMultipleWrap'),multi=$('salesMultipleEmployees');
-    if(multiWrap&&multi){
-      multiWrap.style.display=people.length>1?'block':'none';
-      multi.checked=participants.length>1 || chosen.length>1;
-    }
     updateLeadEmployeeOptions();
     $('startShiftBtn').textContent=shift?'Подключиться / сохранить состав':'Начать смену';
     $('salesWorkspaceStatus').textContent=shift?'Открытая смена №'+shift.id+'. Существующие участники сохраняются. Выберите кассира этого рабочего места.':'Будет открыта общая смена выбранного филиала.';
