@@ -320,9 +320,12 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
 <div class="modal" id="salesTaskModal"><div class="dialog" style="max-width:650px"><h2>📌 Задания на смену</h2><div id="salesTaskContent"></div><div class="actions"><button id="closeSalesTask" class="secondary">Позже</button><button id="confirmSalesTask" class="primary">Подтвердить выполнение</button></div></div></div>
 <div class="modal" id="salesWorkspaceModal"><div class="dialog" style="max-width:650px">
-  <h2>🧾 Рабочее место</h2><div class="status">Выберите филиал, участников смены и кассира этого рабочего места. Сотрудники могут работать в разных филиалах.</div>
-  <div class="sales-grid" style="margin-top:14px"><div class="field"><label>Филиал</label><select id="salesBranchSelect"></select></div><div class="field"><label>Сотрудники / кассиры</label><select id="salesEmployeeSelect" multiple size="6"></select><div class="status">Можно выбрать несколько сотрудников, удерживая Ctrl. Уже подключённые участники остаются в общей смене.</div></div></div><div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select></div>
-  <div class="field"><label for="salesCashierSelect">Кто оформляет продажи на этом рабочем месте</label><select id="salesCashierSelect"></select></div>
+  <h2>🧾 Рабочее место</h2><div class="status">Сначала выберите филиал, затем сотрудника. Если на смене работает второй сотрудник — отметьте «Добавить сотрудника в смену».</div>
+  <div class="field" style="margin-top:14px"><label>1. Филиал</label><select id="salesBranchSelect"></select></div>
+  <div class="field"><label>2. Сотрудник</label><select id="salesEmployeeSelect"></select></div>
+  <label id="salesAddEmployeeWrap" class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="salesAddEmployee" type="checkbox" style="width:auto"> <span>Добавить сотрудника в смену</span></label>
+  <div id="salesAdditionalWrap" class="field" style="display:none"><label>Дополнительный сотрудник</label><select id="salesAdditionalEmployee"></select></div>
+  <div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select><div class="status">Именно этот сотрудник получает 100 ₽ за каждую оформленную ретушь за смену.</div></div>
   <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
 </div></div>
 
@@ -1130,7 +1133,16 @@ function persistSalesSession() {
   localStorage.removeItem('salesSession');
 }
 function selectedWorkspacePeople() {
-  return [...new Set([...$('salesEmployeeSelect').selectedOptions].map(o=>Number(o.value)).filter(Boolean).concat((workspaceShift?.participants||[]).map(p=>p.personId)))];
+  const ids=[];
+  const primary=Number($('salesEmployeeSelect').value||0);
+  const additional=$('salesAdditionalEmployee') && $('salesAddEmployee').checked ? Number($('salesAdditionalEmployee').value||0) : 0;
+  if(primary) ids.push(primary);
+  if(additional && additional!==primary) ids.push(additional);
+  // Existing participants remain part of the already-open shift.
+  for(const p of (workspaceShift?.participants||[])) {
+    const id=Number(p.personId||0); if(id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 function renderSalesWorkspaceOptions() {
   const current = $('salesBranchSelect').value || String(salesSession?.branchId || '');
@@ -1138,29 +1150,39 @@ function renderSalesWorkspaceOptions() {
   if (salesBranches.some(b=>String(b.id)===current)) $('salesBranchSelect').value=current;
 }
 function updateLeadEmployeeOptions() {
-  const connected=new Set((workspaceShift?.participants||[]).map(p=>p.personId));
-  for(const option of $('salesEmployeeSelect').options) if(connected.has(Number(option.value))) option.selected=true;
-  const ids=selectedWorkspacePeople(), existing=workspaceShift?.participants || [];
-  const people=ids.map(id=>salesPeople.find(p=>Number(p.id)===id) || {id,name:existing.find(p=>p.personId===id)?.name || 'Сотрудник',is_active:false});
-  const cashier=$('salesCashierSelect'), previous=cashier.value;
-  const activePeople=people.filter(p=>p.is_active!==false);
-  cashier.innerHTML='<option value="">Выберите, кто оформляет продажи</option>'+activePeople.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  const preferred=previous || (Number(salesSession?.branchId)===Number($('salesBranchSelect').value)?String(salesSession?.personId || ''):'');
-  if (activePeople.length===1) cashier.value=String(activePeople[0].id);
-  else if (activePeople.some(p=>String(p.id)===preferred)) cashier.value=preferred;
-  const lead=$('salesLeadEmployee'), previousLead=lead.value;
-  $('salesLeadWrap').style.display=ids.length>1?'block':'none';
-  lead.innerHTML='<option value="">'+(workspaceShift?.leadPersonId?'Сохранить текущего главного':'Пока не назначен')+'</option>'+people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  const preferredLead=previousLead || String(workspaceShift?.leadPersonId || (!workspaceShift?people.find(p=>p.retouch_lead_default)?.id:'') || '');
-  if(ids.length>1 && ids.includes(Number(preferredLead))) lead.value=preferredLead;
-  else lead.value='';
+  const primary=Number($('salesEmployeeSelect').value||0);
+  const additional=$('salesAddEmployee').checked?Number($('salesAdditionalEmployee').value||0):0;
+  const ids=[primary,additional].filter((id,i,a)=>id && a.indexOf(id)===i);
+  const people=ids.map(id=>salesPeople.find(p=>Number(p.id)===id)).filter(Boolean);
+  const wrap=$('salesLeadWrap'),lead=$('salesLeadEmployee');
+  if(ids.length<2){wrap.style.display='none';lead.innerHTML='';return;}
+  wrap.style.display='block';
+  lead.innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const existingLead=workspaceShift?.leadPersonId;
+  if(existingLead && ids.includes(Number(existingLead))) lead.value=String(existingLead);
+  else if(!lead.value) lead.value=String(ids[0]);
+}
+function refreshAdditionalEmployeeOptions() {
+  const primary=Number($('salesEmployeeSelect').value||0);
+  const additional=$('salesAdditionalEmployee');
+  if(!additional) return;
+  const existingIds=new Set((workspaceShift?.participants||[]).map(p=>Number(p.personId)));
+  additional.innerHTML='<option value="">Выберите сотрудника</option>'+salesPeople.filter(p=>Number(p.id)!==primary).map(p=>`<option value="${p.id}">${esc(p.name)}${existingIds.has(Number(p.id))?' — уже в смене':''}</option>`).join('');
+  const existingOther=(workspaceShift?.participants||[]).find(p=>Number(p.personId)!==primary);
+  if(existingOther) additional.value=String(existingOther.personId);
+  updateLeadEmployeeOptions();
+}
+function syncWorkspaceEmployeeUI() {
+  const checked=$('salesAddEmployee').checked;
+  $('salesAdditionalWrap').style.display=checked?'block':'none';
+  if(checked) refreshAdditionalEmployeeOptions();
+  else updateLeadEmployeeOptions();
 }
 async function refreshWorkspaceBranch() {
   const request=++workspaceRequest, branchId=Number($('salesBranchSelect').value);
-  const chosen=selectedWorkspacePeople();
   workspaceLoading=true; workspaceShift=null; $('startShiftBtn').disabled=true;
   $('salesWorkspaceStatus').textContent='Проверяю открытую смену…';
-  $('salesLeadEmployee').innerHTML=''; $('salesCashierSelect').innerHTML='';
+  $('salesLeadEmployee').innerHTML='';
   try {
     const r=await db.from('sales_shifts').select('id,branch_id,started_at').eq('branch_id',branchId).eq('status','open').order('started_at').limit(2);
     if(r.error) throw r.error;
@@ -1175,15 +1197,18 @@ async function refreshWorkspaceBranch() {
     }
     if(request!==workspaceRequest) return;
     workspaceShift=shift?{...shift,participants,leadPersonId:participants.find(p=>p.isLead)?.personId}:null;
-    const existing=new Set(participants.map(p=>p.personId));
     const people=[...uniquePeople()];
     participants.forEach(p=>{if(!people.some(x=>Number(x.id)===p.personId))people.push({id:p.personId,name:p.name,is_active:false});});
-    const selected=new Set([...chosen,...existing]);
-    if(!chosen.length && salesSession?.personId) selected.add(Number(salesSession.personId));
-    $('salesEmployeeSelect').innerHTML=people.map(p=>`<option value="${p.id}" ${selected.has(Number(p.id))?'selected':''} ${existing.has(Number(p.id))?'disabled':''}>${esc(p.name)}${existing.has(Number(p.id))?' — уже в смене':''}</option>`).join('') || '<option value="">Нет сотрудников</option>';
+    const currentPrimary=participants[0]?.personId || salesSession?.personId || '';
+    $('salesEmployeeSelect').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('') || '<option value="">Нет сотрудников</option>';
+    if(currentPrimary) $('salesEmployeeSelect').value=String(currentPrimary);
+    const hasSecond=participants.length>1;
+    $('salesAddEmployee').checked=hasSecond;
+    refreshAdditionalEmployeeOptions();
+    $('salesAdditionalWrap').style.display=hasSecond?'block':'none';
     updateLeadEmployeeOptions();
     $('startShiftBtn').textContent=shift?'Подключиться / сохранить состав':'Начать смену';
-    $('salesWorkspaceStatus').textContent=shift?'Открытая смена №'+shift.id+'. Существующие участники сохраняются. Выберите кассира этого рабочего места.':'Будет открыта общая смена выбранного филиала.';
+    $('salesWorkspaceStatus').textContent=shift?'Открытая смена №'+shift.id+'. Первый сотрудник выбран автоматически; при необходимости добавьте второго.':'Сначала выберите филиал и сотрудника.';
     $('startShiftBtn').disabled=false;
   } catch(e) {
     if(request===workspaceRequest) $('salesWorkspaceStatus').textContent='Ошибка: '+e.message;
@@ -1193,14 +1218,18 @@ async function openSalesWorkspace() {
   try {
     await loadSalesSetup();
     if(!salesBranches.length) {alert('Сначала администратору нужно настроить филиалы.');return;}
-    renderSalesWorkspaceOptions(); open('salesWorkspaceModal'); await refreshWorkspaceBranch();
+    renderSalesWorkspaceOptions();
+    $('salesAddEmployee').checked=false;
+    $('salesAdditionalWrap').style.display='none';
+    $('salesLeadWrap').style.display='none';
+    open('salesWorkspaceModal'); await refreshWorkspaceBranch();
   } catch(e) { alert('Не удалось загрузить рабочее место: '+e.message); }
 }
 function updateSalesSessionUI() {
   const active=!!salesSession?.shiftId;
   $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
   $('salesBtn').disabled=false; $('shiftReportBtn').disabled=!active; $('closeShiftBtn').disabled=!active;
-  $('salesSelectBtn').textContent=active?'Состав смены / рабочее место':'Выбрать филиал и кассира';
+  $('salesSelectBtn').textContent=active?'Состав смены / рабочее место':'Выбрать филиал и сотрудника';
 }
 async function ensureEmployeeRow(personId,branchId) {
   const r=await db.rpc('sales_ensure_employee',{p_person_id:personId,p_branch_id:branchId});
@@ -1223,8 +1252,9 @@ async function validateSalesSession() {
 function renderSaleCashiers() {
   const participants=(saleContext?.participants||[]).filter(p=>p.isActive);
   $('saleEmployeeView').innerHTML=participants.map(p=>`<option value="${p.employeeId}">${esc(p.name)}</option>`).join('');
-  $('saleEmployeeView').value=String(saleContext.employeeId);
-  $('saleSessionInfo').textContent=`${saleContext.branchName} · Кассир: ${saleContext.employeeName}`;
+  if(participants.length===1) $('saleEmployeeView').value=String(participants[0].employeeId);
+  else $('saleEmployeeView').value='';
+  $('saleSessionInfo').textContent=`${saleContext.branchName} · ${participants.length>1?'Выберите кассира':'Кассир: '+saleContext.employeeName}`;
 }
 $('saleEmployeeView').onchange=()=>{
   const p=saleContext?.participants.find(p=>p.employeeId===Number($('saleEmployeeView').value) && p.isActive);
@@ -1234,18 +1264,25 @@ $('saleEmployeeView').onchange=()=>{
   renderSaleCashiers();
 };
 $('salesBranchSelect').onchange=refreshWorkspaceBranch;
-$('salesEmployeeSelect').onchange=updateLeadEmployeeOptions;
+$('salesEmployeeSelect').onchange=()=>{ refreshAdditionalEmployeeOptions(); };
+$('salesAddEmployee').onchange=syncWorkspaceEmployeeUI;
+$('salesAdditionalEmployee').onchange=updateLeadEmployeeOptions;
+$('salesLeadEmployee').onchange=()=>{};
 $('salesSelectBtn').onclick=openSalesWorkspace;
 $('startShiftBtn').onclick=async()=>{
   if(workspaceLoading || $('startShiftBtn').disabled) return;
-  const branchId=Number($('salesBranchSelect').value),ids=selectedWorkspacePeople(),cashierId=Number($('salesCashierSelect').value);
-  if(!branchId || !ids.length || !ids.includes(cashierId)) { $('salesWorkspaceStatus').textContent='Выберите филиал, сотрудников и кассира этого рабочего места.';return; }
+  const branchId=Number($('salesBranchSelect').value),ids=selectedWorkspacePeople();
+  const leadId=ids.length>1?Number($('salesLeadEmployee').value||0):null;
+  if(!branchId || !ids.length) { $('salesWorkspaceStatus').textContent='Сначала выберите филиал и сотрудника.';return; }
+  if(ids.length>1 && !leadId) { $('salesWorkspaceStatus').textContent='Выберите главного по ретуши.';return; }
   $('startShiftBtn').disabled=true; $('salesBranchSelect').disabled=true; $('salesWorkspaceStatus').textContent='Сохраняю состав смены…';
   try {
-    const r=await db.rpc('sales_open_team_shift',{p_branch_id:branchId,p_person_ids:ids,p_lead_person_id:ids.length>1?(Number($('salesLeadEmployee').value)||null):null,p_expected_shift_id:workspaceShift?.id||null});
+    const r=await db.rpc('sales_open_team_shift',{p_branch_id:branchId,p_person_ids:ids,p_lead_person_id:leadId,p_expected_shift_id:workspaceShift?.id||null});
     if(r.error) throw r.error;
-    const c=r.data, cashier=c.participants.find(p=>p.personId===cashierId && p.isActive);
-    if(!cashier) throw new Error('Выбранный кассир недоступен. Обновите состав смены.');
+    const c=r.data;
+    const primaryPersonId=Number($('salesEmployeeSelect').value||0);
+    const cashier=c.participants.find(p=>p.personId===primaryPersonId && p.isActive) || c.participants.find(p=>p.isActive);
+    if(!cashier) throw new Error('Выбранный сотрудник недоступен. Обновите состав смены.');
     salesSession={shiftId:c.shiftId,branchId:c.branchId,branchName:c.branchName,employeeId:cashier.employeeId,personId:cashier.personId,employeeName:cashier.name,startedAt:c.startedAt,participants:c.participants};
     persistSalesSession(); updateSalesSessionUI(); close('salesWorkspaceModal');
     await showShiftTasks(c.branchId,c.shiftId,cashier.employeeId);
