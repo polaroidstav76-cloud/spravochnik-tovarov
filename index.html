@@ -1257,11 +1257,13 @@ function renderSaleCashiers() {
   $('saleSessionInfo').textContent=`${saleContext.branchName} · ${participants.length>1?'Выберите кассира':'Кассир: '+saleContext.employeeName}`;
 }
 $('saleEmployeeView').onchange=()=>{
-  const p=saleContext?.participants.find(p=>p.employeeId===Number($('saleEmployeeView').value) && p.isActive);
+  const selectedId=Number($('saleEmployeeView').value||0);
+  const p=saleContext?.participants.find(p=>p.employeeId===selectedId && p.isActive);
   if(!p) return;
   Object.assign(saleContext,{employeeId:p.employeeId,personId:p.personId,employeeName:p.name});
   if(salesSession?.shiftId===saleContext.shiftId) { Object.assign(salesSession,{employeeId:p.employeeId,personId:p.personId,employeeName:p.name}); persistSalesSession(); updateSalesSessionUI(); }
-  renderSaleCashiers();
+  // Не перерисовываем select: при нескольких сотрудниках выбранное значение должно сохраняться.
+  $('saleSessionInfo').textContent=`${saleContext.branchName} · Кассир: ${p.name}`;
 };
 $('salesBranchSelect').onchange=refreshWorkspaceBranch;
 $('salesEmployeeSelect').onchange=()=>{ refreshAdditionalEmployeeOptions(); };
