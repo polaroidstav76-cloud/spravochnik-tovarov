@@ -60,6 +60,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .card{transition:transform .15s,box-shadow .15s}.card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(15,23,42,.11)}
 .modal{background:rgba(15,23,42,.58);backdrop-filter:blur(5px)}
 .dialog{border:1px solid rgba(226,232,240,.95);box-shadow:0 24px 70px rgba(15,23,42,.22);border-radius:20px}
+.dialog{position:relative}.dialog button[id^="close"]{position:absolute;top:14px;right:14px;z-index:50}.dialog .sales-home-head button[id^="close"]{position:absolute;top:14px;right:14px}.dialog .actions{padding-right:90px}
 .sales-home{border-radius:20px;box-shadow:var(--shadow)}
 .sales-home-head{background:linear-gradient(135deg,#0f4c81,#2563eb);padding:18px 20px}
 .sales-home-actions button{border:1px solid #dbe4ef;background:#fff;color:#1e293b}.sales-home-actions .primary{color:#fff;border-color:transparent}
@@ -579,7 +580,7 @@ function shirtSinglePrice(print,size,qty,type){
   return {price:fallback,mode:'Розница'};
 }
 function shirtIncludedIndex(prints){if(!prints.length)return -1;let idx=0,best=-1;prints.forEach((p,i)=>{const v=SHIRT_RETAIL[p.print]*(p.size==='1'?1:0.5);if(v>best){best=v;idx=i}});return idx}
-function fallbackShirtCombinationPrice(prints){if(!prints.length)return 0;let total=0;prints.forEach((p,i)=>{const base=Number(SHIRT_RETAIL[p.print]||0);total+=i===0?base:(p.size==='0.5'?base*0.5:base)});return total}
+function fallbackShirtCombinationPrice(prints){if(!prints.length)return 0;const ordered=[...prints].sort((a,b)=>(Number(SHIRT_RETAIL[b.print]||0)*(b.size==='0.5'?0.5:1))-(Number(SHIRT_RETAIL[a.print]||0)*(a.size==='0.5'?0.5:1)));return ordered.reduce((total,p,i)=>{const base=Number(SHIRT_RETAIL[p.print]||0);return total+(i===0?base:base*(p.size==='0.5'?0.5:1));},0)}
 function renderShirtPrints(){const box=$('shirtPrints');if(!box)return;const arr=window.shirtPrints||[];box.innerHTML=arr.map((p,i)=>`<div class="block"><div class="block-head"><b>Нанесение ${i+1}</b>${arr.length>1?`<button type="button" class="danger small" onclick="removeShirtPrint(${i})">Удалить</button>`:''}</div><div class="row"><div class="field"><label>Тип нанесения</label><select onchange="shirtPrints[${i}].print=this.value"><option value="dtf" ${p.print==='dtf'?'selected':''}>ДТФ</option><option value="film" ${p.print==='film'?'selected':''}>Плёнка</option></select></div><div class="field"><label>Размер</label><select onchange="shirtPrints[${i}].size=this.value"><option value="1" ${p.size==='1'?'selected':''}>1 — больше 15×21, до 28×38 см</option><option value="0.5" ${p.size==='0.5'?'selected':''}>0,5 — до 15×21 см</option></select></div></div></div>`).join('')}
 window.shirtPrints=[{print:'dtf',size:'1'}];
 window.removeShirtPrint=i=>{shirtPrints.splice(i,1);renderShirtPrints()};
@@ -758,6 +759,103 @@ async function openPriceAdmin(){
 }
 function priceLabelSides(v){return v==='double'?'Двусторонняя':'Односторонняя'}
 function serviceLabel(v){return v==='cutting'?'Резка листов':'Разные картинки'}
+function renderPriceRules(){
+  const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...laminationPriceRules.map(r=>({...r,_type:'lamination'})),...servicePriceRules.filter(r=>!String(r.service_type||'').startsWith('shirt_')).map(r=>({...r,_type:'service'}))]
+    .sort((a,b)=>String(a._type).localeCompare(b._type)
+      ||String(a.material_name||'').localeCompare(String(b.material_name||''),'ru')
+      ||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm
+      ||a.min_sheets-b.min_sheets);
+
+  const html=rows.length?`<table class="price-table"><thead><tr>
+    <th>Тип</th><th>Материал</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th>
+  </tr></thead><tbody>`+
+    rows.map(r=>`<tr>
+      <td>${r._type==='print'?'Печать':(r._type==='lamination'?'Ламинация':'Услуга')}</td>
+      <td>${esc(r.material_name||'—')}</td>
+      <td>${r.sheet_width_cm}×${r.sheet_height_cm}</td>
+      <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?('Ламинация: '+priceLabelSides(r.sides)):'Услуга: '+serviceLabel(r.service_type))}</td>
+      <td>${r.min_sheets}</td>
+      <td>${money(r.retail_price)}</td>
+      <td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td>
+      <td><div class="price-row-actions"><button class="secondary small" onclick="editPriceRule('${r._type}','${r.id}')">Изменить</button><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></div></td>
+    </tr>`).join('')+'</tbody></table>':'<div class="status">Правил печати/услуг пока нет.</div>';
+
+  $('priceRows').innerHTML=html;
+  if(typeof renderShirtPriceRules==='function') renderShirtPriceRules();
+}
+
+function resetPriceEdit(){
+  priceEdit={type:null,id:null};
+  $('cancelPrintEdit').style.display='none'; $('cancelLamEdit').style.display='none'; $('cancelServiceEdit').style.display='none';
+  $('addPrintRule').textContent='＋ Добавить правило печати'; $('addLamRule').textContent='＋ Добавить правило ламинации'; $('addServiceRule').textContent='＋ Добавить правило услуги';
+}
+window.editPriceRule=(type,id)=>{
+  const source=type==='print'?printPriceRules:(type==='lamination'?laminationPriceRules:servicePriceRules);
+  const r=source.find(x=>String(x.id)===String(id)); if(!r)return;
+  resetPriceEdit(); priceEdit={type,id:String(id)};
+  if(type==='print'){ $('prMaterial').value=r.material_name||''; $('prSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('prSides').value=r.sides||'single'; $('prMinSheets').value=r.min_sheets; $('prRetail').value=r.retail_price; $('prWholesale').value=r.wholesale_price||0; $('addPrintRule').textContent='Сохранить изменения'; $('cancelPrintEdit').style.display='inline-block'; }
+  if(type==='lamination'){ $('lrMaterial').value=r.material_name||''; $('lrSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('lrSides').value=r.sides||'single'; $('lrMinSheets').value=r.min_sheets; $('lrRetail').value=r.retail_price; $('lrWholesale').value=r.wholesale_price||0; $('addLamRule').textContent='Сохранить изменения'; $('cancelLamEdit').style.display='inline-block'; }
+  if(type==='service'){ $('srSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('srService').value=r.service_type; $('srMinSheets').value=r.min_sheets; $('srRetail').value=r.retail_price; $('srWholesale').value=r.wholesale_price||0; $('addServiceRule').textContent='Сохранить изменения'; $('cancelServiceEdit').style.display='inline-block'; }
+};
+$('cancelPrintEdit').onclick=()=>{resetPriceEdit();$('prMaterial').value='';$('prSheetSize').value='';$('prMinSheets').value='1';$('prRetail').value='';$('prWholesale').value='';};
+$('cancelLamEdit').onclick=()=>{resetPriceEdit();$('lrMaterial').value='';$('lrSheetSize').value='';$('lrSides').value='single';$('lrMinSheets').value='1';$('lrRetail').value='';$('lrWholesale').value='';};
+$('cancelServiceEdit').onclick=()=>{resetPriceEdit();$('srSheetSize').value='';$('srMinSheets').value='1';$('srRetail').value='';$('srWholesale').value='';};
+
+window.deletePriceRule=async(type,id)=>{
+  if(!confirm('Удалить это правило цены?'))return;
+  const table=type==='print'?'sheet_print_price_rules':(type==='lamination'?'sheet_lamination_price_rules':'sheet_service_price_rules');
+  const r=await db.from(table).delete().eq('id',id);
+  if(r.error){alert(r.error.message);return}
+  await loadPriceRules();renderPriceRules();
+};
+$('addPrintRule').onclick=async()=>{
+  const name=$('prMaterial').value.trim();
+  const sh=parsePair($('prSheetSize').value);
+  const min=Number($('prMinSheets').value);
+  const retail=Number($('prRetail').value);
+  const wholesale=Number($('prWholesale').value);
+
+  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){
+    $('priceStatus').textContent='Проверьте материал, размер, порог и цены.';
+    return;
+  }
+
+  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides:$('prSides').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='print' ? await db.from('sheet_print_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_print_price_rules').insert(payload);
+
+  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  $('prMaterial').value='';
+  $('prSheetSize').value='';
+  $('prMinSheets').value='1';
+  $('prRetail').value='';
+  $('prWholesale').value='';
+  resetPriceEdit(); $('priceStatus').textContent='Правило печати сохранено.';
+  await loadPriceRules();
+  renderPriceRules();
+};
+
+$('addLamRule').onclick=async()=>{
+  const name=$('lrMaterial').value.trim();
+  const sh=parsePair($('lrSheetSize').value);
+  const min=Number($('lrMinSheets').value);
+  const retail=Number($('lrRetail').value);
+  const wholesale=Number($('lrWholesale').value);
+  const sides=$('lrSides').value;
+  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
+  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='lamination' ? await db.from('sheet_lamination_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_lamination_price_rules').insert(payload);
+  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrSides').value='single'; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
+  resetPriceEdit(); $('priceStatus').textContent='Правило ламинации сохранено.'; await loadPriceRules(); renderPriceRules();
+};
+$('addServiceRule').onclick=async()=>{
+  const sh=parsePair($('srSheetSize').value), min=Number($('srMinSheets').value), retail=Number($('srRetail').value), wholesale=Number($('srWholesale').value);
+  if(!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
+  const payload={sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
+  const r=priceEdit.type==='service' ? await db.from('sheet_service_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_service_price_rules').insert(payload);
+  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  resetPriceEdit(); $('priceStatus').textContent='Правило услуги сохранено.';await loadPriceRules();renderPriceRules();
+};
 function shirtComboLabel(r){return r.prints.map(p=>`${SHIRT_PRINTS[p.print]} ${p.size==='1'?'1':'0,5'}`).join(' + ')}
 function renderShirtPriceRules(){
   const box=$('shirtPriceRows');if(!box)return;
