@@ -149,9 +149,8 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
   <section class="calc-card" aria-labelledby="shirtCalcTitle">
     <h2 id="shirtCalcTitle">Калькулятор стоимости футболок</h2>
-    <div class="status">Розница или опт → наша футболка или футболка клиента → ДТФ или плёнка → до 3 нанесений.</div>
+    <div class="status">Розничная/оптовая цена определяется автоматически по количеству. Для нашей футболки оптовый порог считается по количеству футболок, для футболки клиента — по общему количеству нанесений.</div>
     <div class="row calc-row">
-      <div class="field"><label for="shirtMode">Режим</label><select id="shirtMode"><option value="retail">Розница</option><option value="wholesale">Опт</option></select></div>
       <div class="field"><label for="shirtType">Футболка</label><select id="shirtType"><option value="ours">Наша футболка — 1850 ₽ + дополнительные принты</option><option value="client">Футболка клиента</option></select></div>
       <div class="field"><label for="shirtQty">Количество футболок, шт.</label><input id="shirtQty" type="number" min="1" step="1" value="1"></div>
     </div>
@@ -242,17 +241,29 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
   </div>
   <div class="actions" style="justify-content:flex-start"><button id="addLamRule" class="secondary">＋ Добавить правило ламинации</button><button id="cancelLamEdit" class="small" style="display:none">Отмена редактирования</button></div>
 
-  <h3>Футболки</h3>
-  <div class="status">Оптовая цена вводится за одну футболку/одно нанесение размера 1. Размер 0,5 считается как 50%. Для нашей футболки 1850 ₽ включает один принт; дополнительные принты считаются отдельно. Порог опта для нашей футболки — количество футболок, для футболки клиента — количество нанесений.</div>
+  <h3>Футболки — комбинации нанесений</h3>
+  <div class="status">Здесь администратор сам задаёт цену любой комбинации до 3 нанесений. Порядок нанесений не важен: ДТФ большой + плёнка маленькая и плёнка маленькая + ДТФ большой — одна и та же комбинация. Для опта укажите порог «Опт от». Для нашей футболки порог считается по количеству футболок, для футболки клиента — по общему количеству нанесений.</div>
   <div class="row">
-    <div class="field"><label>Тип</label><select id="shirtPriceType"><option value="ours">Наша футболка</option><option value="client">Футболка клиента</option></select></div>
-    <div class="field"><label>Нанесение</label><select id="shirtPricePrint"><option value="dtf">ДТФ</option><option value="film">Плёнка</option></select></div>
+    <div class="field"><label>Тип футболки</label><select id="shirtRuleType"><option value="ours">Наша футболка</option><option value="client">Футболка клиента</option></select></div>
+    <div class="field"><label>Опт от количества</label><input id="shirtRuleWholesaleFrom" type="number" min="1" step="1" value="10"></div>
   </div>
   <div class="row">
-    <div class="field"><label>От количества</label><input id="shirtPriceMin" type="number" min="1" step="1" value="1"></div>
-    <div class="field"><label>Оптовая цена размера 1, ₽</label><input id="shirtPriceWholesale" type="number" min="0" step="0.01"></div>
+    <div class="field"><label>Нанесение 1</label><select id="shirtRulePrint1"><option value="dtf">ДТФ</option><option value="film">Плёнка</option></select></div>
+    <div class="field"><label>Размер 1</label><select id="shirtRuleSize1"><option value="1">1 — больше 15×21 до 28×38 см</option><option value="0.5">0,5 — до 15×21 см</option></select></div>
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="addShirtPriceRule" class="secondary">＋ Добавить правило футболок</button><button id="cancelShirtPriceEdit" class="small" style="display:none">Отмена редактирования</button></div>
+  <div class="row">
+    <div class="field"><label>Нанесение 2 (необязательно)</label><select id="shirtRulePrint2"><option value="">— нет —</option><option value="dtf">ДТФ</option><option value="film">Плёнка</option></select></div>
+    <div class="field"><label>Размер 2</label><select id="shirtRuleSize2"><option value="1">1 — больше 15×21 до 28×38 см</option><option value="0.5">0,5 — до 15×21 см</option></select></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Нанесение 3 (необязательно)</label><select id="shirtRulePrint3"><option value="">— нет —</option><option value="dtf">ДТФ</option><option value="film">Плёнка</option></select></div>
+    <div class="field"><label>Размер 3</label><select id="shirtRuleSize3"><option value="1">1 — больше 15×21 до 28×38 см</option><option value="0.5">0,5 — до 15×21 см</option></select></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Розничная цена комбинации, ₽</label><input id="shirtRuleRetail" type="number" min="0" step="0.01"></div>
+    <div class="field"><label>Оптовая цена комбинации, ₽</label><input id="shirtRuleWholesale" type="number" min="0" step="0.01"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start"><button id="addShirtPriceRule" class="secondary">＋ Добавить комбинацию</button><button id="cancelShirtPriceEdit" class="small" style="display:none">Отмена редактирования</button></div>
   <div id="shirtPriceRows" style="margin-top:12px"></div>
 
   <h3>Услуги: «Разные картинки» и «Резка»</h3>
@@ -541,11 +552,34 @@ let shirtPriceRules=[];
 const SHIRT_TYPES={ours:'Наша футболка',client:'Футболка клиента'};
 const SHIRT_PRINTS={dtf:'ДТФ',film:'Плёнка'};
 const SHIRT_RETAIL={dtf:1050,film:650};
-function shirtServiceType(type,print){return type==='ours'?'shirt_ours':`shirt_client_${print}`}
-function parseShirtRule(r){const m=String(r.service_type||'').match(/^shirt_(ours|client(?:_(dtf|film))?)$/);if(!m)return null;return {...r,shirt_type:m[1]==='ours'?'ours':'client',print_type:m[1]==='ours'?'all':m[2]}}
-function bestShirtRule(type,print,qty,mode){const arr=shirtPriceRules.filter(r=>r.shirt_type===type&&(type==='ours'||r.print_type===print)&&Number(r.min_sheets)<=qty).sort((a,b)=>Number(b.min_sheets)-Number(a.min_sheets));const r=arr[0];if(!r)return null;const wholesale=Number(r.wholesale_price||0);return {rule:r,price:mode==='wholesale'&&wholesale>0?wholesale:Number(r.retail_price||SHIRT_RETAIL[print])}}
-function shirtSizePrice(print,size,qty,mode){const type=$('shirtType')?.value||'client';const x=bestShirtRule(type,print,qty,mode);const base=x?x.price:SHIRT_RETAIL[print];return size==='0.5'?base*0.5:base}
-function shirtIncludedIndex(prints){if(!prints.length)return -1;let idx=0,best=-1;prints.forEach((p,i)=>{const v=SHIRT_RETAIL[p.print];const score=(p.size==='1'?v:v*0.5);if(score>best){best=score;idx=i}});return idx}
+function shirtComboKey(type,prints){const sorted=prints.map(p=>`${p.print}:${p.size}`).sort();return `${type}|${sorted.join(',')}`}
+function encodeShirtCombo(type,prints){return `shirt_combo|${shirtComboKey(type,prints)}`}
+function parseShirtComboRule(r){
+  const raw=String(r.service_type||'');
+  if(!raw.startsWith('shirt_combo|')) return null;
+  const parts=raw.split('|'); if(parts.length<3)return null;
+  const type=parts[1]; const combo=parts.slice(2).join('|').split(',').filter(Boolean).map(x=>{const [print,size]=x.split(':');return {print,size}}).filter(x=>SHIRT_PRINTS[x.print]&&(x.size==='1'||x.size==='0.5'));
+  if(!['ours','client'].includes(type)||!combo.length)return null;
+  return {...r,shirt_type:type,prints:combo,combo_key:shirtComboKey(type,combo),wholesale_from:Number(r.min_sheets||1)};
+}
+function parseShirtRule(r){return parseShirtComboRule(r)}
+function normalizedShirtPrints(prints){return prints.map(p=>({print:p.print,size:p.size})).sort((a,b)=>`${a.print}:${a.size}`.localeCompare(`${b.print}:${b.size}`))}
+function findShirtCombo(type,prints,qty){
+  const key=shirtComboKey(type,prints);
+  const rows=shirtPriceRules.filter(r=>r.shirt_type===type&&r.combo_key===key).sort((a,b)=>Number(b.wholesale_from)-Number(a.wholesale_from));
+  if(!rows.length)return null;
+  const wholesaleRow=rows.find(r=>qty>=Number(r.wholesale_from)&&Number(r.wholesale_price)>0);
+  const retailRow=rows.slice().sort((a,b)=>Number(a.wholesale_from)-Number(b.wholesale_from)).find(r=>Number(r.retail_price)>=0) || rows[0];
+  return {retailRow,wholesaleRow,price:wholesaleRow?Number(wholesaleRow.wholesale_price):Number(retailRow.retail_price),mode:wholesaleRow?'Опт':'Розница'};
+}
+function shirtSinglePrice(print,size,qty,type){
+  const combo=findShirtCombo(type,[{print,size}],type==='ours'?qty:qty);
+  if(combo)return {price:combo.price,mode:combo.mode};
+  const fallback=Number(SHIRT_RETAIL[print])*(size==='0.5'?0.5:1);
+  return {price:fallback,mode:'Розница'};
+}
+function shirtIncludedIndex(prints){if(!prints.length)return -1;let idx=0,best=-1;prints.forEach((p,i)=>{const v=SHIRT_RETAIL[p.print]*(p.size==='1'?1:0.5);if(v>best){best=v;idx=i}});return idx}
+function fallbackShirtCombinationPrice(prints){if(!prints.length)return 0;let total=0;prints.forEach((p,i)=>{const base=Number(SHIRT_RETAIL[p.print]||0);total+=i===0?base:(p.size==='0.5'?base*0.5:base)});return total}
 function renderShirtPrints(){const box=$('shirtPrints');if(!box)return;const arr=window.shirtPrints||[];box.innerHTML=arr.map((p,i)=>`<div class="block"><div class="block-head"><b>Нанесение ${i+1}</b>${arr.length>1?`<button type="button" class="danger small" onclick="removeShirtPrint(${i})">Удалить</button>`:''}</div><div class="row"><div class="field"><label>Тип нанесения</label><select onchange="shirtPrints[${i}].print=this.value"><option value="dtf" ${p.print==='dtf'?'selected':''}>ДТФ</option><option value="film" ${p.print==='film'?'selected':''}>Плёнка</option></select></div><div class="field"><label>Размер</label><select onchange="shirtPrints[${i}].size=this.value"><option value="1" ${p.size==='1'?'selected':''}>1 — больше 15×21, до 28×38 см</option><option value="0.5" ${p.size==='0.5'?'selected':''}>0,5 — до 15×21 см</option></select></div></div></div>`).join('')}
 window.shirtPrints=[{print:'dtf',size:'1'}];
 window.removeShirtPrint=i=>{shirtPrints.splice(i,1);renderShirtPrints()};
@@ -681,27 +715,41 @@ $('sheetCalcBtn').onclick=async()=>{
 };
 
 $('shirtCalcBtn').onclick=async()=>{
-  const mode=$('shirtMode').value,type=$('shirtType').value,qty=Math.floor(Number($('shirtQty').value)||0),prints=window.shirtPrints||[];
+  const type=$('shirtType').value,qty=Math.floor(Number($('shirtQty').value)||0),prints=window.shirtPrints||[];
   const out=$('shirtCalcResult');
   if(qty<1){out.innerHTML='<b>Введите количество футболок.</b>';return}
   if(!prints.length){out.innerHTML='<b>Добавьте хотя бы одно нанесение.</b>';return}
   if(prints.length>3){out.innerHTML='<b>Максимум 3 нанесения. Для расчёта 4 и более нанесений обратитесь к администратору.</b>';return}
-  for(const p of prints){if(p.size==='1' && (p.print!=='dtf'&&p.print!=='film')){out.innerHTML='<b>Проверьте тип нанесения.</b>';return}}
   await loadPriceRules();
-  const included=type==='ours'?shirtIncludedIndex(prints):-1;
+  const normalized=normalizedShirtPrints(prints);
+  const totalPrintCount=type==='ours'?qty*prints.length:qty*prints.length;
+  const combo=findShirtCombo(type,normalized,type==='ours'?qty:totalPrintCount);
   let perShirt=0,detail=[];
   if(type==='ours'){
-    const baseRule=bestShirtRule('ours','all',qty,mode);
-    const shirtBase=mode==='retail'?1850:(baseRule?baseRule.price:0);
-    if(mode==='wholesale'&&!baseRule){out.innerHTML='<b>Для опта нашей футболки не задана цена.</b><div class="calc-min">Администратору нужно добавить оптовое правило для нашей футболки.</div>';return}
-    perShirt=shirtBase;detail.push(`<div>Футболка: <b>${money(shirtBase)}</b> за шт. (${mode==='wholesale'?'опт':'розница'})</div>`);
-    prints.forEach((p,i)=>{const base=shirtSizePrice(p.print,p.size,qty,mode);if(i===included){detail.push(`<div>Нанесение ${i+1}: ${SHIRT_PRINTS[p.print]}, размер ${p.size} — <b>входит в стоимость футболки</b></div>`)}else{perShirt+=base;detail.push(`<div>Дополнительное нанесение ${i+1}: ${SHIRT_PRINTS[p.print]}, размер ${p.size} — <b>${money(base)}</b></div>`)}});
+    const base=1850; perShirt=base; detail.push(`<div>Наша футболка: <b>${money(base)}</b> за шт. — первый принт входит в стоимость.</div>`);
+    const included=shirtIncludedIndex(prints);
+    const extraPrints=prints.filter((_,i)=>i!==included);
+    if(included>=0) detail.push(`<div>Нанесение ${included+1}: ${SHIRT_PRINTS[prints[included].print]}, размер ${prints[included].size} — <b>входит в 1850 ₽</b></div>`);
+    if(extraPrints.length){
+      const extraCombo=findShirtCombo('client',normalizedShirtPrints(extraPrints),qty);
+      if(extraCombo){
+        perShirt+=extraCombo.price;
+        detail.push(`<div>Дополнительная комбинация нанесений: <b>${extraCombo.mode} ${money(extraCombo.price)}</b></div>`);
+      }else{
+        extraPrints.forEach((p)=>{const single=shirtSinglePrice(p.print,p.size,qty,'client');perShirt+=single.price;detail.push(`<div>Дополнительное нанесение: ${SHIRT_PRINTS[p.print]}, размер ${p.size} — <b>${money(single.price)}</b></div>`)});
+      }
+    }
+    const total=perShirt*qty;
+    out.innerHTML=detail.join('')+`<div>Количество футболок: <b>${qty}</b></div><div class="calc-min">Опт определяется автоматически по количеству футболок. Размер 0,5 — до 15×21 см; размер 1 — больше 15×21 до 28×38 см.</div><div class="calc-total">Итого: ${money(total)}</div>`;
   }else{
-    prints.forEach((p,i)=>{const price=shirtSizePrice(p.print,p.size,qty,mode);perShirt+=price;detail.push(`<div>Нанесение ${i+1}: ${SHIRT_PRINTS[p.print]}, размер ${p.size} — <b>${money(price)}</b></div>`)});
+    if(combo){perShirt=combo.price;detail.push(`<div>Комбинация нанесений: <b>${combo.mode}</b> — ${prints.map(p=>`${SHIRT_PRINTS[p.print]} ${p.size}`).join(' + ')}</div>`);}
+    else{
+      perShirt=fallbackShirtCombinationPrice(prints);
+      detail.push(`<div>Розничный расчёт комбинации: <b>${money(perShirt)}</b> за одну футболку клиента.</div>`);
+    }
+    const total=perShirt*qty;
+    out.innerHTML=detail.join('')+`<div>Футболок клиента: <b>${qty}</b></div><div>Всего нанесений: <b>${totalPrintCount}</b></div><div class="calc-min">Опт определяется автоматически по общему количеству нанесений. Цена комбинации не зависит от порядка добавления принтов.</div><div class="calc-total">Итого: ${money(total)}</div>`;
   }
-  const total=perShirt*qty;
-  const discount=prints.filter(p=>p.size==='0.5').length?prints.filter(p=>p.size==='0.5').length:0;
-  out.innerHTML=detail.join('')+`<div>Нанесений на одну футболку: <b>${prints.length}</b></div><div>Количество футболок: <b>${qty}</b></div>${discount?'<div class="calc-min">Размер 0,5 рассчитывается как 50% от цены размера 1. Для нашей футболки один наиболее дорогой принт включён в 1850 ₽.</div>':''}<div class="calc-total">Итого: ${money(total)}</div>`;
 };
 
 async function openPriceAdmin(){
@@ -710,111 +758,19 @@ async function openPriceAdmin(){
 }
 function priceLabelSides(v){return v==='double'?'Двусторонняя':'Односторонняя'}
 function serviceLabel(v){return v==='cutting'?'Резка листов':'Разные картинки'}
+function shirtComboLabel(r){return r.prints.map(p=>`${SHIRT_PRINTS[p.print]} ${p.size==='1'?'1':'0,5'}`).join(' + ')}
 function renderShirtPriceRules(){
-  const box=$('shirtPriceRows'); if(!box)return;
-  const rows=shirtPriceRules.slice().sort((a,b)=>String(a.shirt_type+a.print_type).localeCompare(b.shirt_type+b.print_type)||Number(a.min_sheets)-Number(b.min_sheets));
-  box.innerHTML=rows.length?`<table class="price-table"><thead><tr><th>Тип</th><th>Нанесение</th><th>От количества</th><th>Розница, размер 1</th><th>Опт, размер 1</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${SHIRT_TYPES[r.shirt_type]}</td><td>${r.print_type==='all'?'Любой принт':SHIRT_PRINTS[r.print_type]}</td><td>${r.min_sheets}</td><td>${money(r.retail_price||SHIRT_RETAIL[r.print_type])}</td><td>${money(r.wholesale_price||0)}</td><td><div class="price-row-actions"><button class="small secondary" onclick="editShirtPriceRule(${r.id})">Изменить</button><button class="small danger" onclick="deleteShirtPriceRule(${r.id})">Удалить</button></div></td></tr>`).join('')}</tbody></table>`:'<div class="status">Правил опта футболок пока нет. Розничные цены используются по умолчанию.</div>';}
-function renderPriceRules(){
-  renderShirtPriceRules();
-  const rows=[...printPriceRules.map(r=>({...r,_type:'print'})),...laminationPriceRules.map(r=>({...r,_type:'lamination'})),...servicePriceRules.filter(r=>!String(r.service_type||'').startsWith('shirt_')).map(r=>({...r,_type:'service'}))]
-    .sort((a,b)=>String(a._type).localeCompare(b._type)
-      ||String(a.material_name||'').localeCompare(String(b.material_name||''),'ru')
-      ||a.sheet_width_cm-b.sheet_width_cm||a.sheet_height_cm-b.sheet_height_cm
-      ||a.min_sheets-b.min_sheets);
-
-  const html=rows.length?`<table class="price-table"><thead><tr>
-    <th>Тип</th><th>Материал</th><th>Лист</th><th>Печать/услуга</th><th>От листов</th><th>Розница</th><th>Опт</th><th></th>
-  </tr></thead><tbody>`+
-    rows.map(r=>`<tr>
-      <td>${r._type==='print'?'Печать':(r._type==='lamination'?'Ламинация':'Услуга')}</td>
-      <td>${esc(r.material_name||'—')}</td>
-      <td>${r.sheet_width_cm}×${r.sheet_height_cm}</td>
-      <td>${r._type==='print'?priceLabelSides(r.sides):(r._type==='lamination'?('Ламинация: '+priceLabelSides(r.sides)):'Услуга: '+serviceLabel(r.service_type))}</td>
-      <td>${r.min_sheets}</td>
-      <td>${money(r.retail_price)}</td>
-      <td>${r.wholesale_price>0?money(r.wholesale_price):'—'}</td>
-      <td><div class="price-row-actions"><button class="secondary small" onclick="editPriceRule('${r._type}','${r.id}')">Изменить</button><button class="danger small" onclick="deletePriceRule('${r._type}','${r.id}')">Удалить</button></div></td>
-    </tr>`).join('')+'</tbody></table>':'<div class="status">Правил печати/услуг пока нет.</div>';
-
-  $('priceRows').innerHTML=html;
+  const box=$('shirtPriceRows');if(!box)return;
+  const rows=shirtPriceRules.slice().sort((a,b)=>String(a.shirt_type).localeCompare(b.shirt_type)||shirtComboLabel(a).localeCompare(shirtComboLabel(b),'ru')||Number(a.wholesale_from)-Number(b.wholesale_from));
+  box.innerHTML=rows.length?`<table class="price-table"><thead><tr><th>Футболка</th><th>Комбинация</th><th>Опт от</th><th>Розница</th><th>Опт</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${SHIRT_TYPES[r.shirt_type]}</td><td>${esc(shirtComboLabel(r))}</td><td>${r.wholesale_from}</td><td>${money(r.retail_price)}</td><td>${Number(r.wholesale_price)>0?money(r.wholesale_price):'—'}</td><td><div class="price-row-actions"><button class="small secondary" onclick="editShirtPriceRule(${r.id})">Изменить</button><button class="small danger" onclick="deleteShirtPriceRule(${r.id})">Удалить</button></div></td></tr>`).join('')}</tbody></table>`:'<div class="status">Правил комбинаций пока нет.</div>';
 }
-function resetPriceEdit(){
-  priceEdit={type:null,id:null};
-  $('cancelPrintEdit').style.display='none'; $('cancelLamEdit').style.display='none'; $('cancelServiceEdit').style.display='none';
-  $('addPrintRule').textContent='＋ Добавить правило печати'; $('addLamRule').textContent='＋ Добавить правило ламинации'; $('addServiceRule').textContent='＋ Добавить правило услуги';
-}
-window.editPriceRule=(type,id)=>{
-  const source=type==='print'?printPriceRules:(type==='lamination'?laminationPriceRules:servicePriceRules);
-  const r=source.find(x=>String(x.id)===String(id)); if(!r)return;
-  resetPriceEdit(); priceEdit={type,id:String(id)};
-  if(type==='print'){ $('prMaterial').value=r.material_name||''; $('prSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('prSides').value=r.sides||'single'; $('prMinSheets').value=r.min_sheets; $('prRetail').value=r.retail_price; $('prWholesale').value=r.wholesale_price||0; $('addPrintRule').textContent='Сохранить изменения'; $('cancelPrintEdit').style.display='inline-block'; }
-  if(type==='lamination'){ $('lrMaterial').value=r.material_name||''; $('lrSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('lrSides').value=r.sides||'single'; $('lrMinSheets').value=r.min_sheets; $('lrRetail').value=r.retail_price; $('lrWholesale').value=r.wholesale_price||0; $('addLamRule').textContent='Сохранить изменения'; $('cancelLamEdit').style.display='inline-block'; }
-  if(type==='service'){ $('srSheetSize').value=`${r.sheet_width_cm}×${r.sheet_height_cm}`; $('srService').value=r.service_type; $('srMinSheets').value=r.min_sheets; $('srRetail').value=r.retail_price; $('srWholesale').value=r.wholesale_price||0; $('addServiceRule').textContent='Сохранить изменения'; $('cancelServiceEdit').style.display='inline-block'; }
-};
-$('cancelPrintEdit').onclick=()=>{resetPriceEdit();$('prMaterial').value='';$('prSheetSize').value='';$('prMinSheets').value='1';$('prRetail').value='';$('prWholesale').value='';};
-$('cancelLamEdit').onclick=()=>{resetPriceEdit();$('lrMaterial').value='';$('lrSheetSize').value='';$('lrSides').value='single';$('lrMinSheets').value='1';$('lrRetail').value='';$('lrWholesale').value='';};
-$('cancelServiceEdit').onclick=()=>{resetPriceEdit();$('srSheetSize').value='';$('srMinSheets').value='1';$('srRetail').value='';$('srWholesale').value='';};
-
-window.deletePriceRule=async(type,id)=>{
-  if(!confirm('Удалить это правило цены?'))return;
-  const table=type==='print'?'sheet_print_price_rules':(type==='lamination'?'sheet_lamination_price_rules':'sheet_service_price_rules');
-  const r=await db.from(table).delete().eq('id',id);
-  if(r.error){alert(r.error.message);return}
-  await loadPriceRules();renderPriceRules();
-};
-$('addPrintRule').onclick=async()=>{
-  const name=$('prMaterial').value.trim();
-  const sh=parsePair($('prSheetSize').value);
-  const min=Number($('prMinSheets').value);
-  const retail=Number($('prRetail').value);
-  const wholesale=Number($('prWholesale').value);
-
-  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){
-    $('priceStatus').textContent='Проверьте материал, размер, порог и цены.';
-    return;
-  }
-
-  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides:$('prSides').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
-  const r=priceEdit.type==='print' ? await db.from('sheet_print_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_print_price_rules').insert(payload);
-
-  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  $('prMaterial').value='';
-  $('prSheetSize').value='';
-  $('prMinSheets').value='1';
-  $('prRetail').value='';
-  $('prWholesale').value='';
-  resetPriceEdit(); $('priceStatus').textContent='Правило печати сохранено.';
-  await loadPriceRules();
-  renderPriceRules();
-};
-
-$('addLamRule').onclick=async()=>{
-  const name=$('lrMaterial').value.trim();
-  const sh=parsePair($('lrSheetSize').value);
-  const min=Number($('lrMinSheets').value);
-  const retail=Number($('lrRetail').value);
-  const wholesale=Number($('lrWholesale').value);
-  const sides=$('lrSides').value;
-  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
-  const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
-  const r=priceEdit.type==='lamination' ? await db.from('sheet_lamination_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_lamination_price_rules').insert(payload);
-  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  $('lrMaterial').value=''; $('lrSheetSize').value=''; $('lrSides').value='single'; $('lrMinSheets').value='1'; $('lrRetail').value=''; $('lrWholesale').value='';
-  resetPriceEdit(); $('priceStatus').textContent='Правило ламинации сохранено.'; await loadPriceRules(); renderPriceRules();
-};
-$('addServiceRule').onclick=async()=>{
-  const sh=parsePair($('srSheetSize').value), min=Number($('srMinSheets').value), retail=Number($('srRetail').value), wholesale=Number($('srWholesale').value);
-  if(!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
-  const payload={sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
-  const r=priceEdit.type==='service' ? await db.from('sheet_service_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_service_price_rules').insert(payload);
-  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  resetPriceEdit(); $('priceStatus').textContent='Правило услуги сохранено.';await loadPriceRules();renderPriceRules();
-};
+function resetShirtPriceForm(){shirtPriceEditId=null;$('shirtRuleWholesaleFrom').value='10';$('shirtRulePrint1').value='dtf';$('shirtRuleSize1').value='1';$('shirtRulePrint2').value='';$('shirtRuleSize2').value='1';$('shirtRulePrint3').value='';$('shirtRuleSize3').value='1';$('shirtRuleRetail').value='';$('shirtRuleWholesale').value='';$('addShirtPriceRule').textContent='＋ Добавить комбинацию';$('cancelShirtPriceEdit').style.display='none'}
 let shirtPriceEditId=null;
-window.editShirtPriceRule=async id=>{const r=shirtPriceRules.find(x=>Number(x.id)===Number(id));if(!r)return;shirtPriceEditId=id;$('shirtPriceType').value=r.shirt_type;$('shirtPricePrint').value=r.print_type;$('shirtPriceMin').value=r.min_sheets;$('shirtPriceWholesale').value=r.wholesale_price||0;$('addShirtPriceRule').textContent='Сохранить изменения';$('cancelShirtPriceEdit').style.display='inline-block'};
-window.deleteShirtPriceRule=async id=>{if(!confirm('Удалить это правило опта футболки?'))return;const r=await db.from('sheet_service_price_rules').delete().eq('id',id);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Правило футболки удалено.'};
-$('addShirtPriceRule').onclick=async()=>{const type=$('shirtPriceType').value,print=$('shirtPricePrint').value,min=Number($('shirtPriceMin').value),wholesale=Number($('shirtPriceWholesale').value);if(!(min>=1)||!(wholesale>=0)){$('priceStatus').textContent='Проверьте порог и оптовую цену.';return}const payload={service_type:shirtServiceType(type,print),sheet_width_cm:1,sheet_height_cm:1,min_sheets:min,retail_price:type==='ours'?1850:SHIRT_RETAIL[print],wholesale_price:wholesale};const r=shirtPriceEditId?await db.from('sheet_service_price_rules').update(payload).eq('id',shirtPriceEditId):await db.from('sheet_service_price_rules').insert(payload);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}shirtPriceEditId=null;$('shirtPriceWholesale').value='';$('shirtPriceMin').value='1';$('addShirtPriceRule').textContent='＋ Добавить правило футболок';$('cancelShirtPriceEdit').style.display='none';await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Правило футболки сохранено.'};
-$('cancelShirtPriceEdit').onclick=()=>{shirtPriceEditId=null;$('shirtPriceMin').value='1';$('shirtPriceWholesale').value='';$('addShirtPriceRule').textContent='＋ Добавить правило футболок';$('cancelShirtPriceEdit').style.display='none'};
+function readShirtRuleForm(){const type=$('shirtRuleType').value,prints=[];for(let i=1;i<=3;i++){const print=$('shirtRulePrint'+i).value;if(print)prints.push({print,size:$('shirtRuleSize'+i).value})}return {type,prints:normalizedShirtPrints(prints),wholesaleFrom:Number($('shirtRuleWholesaleFrom').value),retail:Number($('shirtRuleRetail').value),wholesale:Number($('shirtRuleWholesale').value)}}
+window.editShirtPriceRule=async id=>{const r=shirtPriceRules.find(x=>Number(x.id)===Number(id));if(!r)return;shirtPriceEditId=id;$('shirtRuleType').value=r.shirt_type;$('shirtRuleWholesaleFrom').value=r.wholesale_from;r.prints.forEach((p,i)=>{if(i<3){$('shirtRulePrint'+(i+1)).value=p.print;$('shirtRuleSize'+(i+1)).value=p.size}});for(let i=r.prints.length+1;i<=3;i++)$('shirtRulePrint'+i).value='';$('shirtRuleRetail').value=r.retail_price;$('shirtRuleWholesale').value=r.wholesale_price||'';$('addShirtPriceRule').textContent='Сохранить изменения';$('cancelShirtPriceEdit').style.display='inline-block'};
+window.deleteShirtPriceRule=async id=>{if(!confirm('Удалить правило комбинации футболок?'))return;const r=await db.from('sheet_service_price_rules').delete().eq('id',id);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Правило комбинации удалено.'};
+$('addShirtPriceRule').onclick=async()=>{const f=readShirtRuleForm();if(!f.prints.length||f.prints.length>3||!(f.wholesaleFrom>=1)||!(f.retail>=0)||!(f.wholesale>=0)){$('priceStatus').textContent='Укажите 1–3 нанесения, порог опта и обе цены.';return}const service=encodeShirtCombo(f.type,f.prints),payload={service_type:service,sheet_width_cm:1,sheet_height_cm:1,min_sheets:f.wholesaleFrom,retail_price:f.retail,wholesale_price:f.wholesale};const r=shirtPriceEditId?await db.from('sheet_service_price_rules').update(payload).eq('id',shirtPriceEditId):await db.from('sheet_service_price_rules').insert(payload);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}resetShirtPriceForm();await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Комбинация сохранена.'};
+$('cancelShirtPriceEdit').onclick=resetShirtPriceForm;
 $('closePriceAdmin').onclick=()=>close('priceModal');
 
 $('addBtn').onclick=()=>editProduct();
