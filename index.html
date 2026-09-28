@@ -893,32 +893,279 @@ async function openTraineeTests(){const ts=await getTests();$('testIntro').inner
 window.startTest=async id=>{const t=(await db.from('tests').select('*').eq('id',id).single()).data;const qs=(await db.from('test_questions').select('*').eq('test_id',id).order('sort_order')).data||[];activeTest={...t,questions:qs};$('testTitle').textContent=t.title;$('testIntro').textContent=`Вопросов: ${qs.length}. Результат не показывается стажёру.`;$('testQuestions').innerHTML=qs.map((q,i)=>`<div class="field"><label>${i+1}. ${esc(q.question_text)}</label><textarea id="a_${q.id}"></textarea></div>`).join('');$('submitTest').style.display='inline-block'};
 $('submitTest').onclick=async()=>{if(!activeTest)return;const name=$('traineeName').value.trim();if(!name){$('testStatus').textContent='Введите ФИО';return}const ans=activeTest.questions.map(q=>({q,a:$('a_'+q.id).value.trim()}));const score=Math.round(ans.filter(x=>match(x.a,x.q.correct_answer)).length*100/Math.max(1,ans.length));const extraShifts=score<70?2:(score<=90?1:0);const r=await db.from('test_attempts').insert({test_id:activeTest.id,trainee_name:name,score_percent:score,extra_training_hours:extraShifts}).select().single();if(r.error){$('testStatus').textContent='Ошибка: '+r.error.message;return}const ar=await db.from('test_answers').insert(ans.map(x=>({attempt_id:r.data.id,question_id:x.q.id,trainee_answer:x.a,is_correct:match(x.a,x.q.correct_answer)})));if(ar.error){$('testStatus').textContent='Ошибка сохранения ответов: '+ar.error.message;return}$('testStatus').textContent='Ответы приняты. Результат доступен только администратору.';$('submitTest').style.display='none'};
 let qrows=[];
+let editingTestId=null;
 function addQ(){const d=document.createElement('div');d.className='block';d.innerHTML='<textarea class="qq" placeholder="Вопрос"></textarea><input class="qa" placeholder="Правильный ответ (варианты через ;)"><input class="qc" placeholder="Категория"><input class="qp" placeholder="Товар / артикул"><button type="button" class="danger small" onclick="this.parentElement.remove()">Удалить</button>';$('adminQuestionEditor').appendChild(d)}
-async function openTestAdmin(){if(!isAdmin){open('loginModal');return}$('adminQuestionEditor').innerHTML='';addQ();const ts=await getTests();const aa=(await db.from('test_attempts').select('*').order('created_at',{ascending:false}).limit(100)).data||[];const testsHtml=ts.length?ts.map(t=>`<div class="block"><b>${esc(t.title)}</b><br><button class="secondary small" onclick="deleteTest('${t.id}')">Удалить тест</button></div>`).join(''):'<div class="status">Тестов пока нет</div>';const resultsHtml=aa.length?aa.map(a=>{const extra=a.score_percent<70?2:(a.score_percent<=90?1:0);const label=a.score_percent<70?'нужно 2 смены стажировки':(a.score_percent<=90?'нужно 1 смена стажировки':'дополнительная стажировка не требуется');return `<div class="block"><b>${esc(a.trainee_name)}</b> — ${a.score_percent}% — ${label}<br>${new Date(a.created_at).toLocaleString('ru-RU')}<br><button class="secondary small" onclick="showAttempt('${a.id}')">Краткий результат</button></div>`}).join(''):'<div class="status">Результатов пока нет</div>';$('adminTests').innerHTML='<h3>Тесты</h3>'+testsHtml+'<h3>Результаты</h3>'+resultsHtml;open('testAdminModal')}
-window.showAttempt=async id=>{const a=(await db.from('test_attempts').select('*').eq('id',id).single()).data;if(!a)return;const an=(await db.from('test_answers').select('*').eq('attempt_id',id)).data||[];const qs=an.length?(await db.from('test_questions').select('*').in('id',an.map(x=>x.question_id))).data||[]:[];const m=Object.fromEntries(qs.map(q=>[q.id,q]));const wrong=an.filter(x=>!x.is_correct);const extraShifts=a.score_percent<70?2:(a.score_percent<=90?1:0);const cats={};an.forEach(x=>{const c=m[x.question_id]?.category||'Без категории';if(!cats[c])cats[c]={total:0,wrong:0};cats[c].total++;if(!x.is_correct)cats[c].wrong++});const weak=Object.entries(cats).filter(([,v])=>v.wrong>0).sort((a,b)=>b[1].wrong-a[1].wrong).map(([c,v])=>`${esc(c)} — ${v.wrong} ошибок из ${v.total}`);const conclusion=a.score_percent<70?'Нужно дополнительно стажировать 2 смены.':(a.score_percent<=90?'Нужно дополнительно стажировать 1 смену.':'Дополнительная стажировка по результату теста не требуется.');$('adminTests').innerHTML=`<h3>Краткий результат</h3><div class="block"><b>${esc(a.trainee_name)}</b><br>Результат: <b>${a.score_percent}%</b><br>${conclusion}<br><br><b>Категории для повторения:</b><br>${weak.length?weak.join('<br>'):'Ошибок по категориям не выявлено.'}</div><h3>Ответы</h3>`+an.map(x=>`<div class="block"><b>Вопрос:</b> ${esc(m[x.question_id]?.question_text||'')}<br><b>Ответ стажёра:</b> ${esc(x.trainee_answer||'')}<br><b>Правильный ответ:</b> ${esc(m[x.question_id]?.correct_answer||'')}<br>${x.is_correct?'Правильно':'Неправильно'}</div>`).join('')+`<button class="secondary" onclick="openTestAdmin()">Назад</button>`} ;
+async function openTestAdmin(){
+  if(!isAdmin){
+    open('loginModal');
+    return;
+  }
+
+  editingTestId=null;
+  $('newTestName').value='';
+  $('adminQuestionEditor').innerHTML='';
+  addQ();
+
+  const ts=await getTests();
+
+  const aa=(await db.from('test_attempts')
+    .select('*')
+    .order('created_at',{ascending:false})
+    .limit(100)).data||[];
+
+  const testsHtml=ts.length
+    ? ts.map(t=>`
+      <div class="block">
+        <b>${esc(t.title)}</b>
+        <br>
+        <button class="secondary small" onclick="editTest('${t.id}')">
+          ✏️ Редактировать
+        </button>
+        <button class="secondary small" onclick="deleteTest('${t.id}')">
+          Удалить тест
+        </button>
+      </div>
+    `).join('')
+    : '<div class="status">Тестов пока нет</div>';
+
+  const resultsHtml=aa.length
+    ? aa.map(a=>{
+        const label=a.score_percent<70
+          ? 'нужно 2 смены стажировки'
+          : (a.score_percent<=90
+              ? 'нужно 1 смена стажировки'
+              : 'дополнительная стажировка не требуется');
+
+        return `
+          <div class="block">
+            <b>${esc(a.trainee_name)}</b> — ${a.score_percent}% — ${label}
+            <br>
+            ${new Date(a.created_at).toLocaleString('ru-RU')}
+            <br>
+            <button class="secondary small" onclick="showAttempt('${a.id}')">
+              Краткий результат
+            </button>
+          </div>
+        `;
+      }).join('')
+    : '<div class="status">Результатов пока нет</div>';
+
+  $('adminTests').innerHTML=
+    '<h3>Тесты</h3>'+
+    testsHtml+
+    '<h3>Результаты</h3>'+
+    resultsHtml;
+
+  $('testAdminModal').querySelector('h3').textContent='Создать тест';
+  $('saveTest').textContent='Сохранить тест';
+
+  open('testAdminModal');
+}
+  window.editTest=async function(id){
+  if(!isAdmin)return;
+
+  const {data:t,error:te}=await db
+    .from('tests')
+    .select('*')
+    .eq('id',id)
+    .single();
+
+  if(te||!t){
+    alert('Не удалось загрузить тест: '+(te?.message||'тест не найден'));
+    return;
+  }
+
+  const {data:qs,error:qe}=await db
+    .from('test_questions')
+    .select('*')
+    .eq('test_id',id)
+    .order('sort_order');
+
+  if(qe){
+    alert('Не удалось загрузить вопросы: '+qe.message);
+    return;
+  }
+
+  editingTestId=id;
+
+  $('newTestName').value=t.title||'';
+  $('adminQuestionEditor').innerHTML='';
+
+  (qs||[]).forEach(q=>{
+    const d=document.createElement('div');
+    d.className='block';
+
+    d.innerHTML=`
+      <textarea class="qq" placeholder="Вопрос">${esc(q.question_text||'')}</textarea>
+      <input class="qa" placeholder="Правильный ответ (варианты через ;)" value="${esc(q.correct_answer||'')}">
+      <input class="qc" placeholder="Категория" value="${esc(q.category||'')}">
+      <input class="qp" placeholder="Товар / артикул" value="${esc(q.product_articul||'')}">
+      <button type="button" class="danger small" onclick="this.parentElement.remove()">
+        Удалить
+      </button>
+    `;
+
+    $('adminQuestionEditor').appendChild(d);
+  });
+
+  if(!(qs||[]).length){
+    addQ();
+  }
+
+  $('testAdminModal').querySelector('h3').textContent='Редактировать тест';
+  $('saveTest').textContent='Сохранить изменения';
+
+  open('testAdminModal');
+};
+  window.showAttempt=async id=>{const a=(await db.from('test_attempts').select('*').eq('id',id).single()).data;if(!a)return;const an=(await db.from('test_answers').select('*').eq('attempt_id',id)).data||[];const qs=an.length?(await db.from('test_questions').select('*').in('id',an.map(x=>x.question_id))).data||[]:[];const m=Object.fromEntries(qs.map(q=>[q.id,q]));const wrong=an.filter(x=>!x.is_correct);const extraShifts=a.score_percent<70?2:(a.score_percent<=90?1:0);const cats={};an.forEach(x=>{const c=m[x.question_id]?.category||'Без категории';if(!cats[c])cats[c]={total:0,wrong:0};cats[c].total++;if(!x.is_correct)cats[c].wrong++});const weak=Object.entries(cats).filter(([,v])=>v.wrong>0).sort((a,b)=>b[1].wrong-a[1].wrong).map(([c,v])=>`${esc(c)} — ${v.wrong} ошибок из ${v.total}`);const conclusion=a.score_percent<70?'Нужно дополнительно стажировать 2 смены.':(a.score_percent<=90?'Нужно дополнительно стажировать 1 смену.':'Дополнительная стажировка по результату теста не требуется.');$('adminTests').innerHTML=`<h3>Краткий результат</h3><div class="block"><b>${esc(a.trainee_name)}</b><br>Результат: <b>${a.score_percent}%</b><br>${conclusion}<br><br><b>Категории для повторения:</b><br>${weak.length?weak.join('<br>'):'Ошибок по категориям не выявлено.'}</div><h3>Ответы</h3>`+an.map(x=>`<div class="block"><b>Вопрос:</b> ${esc(m[x.question_id]?.question_text||'')}<br><b>Ответ стажёра:</b> ${esc(x.trainee_answer||'')}<br><b>Правильный ответ:</b> ${esc(m[x.question_id]?.correct_answer||'')}<br>${x.is_correct?'Правильно':'Неправильно'}</div>`).join('')+`<button class="secondary" onclick="openTestAdmin()">Назад</button>`} ;
 window.deleteTest=async id=>{if(!isAdmin)return;const t=(await db.from('tests').select('title').eq('id',id).single()).data;if(!t)return;if(!confirm('Удалить тест «'+t.title+'» и все его результаты?'))return;const qs=(await db.from('test_questions').select('id').eq('test_id',id)).data||[];const qids=qs.map(q=>q.id);if(qids.length){const at=(await db.from('test_attempts').select('id').eq('test_id',id)).data||[];const aids=at.map(x=>x.id);if(aids.length){const er=await db.from('test_answers').delete().in('attempt_id',aids);if(er.error){alert('Ошибка удаления ответов: '+er.error.message);return}const er2=await db.from('test_attempts').delete().in('id',aids);if(er2.error){alert('Ошибка удаления результатов: '+er2.error.message);return}}const er3=await db.from('test_questions').delete().eq('test_id',id);if(er3.error){alert('Ошибка удаления вопросов: '+er3.error.message);return}}const er4=await db.from('tests').delete().eq('id',id);if(er4.error){alert('Ошибка удаления теста: '+er4.error.message);return}alert('Тест удалён');openTestAdmin()};
 $('addQuestion').onclick=addQ;
 $('saveTest').onclick=async()=>{
   const name=$('newTestName').value.trim();
-  const qs=[...$('adminQuestionEditor').children].map((d,i)=>({
-    question_text:d.querySelector('.qq').value.trim(),
-    correct_answer:d.querySelector('.qa').value.trim(),
-    category:d.querySelector('.qc').value.trim(),
-    product_articul:d.querySelector('.qp').value.trim(),
-    sort_order:i
-  })).filter(x=>x.question_text&&x.correct_answer);
-  if(!name){alert('Введите название теста');return}
-  if(!qs.length){alert('Добавьте хотя бы один вопрос и укажите правильный ответ');return}
-  const {data:t,error:te}=await db.from('tests').insert({title:name,is_active:true}).select().single();
-  if(te){alert('Ошибка сохранения теста: '+te.message);return}
-  const {error:qe}=await db.from('test_questions').insert(qs.map(q=>({...q,test_id:t.id})));
-  if(qe){await db.from('tests').delete().eq('id',t.id);alert('Ошибка сохранения вопросов: '+qe.message);return}
+
+  const qs=[...$('adminQuestionEditor').children]
+    .map((d,i)=>({
+      question_text:d.querySelector('.qq').value.trim(),
+      correct_answer:d.querySelector('.qa').value.trim(),
+      category:d.querySelector('.qc').value.trim(),
+      product_articul:d.querySelector('.qp').value.trim(),
+      sort_order:i
+    }))
+    .filter(x=>x.question_text&&x.correct_answer);
+
+  if(!name){
+    alert('Введите название теста');
+    return;
+  }
+
+  if(!qs.length){
+    alert('Добавьте хотя бы один вопрос и укажите правильный ответ');
+    return;
+  }
+
+  /* =========================
+     РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕГО ТЕСТА
+     ========================= */
+
+  if(editingTestId){
+
+    const {error:te}=await db
+      .from('tests')
+      .update({title:name})
+      .eq('id',editingTestId);
+
+    if(te){
+      alert('Ошибка изменения теста: '+te.message);
+      return;
+    }
+
+    /*
+      Получаем существующие вопросы.
+      Сначала обновляем первые существующие вопросы,
+      затем добавляем новые.
+    */
+
+    const {data:oldQs,error:oldErr}=await db
+      .from('test_questions')
+      .select('*')
+      .eq('test_id',editingTestId)
+      .order('sort_order');
+
+    if(oldErr){
+      alert('Ошибка загрузки старых вопросов: '+oldErr.message);
+      return;
+    }
+
+    const existing=oldQs||[];
+
+    for(let i=0;i<qs.length;i++){
+
+      if(existing[i]){
+
+        const {error:e}=await db
+          .from('test_questions')
+          .update({
+            question_text:qs[i].question_text,
+            correct_answer:qs[i].correct_answer,
+            category:qs[i].category,
+            product_articul:qs[i].product_articul,
+            sort_order:i
+          })
+          .eq('id',existing[i].id);
+
+        if(e){
+          alert('Ошибка изменения вопроса: '+e.message);
+          return;
+        }
+
+      }else{
+
+        const {error:e}=await db
+          .from('test_questions')
+          .insert({
+            ...qs[i],
+            test_id:editingTestId
+          });
+
+        if(e){
+          alert('Ошибка добавления нового вопроса: '+e.message);
+          return;
+        }
+      }
+    }
+
+    alert('Тест успешно изменён');
+
+    editingTestId=null;
+    $('newTestName').value='';
+    $('adminQuestionEditor').innerHTML='';
+
+    openTestAdmin();
+    return;
+  }
+
+  /* =========================
+     СОЗДАНИЕ НОВОГО ТЕСТА
+     ========================= */
+
+  const {data:t,error:te}=await db
+    .from('tests')
+    .insert({
+      title:name,
+      is_active:true
+    })
+    .select()
+    .single();
+
+  if(te){
+    alert('Ошибка сохранения теста: '+te.message);
+    return;
+  }
+
+  const {error:qe}=await db
+    .from('test_questions')
+    .insert(
+      qs.map(q=>({
+        ...q,
+        test_id:t.id
+      }))
+    );
+
+  if(qe){
+    await db.from('tests').delete().eq('id',t.id);
+    alert('Ошибка сохранения вопросов: '+qe.message);
+    return;
+  }
+
   alert('Тест создан');
+
   $('newTestName').value='';
   $('adminQuestionEditor').innerHTML='';
+
+  editingTestId=null;
+
   openTestAdmin();
 };
-
 
 function normalizePhone(v){return String(v||'').replace(/\D/g,'')}
 function loyaltyMoney(v){return money(Number(v||0))}
