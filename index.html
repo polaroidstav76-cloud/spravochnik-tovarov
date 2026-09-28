@@ -355,6 +355,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
 <div class="modal" id="testModal"><div class="dialog"><h2 id="testTitle">Тест</h2><div id="testIntro" class="status"></div><div class="field"><label>ФИО стажёра</label><input id="traineeName"></div><div id="testQuestions"></div><div id="testStatus" class="status"></div><div class="actions">
   <button id="closeTest">Закрыть</button>
+  <button type="button" id="saveTestProgress" class="secondary">Сохранить и продолжить позже</button>
   <button class="primary" id="submitTest">Завершить тест</button>
 </div></div></div>
 <div class="modal" id="testAdminModal"><div class="dialog"><h2>Тестирование — администратор</h2><div id="adminTests"></div><hr><h3>Создать тест</h3><input id="newTestName" placeholder="Название теста"><div id="adminQuestionEditor"></div><button id="addQuestion" class="secondary small">＋ Добавить вопрос</button><div class="actions"><button id="closeTestAdmin">Закрыть</button><button class="primary" id="saveTest">Сохранить тест</button></div></div></div>
@@ -916,11 +917,40 @@ window.startTest=async id=>{
 
   $('submitTest').style.display='inline-block';
   $('testStatus').textContent='';
+  $('saveTestProgress').style.display='inline-block';
 
   open('testModal');
 
+  const savedKey='polaroid_test_progress_'+id;
+  const saved=JSON.parse(localStorage.getItem(savedKey)||'null');
+  if(saved && saved.traineeName){
+    const resume=confirm('Найден незавершённый тест. Продолжить с сохранённого места?');
+    if(resume){
+      $('traineeName').value=saved.traineeName;
+      Object.entries(saved.answers||{}).forEach(([qid,answer])=>{
+        const el=$('a_'+qid);
+        if(el)el.value=answer||'';
+      });
+      $('testStatus').textContent='Предыдущие ответы восстановлены. Можно продолжить тест.';
+    }else{
+      localStorage.removeItem(savedKey);
+    }
+  }
 };
-$('submitTest').onclick=async()=>{if(!activeTest)return;const name=$('traineeName').value.trim();if(!name){$('testStatus').textContent='Введите ФИО';return}const ans=activeTest.questions.map(q=>({q,a:$('a_'+q.id).value.trim()}));const score=Math.round(ans.filter(x=>match(x.a,x.q.correct_answer)).length*100/Math.max(1,ans.length));const extraShifts=score<70?2:(score<=90?1:0);const r=await db.from('test_attempts').insert({test_id:activeTest.id,trainee_name:name,score_percent:score,extra_training_hours:extraShifts}).select().single();if(r.error){$('testStatus').textContent='Ошибка: '+r.error.message;return}const ar=await db.from('test_answers').insert(ans.map(x=>({attempt_id:r.data.id,question_id:x.q.id,trainee_answer:x.a,is_correct:match(x.a,x.q.correct_answer)})));if(ar.error){$('testStatus').textContent='Ошибка сохранения ответов: '+ar.error.message;return}$('testStatus').textContent='Ответы приняты. Результат доступен только администратору.';$('submitTest').style.display='none'};
+
+$('saveTestProgress').onclick=()=>{
+  if(!activeTest)return;
+  const name=$('traineeName').value.trim();
+  if(!name){$('testStatus').textContent='Введите ФИО, чтобы сохранить прогресс';return}
+  const answers={};
+  activeTest.questions.forEach(q=>{
+    const el=$('a_'+q.id);
+    answers[q.id]=el?el.value:'';
+  });
+  localStorage.setItem('polaroid_test_progress_'+activeTest.id,JSON.stringify({traineeName:name,answers,savedAt:new Date().toISOString()}));
+  $('testStatus').textContent='Прогресс сохранён. Можно закрыть тест и продолжить позже.';
+};
+$('submitTest').onclick=async()=>{if(!activeTest)return;const name=$('traineeName').value.trim();if(!name){$('testStatus').textContent='Введите ФИО';return}const ans=activeTest.questions.map(q=>({q,a:$('a_'+q.id).value.trim()}));const score=Math.round(ans.filter(x=>match(x.a,x.q.correct_answer)).length*100/Math.max(1,ans.length));const extraShifts=score<70?2:(score<=90?1:0);const r=await db.from('test_attempts').insert({test_id:activeTest.id,trainee_name:name,score_percent:score,extra_training_hours:extraShifts}).select().single();if(r.error){$('testStatus').textContent='Ошибка: '+r.error.message;return}const ar=await db.from('test_answers').insert(ans.map(x=>({attempt_id:r.data.id,question_id:x.q.id,trainee_answer:x.a,is_correct:match(x.a,x.q.correct_answer)})));if(ar.error){$('testStatus').textContent='Ошибка сохранения ответов: '+ar.error.message;return}$('testStatus').textContent='Ответы приняты. Результат доступен только администратору.';$('submitTest').style.display='none';$('saveTestProgress').style.display='none';localStorage.removeItem('polaroid_test_progress_'+activeTest.id)};
 let qrows=[];
 let editingTestId=null;
 function addQ(){const d=document.createElement('div');d.className='block';d.innerHTML='<textarea class="qq" placeholder="Вопрос"></textarea><input class="qa" placeholder="Правильный ответ (варианты через ;)"><input class="qc" placeholder="Категория"><input class="qp" placeholder="Товар / артикул"><button type="button" class="danger small" onclick="this.parentElement.remove()">Удалить</button>';$('adminQuestionEditor').appendChild(d)}
