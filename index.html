@@ -915,13 +915,12 @@ window.startTest=async id=>{
   `).join('');
 
   $('submitTest').style.display='inline-block';
-  $('saveTestProgress').style.display='inline-block';
   $('testStatus').textContent='';
 
   open('testModal');
-  
+
+};
 $('submitTest').onclick=async()=>{if(!activeTest)return;const name=$('traineeName').value.trim();if(!name){$('testStatus').textContent='Введите ФИО';return}const ans=activeTest.questions.map(q=>({q,a:$('a_'+q.id).value.trim()}));const score=Math.round(ans.filter(x=>match(x.a,x.q.correct_answer)).length*100/Math.max(1,ans.length));const extraShifts=score<70?2:(score<=90?1:0);const r=await db.from('test_attempts').insert({test_id:activeTest.id,trainee_name:name,score_percent:score,extra_training_hours:extraShifts}).select().single();if(r.error){$('testStatus').textContent='Ошибка: '+r.error.message;return}const ar=await db.from('test_answers').insert(ans.map(x=>({attempt_id:r.data.id,question_id:x.q.id,trainee_answer:x.a,is_correct:match(x.a,x.q.correct_answer)})));if(ar.error){$('testStatus').textContent='Ошибка сохранения ответов: '+ar.error.message;return}$('testStatus').textContent='Ответы приняты. Результат доступен только администратору.';$('submitTest').style.display='none'};
- 
 let qrows=[];
 let editingTestId=null;
 function addQ(){const d=document.createElement('div');d.className='block';d.innerHTML='<textarea class="qq" placeholder="Вопрос"></textarea><input class="qa" placeholder="Правильный ответ (варианты через ;)"><input class="qc" placeholder="Категория"><input class="qp" placeholder="Товар / артикул"><button type="button" class="danger small" onclick="this.parentElement.remove()">Удалить</button>';$('adminQuestionEditor').appendChild(d)}
