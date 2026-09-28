@@ -60,7 +60,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .card{transition:transform .15s,box-shadow .15s}.card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(15,23,42,.11)}
 .modal{background:rgba(15,23,42,.58);backdrop-filter:blur(5px)}
 .dialog{border:1px solid rgba(226,232,240,.95);box-shadow:0 24px 70px rgba(15,23,42,.22);border-radius:20px}
-.dialog{position:relative}.dialog button[id^="close"]{position:absolute;top:14px;right:14px;z-index:50}.dialog .sales-home-head button[id^="close"]{position:absolute;top:14px;right:14px}.dialog .actions{padding-right:90px}
+.dialog{position:relative}.dialog button[id^="close"]{position:absolute;top:14px;right:14px;z-index:50}.dialog .sales-home-head button[id^="close"]{position:absolute;top:14px;right:14px}.dialog .actions{padding-right:90px}.dialog .sticky-dialog-close{position:sticky!important;top:0;right:auto;align-self:flex-end;z-index:200;margin:0 0 8px auto;display:block;flex:none;background:#eef2ff;color:#1e40af;border:1px solid #c7d2fe;border-radius:10px;padding:10px 14px;box-shadow:0 4px 12px rgba(15,23,42,.12)}
 .sales-home{border-radius:20px;box-shadow:var(--shadow)}
 .sales-home-head{background:linear-gradient(135deg,#0f4c81,#2563eb);padding:18px 20px}
 .sales-home-actions button{border:1px solid #dbe4ef;background:#fff;color:#1e293b}.sales-home-actions .primary{color:#fff;border-color:transparent}
@@ -89,7 +89,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
   <div id="adminbar" class="adminbar">
     <button class="primary" id="addBtn">＋ Добавить товар</button>
-    <button id="refreshBtn">Обновить</button><button id="salesAdminBtn" class="secondary">Продажа</button><button id="reportsBtn" class="secondary">📊 Отчёты</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button><button id="customersBtn" class="secondary">👥 Клиенты</button>
+    <button id="refreshBtn">Обновить</button><button id="salesAdminBtn" class="secondary">⚙️ Настройки</button><button id="reportsBtn" class="secondary">📊 Отчёты</button><button id="pricesBtn" class="secondary">💰 Цены листов</button><button id="testsBtn" class="secondary">📝 Тест</button><button id="customersBtn" class="secondary">👥 Клиенты</button>
   </div>
 
   
@@ -496,7 +496,7 @@ function render(){
       </div>
     </article>`).join('');
 }
-function open(id){$(id).classList.add('show')} function close(id){$(id).classList.remove('show')}
+function open(id){const m=$(id);if(!m)return;m.classList.add('show');const d=m.querySelector('.dialog');if(d&&!d.querySelector('.sticky-dialog-close')){const original=d.querySelector('button[id^="close"]');if(original&&original.id!=='closeSale'){const sticky=original.cloneNode(true);sticky.id=original.id+'_sticky';sticky.classList.add('sticky-dialog-close');sticky.setAttribute('aria-label',original.textContent.trim()||'Закрыть');sticky.onclick=()=>original.click();d.insertBefore(sticky,d.firstChild)}}} function close(id){$(id).classList.remove('show')}
 window.viewProduct=id=>{
   const p=products.find(x=>x.id===id); if(!p)return;
   $('viewTitle').textContent=p.name||'Товар';
