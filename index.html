@@ -655,7 +655,7 @@ function renderLaminationOptions(){
 }
 $('sheetLamination').onchange=()=>{ $('laminationMaterialWrap').style.display=$('sheetLamination').checked?'block':'none'; };
 function fitCount(cardW,cardH,sheetW,sheetH){
-  const usableW=sheetW-2, usableH=sheetH-2;
+  const usableW=sheetW-1, usableH=sheetH-1;
   if(usableW<=0||usableH<=0)return null;
   const a=Math.floor(usableW/cardW)*Math.floor(usableH/cardH);
   const b=Math.floor(usableW/cardH)*Math.floor(usableH/cardW);
@@ -713,7 +713,7 @@ $('sheetCalcBtn').onclick=async()=>{
   const tierText=`от ${pr.min_sheets} листов`;
 
   out.innerHTML=`<div>Материал: <b>${esc(material)}</b></div>
-  <div>Лист: <b>${sheet.w} × ${sheet.h} см</b> (поле 1 см с каждой стороны → рабочая область ${fit.usableW} × ${fit.usableH} см)</div>
+  <div>Лист: <b>${sheet.w} × ${sheet.h} см</b> (поле 0,5 см с каждой стороны → рабочая область ${fit.usableW} × ${fit.usableH} см)</div>
   <div>На одном листе: <b>${fit.count} карточек</b>, раскладка <b>${fit.orientation}</b></div>
   <div>Количество листов: <b>${sheets}</b></div>
   <div>Печать + материал «${esc(material)}»: <b>${money(printPrice)} / лист</b> (${wholesaleUsed?'опт':'розница'}, ${tierText}) → ${money(printTotal)}</div>
