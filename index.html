@@ -60,7 +60,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .card{transition:transform .15s,box-shadow .15s}.card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(15,23,42,.11)}
 .modal{background:rgba(15,23,42,.58);backdrop-filter:blur(5px)}
 .dialog{border:1px solid rgba(226,232,240,.95);box-shadow:0 24px 70px rgba(15,23,42,.22);border-radius:20px}
-.dialog{position:relative}.dialog button[id^="close"]{position:absolute;top:14px;right:14px;z-index:50}.dialog .sales-home-head button[id^="close"]{position:absolute;top:14px;right:14px}.dialog .actions{padding-right:90px}.dialog .sticky-dialog-close{position:sticky!important;top:0;right:auto;align-self:flex-end;z-index:200;margin:0 0 8px auto;display:block;flex:none;background:#eef2ff;color:#1e40af;border:1px solid #c7d2fe;border-radius:10px;padding:10px 14px;box-shadow:0 4px 12px rgba(15,23,42,.12)}
+.dialog{position:relative}.dialog button[id^="close"]{position:sticky;top:0;right:auto;z-index:200;display:block;margin:0 0 8px auto;align-self:flex-end;background:#eef2ff;color:#1e40af;border:1px solid #c7d2fe;border-radius:10px;padding:10px 14px;box-shadow:0 4px 12px rgba(15,23,42,.12)}.dialog .sales-home-head button[id^="close"]{position:sticky;top:0;right:auto;z-index:201}.dialog .actions{padding-right:90px}.dialog .sticky-dialog-close{position:sticky!important;top:0;right:auto;align-self:flex-end;z-index:200;margin:0 0 8px auto;display:block;flex:none;background:#eef2ff;color:#1e40af;border:1px solid #c7d2fe;border-radius:10px;padding:10px 14px;box-shadow:0 4px 12px rgba(15,23,42,.12)}
 .sales-home{border-radius:20px;box-shadow:var(--shadow)}
 .sales-home-head{background:linear-gradient(135deg,#0f4c81,#2563eb);padding:18px 20px}
 .sales-home-actions button{border:1px solid #dbe4ef;background:#fff;color:#1e293b}.sales-home-actions .primary{color:#fff;border-color:transparent}
@@ -580,7 +580,17 @@ function shirtSinglePrice(print,size,qty,type){
   return {price:fallback,mode:'Розница'};
 }
 function shirtIncludedIndex(prints){if(!prints.length)return -1;let idx=0,best=-1;prints.forEach((p,i)=>{const v=SHIRT_RETAIL[p.print]*(p.size==='1'?1:0.5);if(v>best){best=v;idx=i}});return idx}
-function fallbackShirtCombinationPrice(prints){if(!prints.length)return 0;const ordered=[...prints].sort((a,b)=>(Number(SHIRT_RETAIL[b.print]||0)*(b.size==='0.5'?0.5:1))-(Number(SHIRT_RETAIL[a.print]||0)*(a.size==='0.5'?0.5:1)));return ordered.reduce((total,p,i)=>{const base=Number(SHIRT_RETAIL[p.print]||0);return total+(i===0?base:base*(p.size==='0.5'?0.5:1));},0)}
+function fallbackShirtCombinationPrice(prints){
+  if(!prints.length)return 0;
+  // Сначала всегда оплачивается самый дорогой принт независимо от порядка добавления.
+  // Цена размера 0,5 = 50% базовой цены соответствующего типа нанесения.
+  const effectivePrice=p=>Number(SHIRT_RETAIL[p.print]||0)*(p.size==='0.5'?0.5:1);
+  const ordered=[...prints].sort((a,b)=>effectivePrice(b)-effectivePrice(a));
+  return ordered.reduce((total,p,i)=>{
+    const full=Number(SHIRT_RETAIL[p.print]||0);
+    return total+(i===0?full:effectivePrice(p));
+  },0);
+}
 function renderShirtPrints(){const box=$('shirtPrints');if(!box)return;const arr=window.shirtPrints||[];box.innerHTML=arr.map((p,i)=>`<div class="block"><div class="block-head"><b>Нанесение ${i+1}</b>${arr.length>1?`<button type="button" class="danger small" onclick="removeShirtPrint(${i})">Удалить</button>`:''}</div><div class="row"><div class="field"><label>Тип нанесения</label><select onchange="shirtPrints[${i}].print=this.value"><option value="dtf" ${p.print==='dtf'?'selected':''}>ДТФ</option><option value="film" ${p.print==='film'?'selected':''}>Плёнка</option></select></div><div class="field"><label>Размер</label><select onchange="shirtPrints[${i}].size=this.value"><option value="1" ${p.size==='1'?'selected':''}>1 — больше 15×21, до 28×38 см</option><option value="0.5" ${p.size==='0.5'?'selected':''}>0,5 — до 15×21 см</option></select></div></div></div>`).join('')}
 window.shirtPrints=[{print:'dtf',size:'1'}];
 window.removeShirtPrint=i=>{shirtPrints.splice(i,1);renderShirtPrints()};
