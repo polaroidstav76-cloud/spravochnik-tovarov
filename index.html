@@ -1491,7 +1491,51 @@ window.updateSaleTotal=()=>{const gross=saleGrossTotal(),max=Math.round(gross*.3
 window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Корзина пуста.</div>';$('saleEmpty').style.display=saleDraft.length?'none':'block';updateSaleTotal()};
 $('saleCatalogSearch').oninput=renderSaleCatalog;
 function resetSaleLoyalty(){saleLoyaltyCustomerId=null;saleLoyaltyCustomer=null;$('saleClubQuery').value='';$('saleClubResults').innerHTML='';$('saleClubNewName').value='';$('saleClubNewPhone').value='';$('saleClubComment').value='';$('saleLoyaltyBalance').textContent='';$('saleClubStatus').textContent='';$('saleUsePoints').checked=false;$('salePointsFields').style.display='none';$('salePointsToUse').value='0';}
-function selectSaleLoyaltyCustomer(c){saleLoyaltyCustomerId=c.customer_id;saleLoyaltyCustomer=c;$('saleClubResults').innerHTML=`<div class="sales-ok"><b>${esc(c.customer_name)}</b> · ${esc(c.customer_phone)} · доступно ${salesMoney(c.balance)}<br>Заказов: ${c.order_count}</div>`;$('saleLoyaltyBalance').textContent='Баланс: '+salesMoney(c.balance);$('saleClubStatus').textContent='Клиент выбран. После продажи 5% начислятся через 24 часа.';$('saleClubNewName').value=c.customer_name;$('saleClubNewPhone').value=c.customer_phone;$('saleUsePoints').disabled=false;updateSaleTotal()}
+async function checkSaleClubGift(orderCount){
+  const count=Number(orderCount||0);
+  if(!count)return;
+
+  const r=await db
+    .from('loyalty_gift_rules')
+    .select('order_count,gift_name')
+    .eq('order_count',count)
+    .limit(1);
+
+  if(r.error||!r.data?.length)return;
+
+  const gift=r.data[0];
+
+  $('saleClubStatus').innerHTML=
+    `<div class="sales-warning" style="font-size:16px;padding:12px">
+      🎁 <b>КЛИЕНТУ ПОЛОЖЕН ПОДАРОК!</b><br>
+      У клиента ${count} заказов.<br>
+      Подарок: <b>${esc(gift.gift_name)}</b>
+    </div>`;
+}
+  function selectSaleLoyaltyCustomer(c){
+  saleLoyaltyCustomerId=c.customer_id;
+  saleLoyaltyCustomer=c;
+
+  $('saleClubResults').innerHTML=
+    `<div class="sales-ok">
+      <b>${esc(c.customer_name)}</b> · ${esc(c.customer_phone)} · доступно ${salesMoney(c.balance)}
+      <br>Заказов: ${c.order_count}
+    </div>`;
+
+  $('saleLoyaltyBalance').textContent='Баланс: '+salesMoney(c.balance);
+
+  $('saleClubStatus').textContent=
+    'Клиент выбран. После продажи 5% начислятся через 24 часа.';
+
+  $('saleClubNewName').value=c.customer_name;
+  $('saleClubNewPhone').value=c.customer_phone;
+
+  $('saleUsePoints').disabled=false;
+
+  updateSaleTotal();
+
+  checkSaleClubGift(c.order_count);
+}
 $('saleClubEnabled').onchange=()=>{$('saleLoyaltyFields').style.display=$('saleClubEnabled').checked?'block':'none';if(!$('saleClubEnabled').checked)resetSaleLoyalty();updateSaleTotal()};
 $('saleClubSearchBtn').onclick=async()=>{const q=$('saleClubQuery').value.trim();if(!q){$('saleClubStatus').textContent='Введите последние 4 цифры или полный номер.';return}const r=await db.rpc('loyalty_find_customers',{p_query:q});if(r.error){$('saleClubStatus').textContent='Ошибка: '+r.error.message;return}const rows=r.data||[];if(q.replace(/\D/g,'').length===4&&rows.length>1){$('saleClubResults').innerHTML='<div class="sales-warning">Найдено несколько клиентов. Введите полный номер.</div>';return}if(!rows.length){$('saleClubResults').innerHTML='<div class="status">Клиент не найден. Можно заполнить имя и полный номер ниже — программа создаст карту при продаже.</div>';return}selectSaleLoyaltyCustomer(rows[0])};
 $('saleUsePoints').onchange=()=>{$('salePointsFields').style.display=$('saleUsePoints').checked?'grid':'none';updateSaleTotal()};$('salePointsToUse').oninput=updateSaleTotal;
