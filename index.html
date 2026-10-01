@@ -288,31 +288,47 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
 <div class="modal" id="clubModal"><div class="dialog" style="max-width:850px">
   <h2>💳 Клубная карта</h2>
-  <div class="row">
-    <div class="field"><label>Имя клиента *</label><input id="clubName" placeholder="Имя клиента"></div>
-    <div class="field"><label>Номер клиента *</label><input id="clubPhone" placeholder="Например: 89991234567" inputmode="tel"></div>
-  </div>
-  <div class="row">
-    <div class="field"><label>Сумма покупки, ₽ *</label><input id="clubAmount" type="number" min="0" step="0.01" placeholder="5000"></div>
-    <div class="field"><label>Комментарий</label><input id="clubComment" placeholder="Например: первый заказ"></div>
-  </div>
-  <div class="actions" style="justify-content:flex-start"><button id="clubAddPurchase" class="primary">Начислить 5%</button></div>
-  <div id="clubPurchaseStatus" class="status"></div>
-  <hr>
+
   <h3>Информация о клиенте</h3>
-  <div class="field"><label>Последние 4 цифры номера (если несколько совпадений — введите полный номер)</label><input id="clubLookup" placeholder="Например: 4567" inputmode="tel"></div>
-  <div class="actions" style="justify-content:flex-start"><button id="clubLookupBtn" class="secondary">🔎 Информация о клиенте</button></div>
-  <div id="clubCustomerResults"></div>
-  <hr>
-  <h3>🧮 Рассчитать максимум списания</h3>
-  <div class="status">Введите сумму заказа — программа покажет максимальное количество баллов, которое можно использовать по правилу 30%.</div>
-  <div class="row">
-    <div class="field"><label>Сумма заказа, ₽</label><input id="clubRedeemCalcAmount" type="number" min="0" step="0.01" placeholder="500"></div>
-    <div class="field"><label>Максимум баллов к списанию, ₽</label><input id="clubRedeemCalcResult" readonly placeholder="150,00 ₽"></div>
+  <div class="field">
+    <label>Последние 4 цифры номера (если несколько совпадений — введите полный номер)</label>
+    <input id="clubLookup" placeholder="Например: 4567" inputmode="tel">
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="clubRedeemCalcBtn" class="secondary">Рассчитать</button></div>
+
+  <div class="actions" style="justify-content:flex-start">
+    <button id="clubLookupBtn" class="secondary">🔎 Информация о клиенте</button>
+  </div>
+
+  <div id="clubCustomerResults"></div>
+
+  <hr>
+
+  <h3>🧮 Рассчитать максимум списания</h3>
+  <div class="status">
+    Введите сумму заказа — программа покажет максимальное количество баллов, которое можно использовать по правилу 30%.
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Сумма заказа, ₽</label>
+      <input id="clubRedeemCalcAmount" type="number" min="0" step="0.01" placeholder="500">
+    </div>
+
+    <div class="field">
+      <label>Максимум баллов к списанию, ₽</label>
+      <input id="clubRedeemCalcResult" readonly placeholder="150,00 ₽">
+    </div>
+  </div>
+
+  <div class="actions" style="justify-content:flex-start">
+    <button id="clubRedeemCalcBtn" class="secondary">Рассчитать</button>
+  </div>
+
   <div id="clubRedeemCalcStatus" class="status"></div>
-  <div class="actions"><button id="closeClub">Закрыть</button></div>
+
+  <div class="actions">
+    <button id="closeClub">Закрыть</button>
+  </div>
 </div></div>
 
 <div class="modal" id="customersModal"><div class="dialog" style="max-width:1100px">
@@ -1277,19 +1293,6 @@ async function lookupLoyalty(){
 }
 $('clubLookupBtn').onclick=lookupLoyalty;
 $('clubLookup').addEventListener('keydown',e=>{if(e.key==='Enter')lookupLoyalty()});
-$('clubAddPurchase').onclick=async()=>{
-  const name=$('clubName').value.trim(), phone=normalizePhone($('clubPhone').value), amount=Number($('clubAmount').value), comment=$('clubComment').value.trim(), st=$('clubPurchaseStatus');
-  if(!name){st.textContent='Введите имя клиента.';return}
-  if(phone.length<4){st.textContent='Введите номер клиента.';return}
-  if(!(amount>0)){st.textContent='Введите сумму покупки.';return}
-  st.textContent='Сохраняю…';
-  const r=await db.rpc('loyalty_add_purchase',{p_name:name,p_phone:phone,p_amount:amount,p_comment:comment||null});
-  if(r.error){st.textContent='Ошибка: '+r.error.message;return}
-  const x=r.data?.[0];
-  st.textContent=`Покупка сохранена. Начислено ${loyaltyMoney(x?.points_added||0)}. Баллы станут доступны через 24 часа.`;
-  $('clubAmount').value=''; $('clubComment').value=''; $('clubLookup').value=phone;
-  await lookupLoyalty();
-};
 window.showLoyaltyHistory=async(id)=>{
   const r=await db.rpc('loyalty_get_history',{p_customer_id:id});
   if(r.error){alert(r.error.message);return}
