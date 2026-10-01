@@ -1447,10 +1447,19 @@ $('salesCatalogPriceBtn').onclick=openSalesCatalogPrice;$('salesCatalogPriceSear
 async function registerSaleClubCard(){
   const name=$('saleClubNewName').value.trim(), phone=$('saleClubNewPhone').value.trim(), comment=$('saleClubComment').value.trim();
   if(!name||!phone){$('saleClubStatus').textContent='Введите имя и полный номер телефона клиента.';return}
-  const r=await db.rpc('loyalty_register_customer',{p_name:name,p_phone:phone,p_comment:comment||null});
+
+  const r=await db.rpc('loyalty_register_customer',{
+    p_name:name,
+    p_phone:phone,
+    p_comment:comment||null,
+    p_created_by_employee_id:salesSession?.employeeId||null
+  });
+
   if(r.error){$('saleClubStatus').textContent='Ошибка оформления карты: '+r.error.message;return}
+
   $('saleClubQuery').value=phone.replace(/\D/g,'').slice(-4);
   $('saleClubStatus').textContent='Клубная карта оформлена. Клиент выбран для этой продажи.';
+
   const f=await db.rpc('loyalty_find_customers',{p_query:phone});
   if(!f.error&&f.data?.length) selectSaleLoyaltyCustomer(f.data[0]);
 }
