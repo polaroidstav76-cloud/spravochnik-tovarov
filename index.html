@@ -1455,7 +1455,7 @@ async function registerSaleClubCard(){
     p_name:name,
     p_phone:phone,
     p_comment:comment||null,
-    p_created_by_employee_id:salesSession?.employeeId||null
+    p_created_by_employee_id:salesSession?.personId||null
   });
 
   if(r.error){$('saleClubStatus').textContent='Ошибка оформления карты: '+r.error.message;return}
