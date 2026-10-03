@@ -411,8 +411,40 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 <div class="modal" id="salesMovementModal"><div class="dialog" style="max-width:1200px"><h2>🔄 Продажи за день</h2><div class="row"><div class="field"><label>Дата</label><input id="movementDate" type="date"></div><div class="field" style="display:flex;align-items:flex-end"><button id="movementRefresh" class="secondary">Обновить</button></div></div><div id="movementSummary" class="status"></div><div id="movementRows" class="price-admin"></div><div class="actions"><button id="closeMovement">Закрыть</button></div></div></div>
 <div class="modal" id="shiftReportModal"><div class="dialog" style="max-width:1050px"><h2>📊 Отчёт за смену</h2><div id="shiftReportContent"></div><div class="actions"><button id="closeShiftReport">Закрыть</button></div></div></div>
 <div class="modal" id="payrollModal"><div class="dialog" style="max-width:1050px"><h2>💰 Зарплата за неделю</h2><div class="status">Расчёт: количество смен × ставка филиала + ретушь × ставка ретуши главного сотрудника. Период заканчивается в пятницу.</div><div class="sales-grid"><div class="field"><label>Понедельник</label><input id="payrollFrom" type="date"></div><div class="field"><label>Пятница</label><input id="payrollTo" type="date"></div></div><div class="actions" style="justify-content:flex-start"><button id="buildPayrollBtn" class="primary">Рассчитать зарплату</button></div><div id="payrollContent"></div><div class="actions"><button id="closePayroll">Закрыть</button></div></div></div>
-<div class="modal" id="reportsModal"><div class="dialog" style="max-width:1150px"><h2>📊 Отчёты</h2><div class="sales-grid"><div class="field"><label>Период с</label><input id="reportFrom" type="date"></div><div class="field"><label>Период по</label><input id="reportTo" type="date"></div></div><div class="actions" style="justify-content:flex-start"><button id="buildReportBtn" class="primary">Сформировать отчёт</button></div><div id="reportContent"></div><div class="actions"><button id="closeReports">Закрыть</button></div></div></div>
-<div class="modal" id="salesAdminModal"><div class="dialog" style="max-width:1250px"><h2>🛒 Продажи — настройка</h2><div class="status">Одна карточка товара/услуги содержит всё: наименование, розницу, опт по количеству, себестоимость, категорию и комментарий сотруднику.</div><hr>
+<div class="modal" id="reportsModal">
+  <div class="dialog" style="max-width:1150px">
+    <h2>📊 Отчёты</h2>
+
+    <div class="sales-grid">
+      <div class="field">
+        <label>Период с</label>
+        <input id="reportFrom" type="date">
+      </div>
+
+      <div class="field">
+        <label>Период по</label>
+        <input id="reportTo" type="date">
+      </div>
+
+      <div class="field">
+        <label>Филиал</label>
+        <select id="reportBranch">
+          <option value="">Все филиалы</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="actions" style="justify-content:flex-start">
+      <button id="buildReportBtn" class="primary">Сформировать отчёт</button>
+    </div>
+
+    <div id="reportContent"></div>
+
+    <div class="actions">
+      <button id="closeReports">Закрыть</button>
+    </div>
+  </div>
+</div><div class="modal" id="salesAdminModal"><div class="dialog" style="max-width:1250px"><h2>🛒 Продажи — настройка</h2><div class="status">Одна карточка товара/услуги содержит всё: наименование, розницу, опт по количеству, себестоимость, категорию и комментарий сотруднику.</div><hr>
 <h3>Филиалы</h3><div class="row"><div class="field"><label>Название филиала</label><input id="branchName" placeholder="Например: Филиал Центр"></div><div class="field"><label>Первый номер заказа</label><input id="branchOrderStart" type="number" min="1" value="1000"></div></div><div class="actions" style="justify-content:flex-start"><button id="addBranchBtn" class="secondary">＋ Добавить филиал</button></div><div id="branchesAdminRows" class="price-admin"></div>
 <hr><h3>Сотрудники</h3><div class="row"><div class="field"><label>Имя сотрудника</label><input id="employeeName" placeholder="Например: Катя"></div><div class="field"><label>Роль по умолчанию</label><select id="employeeLeadDefault"><option value="false">Обычный сотрудник</option><option value="true">Может быть главным по ретуши</option></select></div></div><div class="status">Сотрудник не привязан к филиалу и может работать где угодно.</div><div class="actions" style="justify-content:flex-start"><button id="addEmployeeBtn" class="secondary">＋ Добавить сотрудника</button></div><div id="employeesAdminRows" class="price-admin"></div>
 <hr><h3>Карточка товара / услуги</h3><input id="catalogEditId" type="hidden"><div class="sales-product-card-form"><div class="row"><div class="field"><label>Тип *</label><select id="catalogType"><option value="product">Товар</option><option value="service">Услуга</option></select></div><div class="field"><label>Наименование *</label><input id="catalogName" placeholder="Например: Фото 21×30"></div><div class="field"><label>Артикул</label><input id="catalogSku"></div></div><div class="row"><div class="field"><label>Категория</label><input id="catalogCategory" placeholder="Фото, Сувениры, Ретушь…"></div><div class="field"><label>Розничная цена, ₽ *</label><input id="catalogPrice" type="number" min="0" step="0.01"></div><div class="field"><label>Себестоимость, ₽</label><input id="catalogCostPrice" type="number" min="0" step="0.01"></div></div><div class="field"><label>Комментарий для сотрудника</label><textarea id="catalogComment" placeholder="Информация, которую сотрудник увидит при двойном клике по позиции в продаже или при открытии позиции в «Товары и услуги». Себестоимость там не показывается."></textarea></div><div class="field"><label>Оптовые цены по количеству</label><div class="status">Например: от 10 шт — 10 ₽; от 30 шт — 8 ₽. Все пороги хранятся в этой же карточке.</div><div id="wholesaleTierRows"></div><button type="button" id="addWholesaleTier" class="secondary small">＋ Добавить оптовый порог</button></div><div class="actions" style="justify-content:flex-start"><button id="addCatalogBtn" class="primary">Сохранить карточку</button><button id="cancelCatalogEdit" class="secondary" style="display:none">Отмена</button></div></div><div id="catalogAdminRows" class="price-admin"></div>
