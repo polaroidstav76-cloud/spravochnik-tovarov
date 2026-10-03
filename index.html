@@ -1296,9 +1296,54 @@ $('clubLookup').addEventListener('keydown',e=>{if(e.key==='Enter')lookupLoyalty(
 window.showLoyaltyHistory=async(id)=>{
   const r=await db.rpc('loyalty_get_history',{p_customer_id:id});
   if(r.error){alert(r.error.message);return}
-  const rows=r.data||[]; const c=rows[0];
-  $('loyaltyHistoryTitle').textContent=c?`${c.customer_name} — ${c.customer_phone}`:'История клиента';
-  $('loyaltyHistoryRows').innerHTML=rows.length?`<table class="customer-table"><thead><tr><th>Дата</th><th>Операция</th><th>Сумма заказа</th><th>Баллы</th><th>Комментарий</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.operation_label)}</td><td>${x.order_amount>0?money(x.order_amount):'—'}</td><td><b>${Number(x.points)>=0?'+':''}${loyaltyMoney(x.points)}</b>${x.available_at && new Date(x.available_at)>new Date()?'<div class="loyalty-pending">ожидают</div>':''}</td><td>${esc(x.comment||'')}</td></tr>`).join('')}</tbody></table>`:'<div class="status">Операций пока нет.</div>';
+
+  const rows=r.data||[];
+  const c=rows[0];
+
+  $('loyaltyHistoryTitle').textContent=
+    c?`${c.customer_name} — ${c.customer_phone}`:'История клиента';
+
+  const employeeName=c?.created_by_employee||'Не указан';
+
+  $('loyaltyHistoryRows').innerHTML=`
+    <div class="status" style="margin-bottom:12px">
+      <b>Кто создал клубную карту:</b> ${esc(employeeName)}
+    </div>
+    ${
+      rows.length
+      ? `<table class="customer-table">
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>Операция</th>
+              <th>Сумма заказа</th>
+              <th>Баллы</th>
+              <th>Комментарий</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(x=>`
+              <tr>
+                <td>${new Date(x.created_at).toLocaleString('ru-RU')}</td>
+                <td>${esc(x.operation_label)}</td>
+                <td>${x.order_amount>0?money(x.order_amount):'—'}</td>
+                <td>
+                  <b>${Number(x.points)>=0?'+':''}${loyaltyMoney(x.points)}</b>
+                  ${
+                    x.available_at && new Date(x.available_at)>new Date()
+                    ? '<div class="loyalty-pending">ожидают</div>'
+                    : ''
+                  }
+                </td>
+                <td>${esc(x.comment||'')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`
+      : '<div class="status">Операций пока нет.</div>'
+    }
+  `;
+
   open('loyaltyHistoryModal');
 };
 $('closeLoyaltyHistory').onclick=()=>close('loyaltyHistoryModal');
