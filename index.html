@@ -2127,7 +2127,58 @@ async function maybeUpsell(source,qty){for(const rule of v4Upsells.filter(r=>Num
 window.addSaleCatalogItem=async id=>{const x=salesCatalog.find(y=>Number(y.id)===Number(id));if(!x)return;let existing=saleDraft.find(y=>Number(y.catalogId)===Number(id));if(existing){existing.quantity=Number(existing.quantity||0)+1;existing.unitPrice=v4Price(x,existing.quantity)}else saleDraft.push({catalogId:x.id,quantity:1,unitPrice:v4Price(x,1)});renderSaleDraft();await maybeUpsell(x,existing?.quantity||1)};
 function saleRowHtml(i){const p=saleDraft[i],cat=salesCatalog.find(x=>Number(x.id)===Number(p.catalogId));const auto=v4Price(cat,p.quantity);return `<div class="sales-item-row" ondblclick="openSalesProductInfo(${cat?.id})"><div><b>${esc(cat?.name||'Товар')}</b><div class="status">${esc(cat?.item_type==='service'?'Услуга':'Товар')}${cat?.category?' · '+esc(cat.category):''}</div><div class="status">Двойной клик — подробная информация</div></div><div class="field"><label>Кол-во</label><input type="number" min="1" step="1" value="${p.quantity}" oninput="saleDraft[${i}].quantity=Number(this.value)||0;saleDraft[${i}].unitPrice=v4Price(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity);updateSaleTotal()" onblur="maybeUpsell(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity)"></div><div class="field"><label>Цена</label><input type="number" min="0" step="0.01" value="${p.unitPrice}" oninput="saleDraft[${i}].unitPrice=Number(this.value)||0;updateSaleTotal()"><div class="status">Авто по тиражу: ${salesMoney(auto)}</div></div><div class="field"><label>Сумма</label><input readonly value="${salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))}"></div><button class="danger small" onclick="saleDraft.splice(${i},1);renderSaleDraft()">×</button></div>`}
 window.updateSaleTotal=()=>{const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),discount=Math.round(gross*discountPct)/100,after=Math.max(0,gross-discount),max=Math.round(after*.3*100)/100,use=salePointsUsed();$('saleGrossTotal').textContent='Сумма до скидки: '+salesMoney(gross);$('salePointsMax').value=salesMoney(max);$('saleLoyaltyDiscount').textContent=(discount>0?'Скидка: −'+salesMoney(discount):'')+(use>0?' · Баллами: −'+salesMoney(use):'');$('saleTotal').textContent=salesMoney(Math.max(0,after-use));$('openSplitPaymentBtn').disabled=$('salePayment').value!=='split';if($('salePayment').value==='split')renderSplitRows();document.querySelectorAll('.sales-item-row .field:nth-child(4) input').forEach((el,i)=>{const p=saleDraft[i];if(p)el.value=salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))})updateCashChange();}
-window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Корзина пуста.</div>';$('saleEmpty').style.display=saleDraft.length?'none':'block';updateSaleTotal()};
+function updateCashChange(){
+  const payment=$('salePayment')?.value;
+  const box=$('cashChangeBox');
+
+  if(!box)return;
+
+  if(payment!=='cash'){
+    box.style.display='none';
+    return;
+  }
+
+  box.style.display='block';
+
+  const gross=saleGrossTotal();
+
+  const discountPct=Math.min(
+    100,
+    Math.max(
+      0,
+      Number($('saleDiscountPercent').value)||0
+    )
+  );
+
+  const discount=Math.round(gross*discountPct)/100;
+  const after=Math.max(0,gross-discount);
+  const total=Math.max(0,after-salePointsUsed());
+
+  const received=Number($('cashReceived').value)||0;
+
+  $('cashChange').value='';
+
+  if(!received){
+    $('cashChangeStatus').textContent=
+      `К оплате: ${salesMoney(total)}. Поле необязательное.`;
+    return;
+  }
+
+  const difference=received-total;
+
+  if(difference>=0){
+    $('cashChange').value=salesMoney(difference);
+
+    $('cashChangeStatus').textContent=
+      `К оплате: ${salesMoney(total)} · Сдача: ${salesMoney(difference)}`;
+  }else{
+    $('cashChangeStatus').textContent=
+      `Не хватает: ${salesMoney(Math.abs(difference))}`;
+  }
+}
+  $('cashReceived').addEventListener('input',updateCashChange);
+$('saleDiscountPercent').addEventListener('input',updateCashChange);
+  window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Корзина пуста.</div>';$('saleEmpty').style.display=saleDraft.length?'none':'block';updateSaleTotal()};
 function splitTotal(){return v4SplitRows.reduce((a,x)=>a+(Number(x.amount)||0),0)}
 function renderSplitRows(){const methods=Object.entries(V4_PAY_LABELS);$('splitPaymentRows').innerHTML=v4SplitRows.map((x,i)=>`<div class="split-row"><div class="field"><label>Способ</label><select onchange="v4SplitRows[${i}].method=this.value;renderSplitRows()">${methods.map(([k,v])=>`<option value="${k}" ${x.method===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>Сумма</label><input type="number" min="0" step="0.01" value="${x.amount||''}" oninput="v4SplitRows[${i}].amount=Number(this.value)||0;updateSplitStatus()"></div><button class="danger small" onclick="v4SplitRows.splice(${i},1);renderSplitRows();updateSplitStatus()">×</button></div>`).join('');updateSplitStatus()}
 function updateSplitStatus(){
