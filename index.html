@@ -401,8 +401,81 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
           <div class="check-row"><label><input type="checkbox" id="saleUsePoints"> Списать баллы в этой продаже</label></div><div id="salePointsFields" style="display:none;margin-top:8px" class="row"><div class="field"><label>Списать баллов</label><input id="salePointsToUse" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Максимум (30%)</label><input id="salePointsMax" readonly></div></div><div id="saleClubStatus" class="status"></div>
         </div>
       </div>
-      <div class="sale-payment-grid"><div class="field"><label>Способ оплаты *</label><select id="salePayment"><option value="">Выберите способ оплаты…</option><option value="cash">Наличные</option><option value="card">Банковская карта</option><option value="qr">QR-код</option><option value="link">Ссылка</option><option value="bank_account">Расчётный счёт</option><option value="transfer">Перевод</option><option value="split">Раздельная оплата</option></select></div><div class="field"><label>Комментарий к продаже</label><input id="saleComment" placeholder="Комментарий"></div></div>
-      <div class="sale-payment-extra"><div class="field"><label>Скидка, %</label><input id="saleDiscountPercent" type="number" min="0" max="100" step="0.01" value="0"></div><div class="field"><label>Раздельная оплата</label><button type="button" id="openSplitPaymentBtn" class="secondary">Настроить части оплаты</button></div></div><div id="splitPaymentBox" class="sale-loyalty-box" style="display:none"><div class="sale-loyalty-head"><b>Раздельная оплата</b><button type="button" id="addSplitPayment" class="secondary small">＋ Добавить часть</button></div><div id="splitPaymentRows"></div><div id="splitPaymentStatus" class="status"></div></div><div class="sales-total-box"><div id="saleGrossTotal" class="sales-gross">Сумма заказа: 0,00 ₽</div><div id="saleLoyaltyDiscount" class="sales-gross"></div><div id="saleTotal" class="sales-total">0,00 ₽</div></div><div id="saleStatus" class="status"></div><div class="sale-save-bar"><div class="actions" style="margin-top:0"><button id="saveSale" class="primary">💾 Оформить продажу</button></div></div>
+<div class="sale-payment-grid">
+  <div class="field">
+    <label>Способ оплаты *</label>
+    <select id="salePayment">
+      <option value="">Выберите способ оплаты…</option>
+      <option value="cash">Наличные</option>
+      <option value="card">Банковская карта</option>
+      <option value="qr">QR-код</option>
+      <option value="link">Ссылка</option>
+      <option value="bank_account">Расчётный счёт</option>
+      <option value="transfer">Перевод</option>
+      <option value="split">Раздельная оплата</option>
+    </select>
+  </div>
+<div id="cashChangeBox" class="sale-loyalty-box" style="display:none;margin-top:10px">
+  <div class="sale-loyalty-head">
+    <b>💵 Наличные</b>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Получено от клиента</label>
+      <input
+        id="cashReceived"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="Например, 2000"
+      >
+    </div>
+
+    <div class="field">
+      <label>Сдача</label>
+      <input
+        id="cashChange"
+        type="text"
+        readonly
+        placeholder="—"
+      >
+    </div>
+  </div>
+
+  <div id="cashChangeStatus" class="status"></div>
+</div>
+  <div class="field">
+    <label>Комментарий к продаже</label>
+    <input id="saleComment" placeholder="Комментарий">
+  </div>
+</div>
+
+<div id="cashChangeBox" class="sale-loyalty-box" style="display:none;margin-top:10px">
+  <div class="sale-loyalty-head">
+    <b>💵 Наличные</b>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Получено от клиента</label>
+      <input
+        id="cashReceived"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="Например, 2000"
+      >
+    </div>
+
+    <div class="field">
+      <label>Сдача</label>
+      <input id="cashChange" readonly placeholder="—">
+    </div>
+  </div>
+
+  <div id="cashChangeStatus" class="status"></div>
+</div>      <div class="sale-payment-extra"><div class="field"><label>Скидка, %</label><input id="saleDiscountPercent" type="number" min="0" max="100" step="0.01" value="0"></div><div class="field"><label>Раздельная оплата</label><button type="button" id="openSplitPaymentBtn" class="secondary">Настроить части оплаты</button></div></div><div id="splitPaymentBox" class="sale-loyalty-box" style="display:none"><div class="sale-loyalty-head"><b>Раздельная оплата</b><button type="button" id="addSplitPayment" class="secondary small">＋ Добавить часть</button></div><div id="splitPaymentRows"></div><div id="splitPaymentStatus" class="status"></div></div><div class="sales-total-box"><div id="saleGrossTotal" class="sales-gross">Сумма заказа: 0,00 ₽</div><div id="saleLoyaltyDiscount" class="sales-gross"></div><div id="saleTotal" class="sales-total">0,00 ₽</div></div><div id="saleStatus" class="status"></div><div class="sale-save-bar"><div class="actions" style="margin-top:0"><button id="saveSale" class="primary">💾 Оформить продажу</button></div></div>
     </section>
   </div>
 </div></div>
@@ -2053,7 +2126,7 @@ function renderSaleCatalog(){const q=$('saleCatalogSearch').value||'';const cats
 async function maybeUpsell(source,qty){for(const rule of v4Upsells.filter(r=>Number(r.source_catalog_id)===Number(source.id))){const min=Number(rule.min_quantity||1),max=rule.max_quantity==null?Infinity:Number(rule.max_quantity);if(qty<min||qty>max)continue;const key=rule.id+':'+source.id;if(window.v4UpsellSeen?.has(key))continue;window.v4UpsellSeen=window.v4UpsellSeen||new Set();window.v4UpsellSeen.add(key);const suggested=salesCatalog.find(x=>Number(x.id)===Number(rule.suggested_catalog_id));if(!suggested)continue;const yes=confirm(`${rule.question||'Предложить дополнительный товар?'}\n\n${suggested.name} — ${salesMoney(suggested.price)}`);if(yes){const ex=saleDraft.find(x=>Number(x.catalogId)===Number(suggested.id));if(ex)ex.quantity=Number(ex.quantity)+1;else saleDraft.push({catalogId:suggested.id,quantity:1,unitPrice:v4Price(suggested,1)})}}renderSaleDraft()}
 window.addSaleCatalogItem=async id=>{const x=salesCatalog.find(y=>Number(y.id)===Number(id));if(!x)return;let existing=saleDraft.find(y=>Number(y.catalogId)===Number(id));if(existing){existing.quantity=Number(existing.quantity||0)+1;existing.unitPrice=v4Price(x,existing.quantity)}else saleDraft.push({catalogId:x.id,quantity:1,unitPrice:v4Price(x,1)});renderSaleDraft();await maybeUpsell(x,existing?.quantity||1)};
 function saleRowHtml(i){const p=saleDraft[i],cat=salesCatalog.find(x=>Number(x.id)===Number(p.catalogId));const auto=v4Price(cat,p.quantity);return `<div class="sales-item-row" ondblclick="openSalesProductInfo(${cat?.id})"><div><b>${esc(cat?.name||'Товар')}</b><div class="status">${esc(cat?.item_type==='service'?'Услуга':'Товар')}${cat?.category?' · '+esc(cat.category):''}</div><div class="status">Двойной клик — подробная информация</div></div><div class="field"><label>Кол-во</label><input type="number" min="1" step="1" value="${p.quantity}" oninput="saleDraft[${i}].quantity=Number(this.value)||0;saleDraft[${i}].unitPrice=v4Price(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity);updateSaleTotal()" onblur="maybeUpsell(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity)"></div><div class="field"><label>Цена</label><input type="number" min="0" step="0.01" value="${p.unitPrice}" oninput="saleDraft[${i}].unitPrice=Number(this.value)||0;updateSaleTotal()"><div class="status">Авто по тиражу: ${salesMoney(auto)}</div></div><div class="field"><label>Сумма</label><input readonly value="${salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))}"></div><button class="danger small" onclick="saleDraft.splice(${i},1);renderSaleDraft()">×</button></div>`}
-window.updateSaleTotal=()=>{const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),discount=Math.round(gross*discountPct)/100,after=Math.max(0,gross-discount),max=Math.round(after*.3*100)/100,use=salePointsUsed();$('saleGrossTotal').textContent='Сумма до скидки: '+salesMoney(gross);$('salePointsMax').value=salesMoney(max);$('saleLoyaltyDiscount').textContent=(discount>0?'Скидка: −'+salesMoney(discount):'')+(use>0?' · Баллами: −'+salesMoney(use):'');$('saleTotal').textContent=salesMoney(Math.max(0,after-use));$('openSplitPaymentBtn').disabled=$('salePayment').value!=='split';if($('salePayment').value==='split')renderSplitRows();document.querySelectorAll('.sales-item-row .field:nth-child(4) input').forEach((el,i)=>{const p=saleDraft[i];if(p)el.value=salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))})}
+window.updateSaleTotal=()=>{const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),discount=Math.round(gross*discountPct)/100,after=Math.max(0,gross-discount),max=Math.round(after*.3*100)/100,use=salePointsUsed();$('saleGrossTotal').textContent='Сумма до скидки: '+salesMoney(gross);$('salePointsMax').value=salesMoney(max);$('saleLoyaltyDiscount').textContent=(discount>0?'Скидка: −'+salesMoney(discount):'')+(use>0?' · Баллами: −'+salesMoney(use):'');$('saleTotal').textContent=salesMoney(Math.max(0,after-use));$('openSplitPaymentBtn').disabled=$('salePayment').value!=='split';if($('salePayment').value==='split')renderSplitRows();document.querySelectorAll('.sales-item-row .field:nth-child(4) input').forEach((el,i)=>{const p=saleDraft[i];if(p)el.value=salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))})updateCashChange();}
 window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Корзина пуста.</div>';$('saleEmpty').style.display=saleDraft.length?'none':'block';updateSaleTotal()};
 function splitTotal(){return v4SplitRows.reduce((a,x)=>a+(Number(x.amount)||0),0)}
 function renderSplitRows(){const methods=Object.entries(V4_PAY_LABELS);$('splitPaymentRows').innerHTML=v4SplitRows.map((x,i)=>`<div class="split-row"><div class="field"><label>Способ</label><select onchange="v4SplitRows[${i}].method=this.value;renderSplitRows()">${methods.map(([k,v])=>`<option value="${k}" ${x.method===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>Сумма</label><input type="number" min="0" step="0.01" value="${x.amount||''}" oninput="v4SplitRows[${i}].amount=Number(this.value)||0;updateSplitStatus()"></div><button class="danger small" onclick="v4SplitRows.splice(${i},1);renderSplitRows();updateSplitStatus()">×</button></div>`).join('');updateSplitStatus()}
@@ -2105,7 +2178,35 @@ function updateSplitStatus(){
 
   $('splitPaymentStatus').textContent=
     `Нужно: ${salesMoney(total)} · Внесено частями: ${salesMoney(sum)}${hint}`;
-}$('salePayment').onchange=()=>{if($('salePayment').value==='split'){if(v4SplitRows.length<2)v4SplitRows=[{method:'cash',amount:0},{method:'card',amount:0}];$('splitPaymentBox').style.display='block';renderSplitRows()}else{$('splitPaymentBox').style.display='none'}updateSaleTotal()};$('saleDiscountPercent').oninput=updateSaleTotal;$('openSplitPaymentBtn').onclick=()=>{$('salePayment').value='split';$('salePayment').dispatchEvent(new Event('change'))};$('addSplitPayment').onclick=()=>{v4SplitRows.push({method:'transfer',amount:0});renderSplitRows()};
+}$('salePayment').onchange=()=>{
+  const payment=$('salePayment').value;
+
+  if(payment==='split'){
+    if(v4SplitRows.length<2){
+      v4SplitRows=[
+        {method:'cash',amount:0},
+        {method:'card',amount:0}
+      ];
+    }
+
+    $('splitPaymentBox').style.display='block';
+    renderSplitRows();
+  }else{
+    $('splitPaymentBox').style.display='none';
+  }
+
+  if(payment==='cash'){
+    $('cashChangeBox').style.display='block';
+  }else{
+    $('cashChangeBox').style.display='none';
+    $('cashReceived').value='';
+    $('cashChange').value='';
+    $('cashChangeStatus').textContent='';
+  }
+
+  updateSaleTotal();
+  updateCashChange();
+};
 
 // Enter в поиске клиента
 $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('saleClubSearchBtn').click()}});
