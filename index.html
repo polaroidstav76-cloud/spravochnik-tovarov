@@ -2057,8 +2057,55 @@ window.updateSaleTotal=()=>{const gross=saleGrossTotal(),discountPct=Math.min(10
 window.renderSaleDraft=()=>{$('saleItems').innerHTML=saleDraft.length?saleDraft.map((_,i)=>saleRowHtml(i)).join(''):'<div class="status">Корзина пуста.</div>';$('saleEmpty').style.display=saleDraft.length?'none':'block';updateSaleTotal()};
 function splitTotal(){return v4SplitRows.reduce((a,x)=>a+(Number(x.amount)||0),0)}
 function renderSplitRows(){const methods=Object.entries(V4_PAY_LABELS);$('splitPaymentRows').innerHTML=v4SplitRows.map((x,i)=>`<div class="split-row"><div class="field"><label>Способ</label><select onchange="v4SplitRows[${i}].method=this.value;renderSplitRows()">${methods.map(([k,v])=>`<option value="${k}" ${x.method===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>Сумма</label><input type="number" min="0" step="0.01" value="${x.amount||''}" oninput="v4SplitRows[${i}].amount=Number(this.value)||0;updateSplitStatus()"></div><button class="danger small" onclick="v4SplitRows.splice(${i},1);renderSplitRows();updateSplitStatus()">×</button></div>`).join('');updateSplitStatus()}
-function updateSplitStatus(){const total=Math.max(0,saleGrossTotal()-(Math.round(saleGrossTotal()*(Number($('saleDiscountPercent').value)||0))/100)-salePointsUsed()),sum=splitTotal();$('splitPaymentStatus').textContent=`Нужно: ${salesMoney(total)} · Внесено частями: ${salesMoney(sum)} · ${Math.abs(total-sum)<0.01?'Сумма совпадает':'Нужно распределить всю сумму'}`}
-$('salePayment').onchange=()=>{if($('salePayment').value==='split'){if(v4SplitRows.length<2)v4SplitRows=[{method:'cash',amount:0},{method:'card',amount:0}];$('splitPaymentBox').style.display='block';renderSplitRows()}else{$('splitPaymentBox').style.display='none'}updateSaleTotal()};$('saleDiscountPercent').oninput=updateSaleTotal;$('openSplitPaymentBtn').onclick=()=>{$('salePayment').value='split';$('salePayment').dispatchEvent(new Event('change'))};$('addSplitPayment').onclick=()=>{v4SplitRows.push({method:'transfer',amount:0});renderSplitRows()};
+function updateSplitStatus(){
+  const total=Math.max(
+    0,
+    saleGrossTotal()
+      -(Math.round(
+        saleGrossTotal()*
+        (Number($('saleDiscountPercent').value)||0)
+      )/100)
+      -salePointsUsed()
+  );
+
+  const sum=splitTotal();
+  const remaining=Math.max(0,total-sum);
+
+  if(Math.abs(total-sum)<0.01){
+    $('splitPaymentStatus').textContent=
+      `Нужно: ${salesMoney(total)} · Внесено частями: ${salesMoney(sum)} · ✅ Сумма совпадает`;
+    return;
+  }
+
+  const parts=v4SplitRows
+    .filter(x=>Number(x.amount)>0)
+    .map(x=>`${V4_PAY_LABELS[x.method]||x.method}: ${salesMoney(x.amount)}`);
+
+  let hint='';
+
+  if(remaining>0){
+    hint=` · Осталось распределить: ${salesMoney(remaining)}`;
+
+    const cash=v4SplitRows
+      .filter(x=>x.method==='cash')
+      .reduce((a,x)=>a+Number(x.amount||0),0);
+
+    const card=v4SplitRows
+      .filter(x=>x.method==='card')
+      .reduce((a,x)=>a+Number(x.amount||0),0);
+
+    if(cash>0 && card===0){
+      hint+=` · 💳 Картой доплатить: ${salesMoney(remaining)}`;
+    }else if(card>0 && cash===0){
+      hint+=` · 💵 Наличными доплатить: ${salesMoney(remaining)}`;
+    }
+  }else{
+    hint=` · ⚠️ Внесено больше нужной суммы на ${salesMoney(Math.abs(total-sum))}`;
+  }
+
+  $('splitPaymentStatus').textContent=
+    `Нужно: ${salesMoney(total)} · Внесено частями: ${salesMoney(sum)}${hint}`;
+}$('salePayment').onchange=()=>{if($('salePayment').value==='split'){if(v4SplitRows.length<2)v4SplitRows=[{method:'cash',amount:0},{method:'card',amount:0}];$('splitPaymentBox').style.display='block';renderSplitRows()}else{$('splitPaymentBox').style.display='none'}updateSaleTotal()};$('saleDiscountPercent').oninput=updateSaleTotal;$('openSplitPaymentBtn').onclick=()=>{$('salePayment').value='split';$('salePayment').dispatchEvent(new Event('change'))};$('addSplitPayment').onclick=()=>{v4SplitRows.push({method:'transfer',amount:0});renderSplitRows()};
 
 // Enter в поиске клиента
 $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('saleClubSearchBtn').click()}});
