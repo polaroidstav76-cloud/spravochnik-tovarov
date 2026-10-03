@@ -1362,17 +1362,133 @@ $('closeCustomers').onclick=()=>close('customersModal');
 $('closeCustomerEdit').onclick=()=>close('customerEditModal');
 async function loadCustomerAdminRows(){
   if(!isAdmin)return;
+
   const q=$('customerAdminSearch').value.trim();
-  let query=db.from('loyalty_customers').select('*').order('name');
-  if(q){query=query.or(`name.ilike.%${q}%,phone.ilike.%${normalizePhone(q)}%`)}
-  const r=await query;
-  if(r.error){$('customerAdminStatus').textContent='Ошибка: '+r.error.message;return}
+
+  let query=db
+    .from('loyalty_customers')
+    .select('*')
+    .order('created_at',{ascending:false});
+
+  if(q){
+    query=query.or(`name.ilike.%${q}%,phone.ilike.%${normalizePhone(q)}%`);
+  }
+
+  const [r,peopleResult]=await Promise.all([
+    query,
+    db.from('sales_people').select('id,name')
+  ]);
+
+  if(r.error){
+    $('customerAdminStatus').textContent='Ошибка: '+r.error.message;
+    return;
+  }
+
+  if(peopleResult.error){
+    $('customerAdminStatus').textContent='Ошибка загрузки сотрудников: '+peopleResult.error.message;
+    return;
+  }
+
   const cs=r.data||[];
+  const people=peopleResult.data||[];
+
   const ids=cs.map(x=>x.id);
+
   let tx=[];
-  if(ids.length){const tr=await db.from('loyalty_transactions').select('customer_id,transaction_type,points,available_at').in('customer_id',ids);tx=tr.data||[]}
-const rows=cs.map(c=>{const mine=tx.filter(t=>t.customer_id===c.id);const balance=mine.filter(t=>new Date(t.available_at)<=new Date()).reduce((a,t)=>a+Number(t.points||0),0);const pending=mine.filter(t=>new Date(t.available_at)>new Date()).reduce((a,t)=>a+Number(t.points||0),0);const orders=mine.filter(t=>t.transaction_type==='purchase').length;const creator=salesPeople.find(p=>Number(p.id)===Number(c.created_by_employee_id));return {...c,balance,pending,orders,created_by_employee_name:creator?.name||'Не указан'};});  $('customerAdminStatus').textContent=`Клиентов: ${rows.length}`;
-  $('customerAdminRows').innerHTML=rows.length?`<table class="customer-table"><thead><tr><th>Имя</th><th>Номер</th><th>Баллы</th><th>Заказов</th><th>Кто создал карту</th><th>Комментарий</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone)}</td><td><b>${loyaltyMoney(c.balance)}</b>${c.pending>0?`<div class="loyalty-pending">+${loyaltyMoney(c.pending)} ожидают</div>`:''}</td><td>${c.orders}</td><td>${esc(c.created_by_employee_name||'Не указан')}</td><td>${esc(c.comment||'')}</td><button class="secondary small" onclick='editCustomerAdmin(${JSON.stringify(c.id)})'>Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Клиентов пока нет.</div>';
+
+  if(ids.length){
+    const tr=await db
+      .from('loyalty_transactions')
+      .select('customer_id,transaction_type,points,available_at')
+      .in('customer_id',ids);
+
+    if(tr.error){
+      $('customerAdminStatus').textContent='Ошибка загрузки операций: '+tr.error.message;
+      return;
+    }
+
+    tx=tr.data||[];
+  }
+
+  const rows=cs.map(c=>{
+    const mine=tx.filter(t=>t.customer_id===c.id);
+
+    const balance=mine
+      .filter(t=>new Date(t.available_at)<=new Date())
+      .reduce((a,t)=>a+Number(t.points||0),0);
+
+    const pending=mine
+      .filter(t=>new Date(t.available_at)>new Date())
+      .reduce((a,t)=>a+Number(t.points||0),0);
+
+    const orders=mine
+      .filter(t=>t.transaction_type==='purchase')
+      .length;
+
+    const creator=people.find(p=>Number(p.id)===Number(c.created_by_employee_id));
+
+    return {
+      ...c,
+      balance,
+      pending,
+      orders,
+      created_by_employee_name:creator?.name||'Не указан'
+    };
+  });
+
+  $('customerAdminStatus').textContent=`Клиентов: ${rows.length}`;
+
+  $('customerAdminRows').innerHTML=rows.length
+    ? `
+      <table class="customer-table">
+        <thead>
+          <tr>
+            <th>Имя</th>
+            <th>Номер</th>
+            <th>Баллы</th>
+            <th>Заказов</th>
+            <th>Кто создал карту</th>
+            <th>Комментарий</th>
+            <th></th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${rows.map(c=>`
+            <tr>
+              <td>${esc(c.name)}</td>
+
+              <td>${esc(c.phone)}</td>
+
+              <td>
+                <b>${loyaltyMoney(c.balance)}</b>
+                ${c.pending>0
+                  ? `<div class="loyalty-pending">+${loyaltyMoney(c.pending)} ожидают</div>`
+                  : ''
+                }
+              </td>
+
+              <td>${c.orders}</td>
+
+              <td>${esc(c.created_by_employee_name||'Не указан')}</td>
+
+              <td>${esc(c.comment||'')}</td>
+
+              <td>
+                <button
+                  type="button"
+                  class="secondary small"
+                  onclick='editCustomerAdmin(${JSON.stringify(c.id)})'
+                >
+                  Изменить
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+    : '<div class="status">Клиентов пока нет.</div>';
 }
 window.editCustomerAdmin=async(id)=>{
   if(!isAdmin)return;
