@@ -385,6 +385,14 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
   <div id="salesAdditionalWrap" class="field" style="display:none"><label>Дополнительный сотрудник</label><select id="salesAdditionalEmployee"></select></div>
   <div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select><div class="status">Именно этот сотрудник получает 100 ₽ за каждую оформленную ретушь за смену.</div></div>
   <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
+<button
+  id="adminBranchViewBtn"
+  class="secondary"
+  style="display:none"
+  type="button"
+>
+  👁 Просмотр филиала без смены
+</button>
 </div></div>
 
 <div class="modal" id="saleModal"><div class="dialog sales-sale-dialog" style="max-width:1350px;padding:22px;overflow:hidden">
@@ -1701,7 +1709,17 @@ function renderSalesEmployeeOptions(){
 function updateLeadEmployeeOptions(){const sel=$('salesEmployeeSelect'),wrap=$('salesLeadWrap'),lead=$('salesLeadEmployee');if(!sel||!wrap||!lead)return;const ids=[...sel.selectedOptions].map(o=>Number(o.value)).filter(Boolean);if(ids.length<2){wrap.style.display='none';lead.innerHTML='';return}wrap.style.display='block';lead.innerHTML=ids.map(id=>{const p=salesPeople.find(x=>Number(x.id)===id);return `<option value="${id}">${esc(p?.name||'Сотрудник')}</option>`}).join('');lead.value=String(ids[0]);}
 function updateSalesSessionUI(){
   const active=!!salesSession?.shiftId;
-  $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Смена начата ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
+const adminView=!!(
+  isAdmin &&
+  salesSession?.branchId &&
+  !salesSession?.shiftId
+);
+
+$('salesSessionStatus').textContent=adminView
+  ?`${salesSession.branchName} · 👁 ПРОСМОТР АДМИНИСТРАТОРА · Смена не открыта`
+  :active
+    ?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`
+    :'Филиал и кассир ещё не выбраны.';
   $('salesBtn').disabled=false;$('shiftReportBtn').disabled=!active;$('closeShiftBtn').disabled=!active;
   $('salesSelectBtn').textContent=active?'Сменить филиал / сотрудника':'Выбрать филиал и кассира';
 }
@@ -2048,6 +2066,7 @@ async function openSalesWorkspace() {
     $('salesAddEmployee').checked=false;
     $('salesAdditionalWrap').style.display='none';
     $('salesLeadWrap').style.display='none';
+    $('adminBranchViewBtn').style.display=isAdmin?'inline-block':'none';
     open('salesWorkspaceModal'); await refreshWorkspaceBranch();
   } catch(e) { alert('Не удалось загрузить рабочее место: '+e.message); }
 }
@@ -2116,6 +2135,49 @@ $('startShiftBtn').onclick=async()=>{
     await showShiftTasks(c.branchId,c.shiftId,cashier.employeeId);
   } catch(e) { $('salesWorkspaceStatus').textContent='Ошибка: '+e.message; }
   finally { $('startShiftBtn').disabled=false; $('salesBranchSelect').disabled=false; }
+};
+  $('adminBranchViewBtn').onclick=async()=>{
+  if(!isAdmin)return;
+
+  const branchId=Number($('salesBranchSelect').value||0);
+
+  if(!branchId){
+    $('salesWorkspaceStatus').textContent='Сначала выберите филиал.';
+    return;
+  }
+
+  const branch=salesBranches.find(
+    b=>Number(b.id)===branchId
+  );
+
+  if(!branch){
+    $('salesWorkspaceStatus').textContent='Филиал не найден.';
+    return;
+  }
+
+  salesSession={
+    shiftId:null,
+    branchId:branch.id,
+    branchName:branch.name,
+    employeeId:null,
+    personId:null,
+    employeeName:'Администратор',
+    startedAt:null,
+    participants:[]
+  };
+
+  close('salesWorkspaceModal');
+
+  $('salesSessionStatus').textContent=
+    `${branch.name} · 👁 Просмотр администратора · Смена не открыта`;
+
+  $('salesBtn').disabled=false;
+  $('shiftReportBtn').disabled=true;
+  $('closeShiftBtn').disabled=true;
+
+  alert(
+    `Вы вошли в режим просмотра филиала «${branch.name}».\n\nСмена не открыта.`
+  );
 };
 
 async function completeShiftTasks(){const shiftId=Number($('salesTaskModal').dataset.shiftId),employeeId=Number($('salesTaskModal').dataset.employeeId);const checks=[...$('salesTaskContent').querySelectorAll('[data-task-id]')];if(checks.some(x=>!x.checked)){alert('Отметьте все задания как выполненные.');return false}for(const x of checks){const r=await db.from('sales_shift_task_completions').upsert({task_id:Number(x.dataset.taskId),shift_id:shiftId,completed_by_employee_id:employeeId},{onConflict:'task_id,shift_id'});if(r.error){alert(r.error.message);return false}}close('salesTaskModal');return true}
@@ -2414,7 +2476,13 @@ $('addTaskBtn').onclick=async()=>{const r=await db.from('sales_shift_tasks').ins
 // Оплата по ссылке: красная строка до оплаты; после оплаты — зелёная. Неоплата закрывает продажу из выручки.
 window.markLinkPaid=async id=>{const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:true});if(r.error)alert(r.error.message);else renderMovement()};window.markLinkUnpaid=async id=>{if(!confirm('Отметить как НЕ оплачено? Продажа будет исключена из выручки.'))return;const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:false});if(r.error)alert(r.error.message);else renderMovement()};
 async function printSaleReceipt(id){const r=await db.from('sales').select('*,sales_branches(name),sales_employees(name)').eq('id',id).single();if(r.error){alert(r.error.message);return}const s=r.data,ir=await db.from('sale_items').select('*').eq('sale_id',id),pr=await db.from('sale_payments').select('*').eq('sale_id',id);const rows=ir.data||[],pays=pr.data||[];const w=window.open('','_blank','width=420,height=700');if(!w){alert('Разрешите всплывающие окна для печати чека.');return}w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Чек №${s.order_number}</title><style>body{font-family:Arial,sans-serif;width:360px;margin:20px auto;color:#111}h2{text-align:center;margin:0 0 12px}.line{display:flex;justify-content:space-between;gap:10px;margin:7px 0}.total{font-size:20px;font-weight:800;border-top:2px solid #111;padding-top:10px;margin-top:10px}.muted{color:#666;font-size:12px}hr{border:0;border-top:1px dashed #aaa;margin:12px 0}@media print{button{display:none}}</style></head><body><h2>ПОЛАРОИД</h2><div class="muted">Товарный чек №${s.order_number||s.id}<br>${new Date(s.created_at).toLocaleString('ru-RU')}<br>${esc(s.sales_branches?.name||'')}</div><hr>${rows.map(x=>`<div class="line"><span>${esc(x.item_name)} × ${x.quantity}</span><b>${salesMoney(x.line_total)}</b></div>`).join('')}${Number(s.discount_amount||0)>0?`<div class="line"><span>Скидка</span><span>−${salesMoney(s.discount_amount)}</span></div>`:''}<div class="total"><div class="line"><span>ИТОГО</span><span>${salesMoney(s.total)}</span></div></div><hr><b>Оплата</b>${pays.map(x=>`<div class="line"><span>${esc(V4_PAY_LABELS[x.payment_method]||x.payment_method)}</span><span>${salesMoney(x.amount)}</span></div>`).join('')}<p class="muted">Кассир: ${esc(s.sales_employees?.name||'')}</p></body></html>`);w.document.close();w.focus();w.print()}
-async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);if(!salesSession?.branchId){$('movementSummary').textContent='Нет открытой смены. Сначала выберите филиал и откройте смену.';$('movementRows').innerHTML='<div class="status">Продажи доступны только для текущего филиала открытой смены.</div>';return}try{const{sales,items}=await loadSalesForRange(start,end,Number(salesSession.branchId));const active=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid'),total=active.reduce((a,x)=>a+Number(x.total),0);$('movementSummary').textContent=`Продаж: ${active.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;$('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>№</th><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id),split=x.payment_method==='split';const pay=split?'<span class="payment-pill">Раздельная</span>':(V4_PAY_LABELS[x.payment_method]||x.payment_method);let cls=x.payment_method==='link'&&x.payment_status==='pending'?'pending-link':x.payment_method==='link'&&x.payment_status==='paid'?'paid-link':x.payment_status==='unpaid'?'unpaid-link':'';const receipt=`<button class="secondary small" onclick="printSaleReceipt(${x.id})">🧾 Чек</button>`;const actions=x.payment_method==='link'&&x.status==='completed'?(x.payment_status==='pending'?`<button class="primary small" onclick="markLinkPaid(${x.id})">Оплачено</button> <button class="secondary small" onclick="markLinkUnpaid(${x.id})">Не оплачено</button>`:x.payment_status==='paid'?'Оплачено':'Не оплачено'):x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button> <button class="secondary small" onclick="deleteSale(${x.id})">Удалить продажу</button>`:'';return `<tr class="${cls}"><td><b>№${x.order_number||x.id}</b></td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${pay}</td><td>${salesMoney(x.total)}${Number(x.discount_amount||0)>0?`<div class="status">Скидка −${salesMoney(x.discount_amount)}</div>`:''}</td><td>${x.payment_method==='link'?esc(x.payment_status==='pending'?'Ожидает оплаты':x.payment_status==='paid'?'Оплачено':'Не оплачено'):x.status==='returned'?'Возврат':'Продажа'}</td><td>${receipt} ${actions}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>'}catch(e){$('movementSummary').textContent='Ошибка: '+e.message}}
+async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);const adminView=!!(isAdmin && salesSession?.branchId && !salesSession?.shiftId);
+
+if(!salesSession?.branchId){
+  $('movementSummary').textContent='Нет выбранного филиала.';
+  $('movementRows').innerHTML='<div class="status">Сначала выберите филиал.</div>';
+  return;
+}try{const{sales,items}=await loadSalesForRange(start,end,Number(salesSession.branchId));const active=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid'),total=active.reduce((a,x)=>a+Number(x.total),0);$('movementSummary').textContent=`Продаж: ${active.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;$('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>№</th><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id),split=x.payment_method==='split';const pay=split?'<span class="payment-pill">Раздельная</span>':(V4_PAY_LABELS[x.payment_method]||x.payment_method);let cls=x.payment_method==='link'&&x.payment_status==='pending'?'pending-link':x.payment_method==='link'&&x.payment_status==='paid'?'paid-link':x.payment_status==='unpaid'?'unpaid-link':'';const receipt=`<button class="secondary small" onclick="printSaleReceipt(${x.id})">🧾 Чек</button>`;const actions=x.payment_method==='link'&&x.status==='completed'?(x.payment_status==='pending'?`<button class="primary small" onclick="markLinkPaid(${x.id})">Оплачено</button> <button class="secondary small" onclick="markLinkUnpaid(${x.id})">Не оплачено</button>`:x.payment_status==='paid'?'Оплачено':'Не оплачено'):x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button> <button class="secondary small" onclick="deleteSale(${x.id})">Удалить продажу</button>`:'';return `<tr class="${cls}"><td><b>№${x.order_number||x.id}</b></td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${pay}</td><td>${salesMoney(x.total)}${Number(x.discount_amount||0)>0?`<div class="status">Скидка −${salesMoney(x.discount_amount)}</div>`:''}</td><td>${x.payment_method==='link'?esc(x.payment_status==='pending'?'Ожидает оплаты':x.payment_status==='paid'?'Оплачено':'Не оплачено'):x.status==='returned'?'Возврат':'Продажа'}</td><td>${receipt} ${actions}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>'}catch(e){$('movementSummary').textContent='Ошибка: '+e.message}}
 $('salesMovementBtn').onclick=openMovement;$('movementRefresh').onclick=renderMovement;$('movementDate').onchange=renderMovement;$('closeMovement').onclick=()=>close('salesMovementModal');
 
 // При закрытии смены проверяем задания и не закрываем их без подтверждения.
