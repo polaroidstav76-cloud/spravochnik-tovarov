@@ -138,11 +138,36 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
       <div class="field"><label for="cardSides">Печать</label><select id="cardSides"><option value="single">Односторонняя</option><option value="double">Двусторонняя</option></select></div>
       <div class="field"><label for="cardMaterial">Материал</label><select id="cardMaterial"><option value="">Выберите материал</option></select></div>
     </div>
-    <div class="check-row">
-      <label><input id="differentImages" type="checkbox"> Разные картинки (только если абсолютно все карточки разные)</label>
-      <label><input id="sheetCutting" type="checkbox"> Резка листов сотрудником</label>
-      <label><input id="sheetLamination" type="checkbox"> Ламинация</label>
-    </div>
+<div class="check-row">
+  <label>
+    <input id="differentImages" type="checkbox">
+    Разные картинки (только если абсолютно все карточки разные)
+  </label>
+
+  <label>
+    <input id="sheetCutting" type="checkbox">
+    Резка листов сотрудником
+  </label>
+
+  <label>
+    <input id="sheetLamination" type="checkbox">
+    Ламинация
+  </label>
+</div>
+
+<div
+  class="row calc-row"
+  id="laminationSidesWrap"
+  style="display:none"
+>
+  <div class="field">
+    <label for="laminationSides">Ламинация</label>
+    <select id="laminationSides">
+      <option value="single">Односторонняя</option>
+      <option value="double">Двусторонняя</option>
+    </select>
+  </div>
+</div>
     <div class="field" id="laminationMaterialWrap" style="display:none"><label for="laminationMaterial">Материал ламинации</label><select id="laminationMaterial"><option value="">Выберите материал ламинации</option></select></div>
     <div class="actions calc-actions"><button id="sheetCalcBtn" class="primary">Рассчитать</button></div>
     <div id="sheetCalcResult" class="calc-result" aria-live="polite"></div>
@@ -791,7 +816,16 @@ function renderLaminationOptions(){
   el.innerHTML='<option value="">Выберите материал ламинации</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
   if(names.includes(current))el.value=current;
 }
-$('sheetLamination').onchange=()=>{ $('laminationMaterialWrap').style.display=$('sheetLamination').checked?'block':'none'; };
+$('sheetLamination').onchange=()=>{
+  const on=$('sheetLamination').checked;
+
+  $('laminationMaterialWrap').style.display=on?'block':'none';
+  $('laminationSidesWrap').style.display=on?'block':'none';
+
+  if(!on){
+    $('laminationMaterial').value='';
+  }
+}
 function fitCount(cardW,cardH,sheetW,sheetH){
   const usableW=sheetW-1, usableH=sheetH-1;
   if(usableW<=0||usableH<=0)return null;
@@ -803,9 +837,12 @@ function fitCount(cardW,cardH,sheetW,sheetH){
 $('sheetCalcBtn').onclick=async()=>{
   await loadPriceRules();
   const card=parsePair($('cardSize').value), sheet=parsePair($('sheetSize').value),
-        qty=Number($('cardQty').value), sides=$('cardSides').value,
-        material=$('cardMaterial').value, lamination=$('sheetLamination').checked,
-        laminationMaterial=$('laminationMaterial').value;
+       qty=Number($('cardQty').value),
+sides=$('cardSides').value,
+material=$('cardMaterial').value,
+lamination=$('sheetLamination').checked,
+laminationSides=$('laminationSides').value,
+laminationMaterial=$('laminationMaterial').value;
   const out=$('sheetCalcResult');
   if(!card){out.innerHTML='<b>Введите размер карточки, например 5×7.</b>';return}
   if(!sheet){out.innerHTML='<b>Введите размер листа, например 30×42.</b>';return}
@@ -834,8 +871,15 @@ $('sheetCalcBtn').onclick=async()=>{
   const cutRule=cutting?serviceRuleFor('cutting',sheet.w,sheet.h,sheets):null;
   const diffPrice=diff?servicePrice(diffRule,'different_images',sheet.w,sheet.h,sheets):0;
   const cutPrice=cutting?servicePrice(cutRule,'cutting',sheet.w,sheet.h,sheets):0;
-  const lamRule=lamination?priceRuleFor(laminationPriceRules.filter(r=>r.sides===sides),sheet.w,sheet.h,sheets,laminationMaterial):null;
-  const lamPrice=lamination?priceMode(lamRule,sheets):0;
+const lamRule=lamination
+  ?priceRuleFor(
+      laminationPriceRules.filter(r=>r.sides===laminationSides),
+      sheet.w,
+      sheet.h,
+      sheets,
+      laminationMaterial
+    )
+  :null;  const lamPrice=lamination?priceMode(lamRule,sheets):0;
 
   if(diff && diffRule===null){out.innerHTML=`<b>Для услуги «Разные картинки» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
   if(cutting && cutRule===null){out.innerHTML=`<b>Для услуги «Резка» нет цены для листа ${sheet.w}×${sheet.h} см.</b>`;return}
