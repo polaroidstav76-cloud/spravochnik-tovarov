@@ -1739,12 +1739,22 @@ async function registerSaleClubCard(){
   const name=$('saleClubNewName').value.trim(), phone=$('saleClubNewPhone').value.trim(), comment=$('saleClubComment').value.trim();
   if(!name||!phone){$('saleClubStatus').textContent='Введите имя и полный номер телефона клиента.';return}
 
-  const r=await db.rpc('loyalty_register_customer',{
-    p_name:name,
-    p_phone:phone,
-    p_comment:comment||null,
-    p_created_by_employee_id:salesSession?.personId||null
-  });
+  const currentEmployee=salesEmployees.find(
+  e=>Number(e.id)===Number(salesSession?.employeeId)
+);
+
+const createdByPersonId=Number(
+  salesSession?.personId ||
+  currentEmployee?.person_id ||
+  0
+) || null;
+
+const r=await db.rpc('loyalty_register_customer',{
+  p_name:name,
+  p_phone:phone,
+  p_comment:comment||null,
+  p_created_by_employee_id:createdByPersonId
+});
 
   if(r.error){$('saleClubStatus').textContent='Ошибка оформления карты: '+r.error.message;return}
 
