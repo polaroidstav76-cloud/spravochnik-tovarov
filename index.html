@@ -71,6 +71,8 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .sales-workspace-left{background:#f8fafc;border-radius:14px}.sales-workspace-right{background:#fff;border-radius:14px}
 .sale-save-bar{padding:14px 0 0}.sale-save-bar .primary{min-width:220px}
 
+.tpl-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}.tpl-item{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}.tpl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.tpl-title{font-weight:800;font-size:16px}.tpl-text{white-space:pre-wrap;line-height:1.5;font-size:14px;margin-top:8px}.tpl-actions{display:flex;gap:6px;flex-wrap:wrap}.tpl-actions button{padding:8px 12px}.tpl-form{border:1px solid #dbe4ef;border-radius:14px;padding:12px;background:#fff;margin-bottom:12px}.tpl-form textarea{min-height:140px}.tpl-search{display:grid;grid-template-columns:1fr 200px;gap:8px}
+@media(max-width:700px){.tpl-search{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -105,7 +107,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
     <button id="salesMovementBtn" class="secondary">🔄 Продажи за сегодня</button>
     <button id="shiftReportBtn" class="secondary">📊 Отчёт за смену</button>
     <button id="closeShiftBtn" class="danger">⏹ Завершить смену</button>
-    <button id="reportsHomeBtn" class="secondary">📈 Отчёты</button><button id="payrollBtn" class="secondary" style="display:none">💰 Зарплата</button>
+    <button id="templatesBtn" class="secondary">💬 Шаблоны</button><button id="reportsHomeBtn" class="secondary">📈 Отчёты</button><button id="payrollBtn" class="secondary" style="display:none">💰 Зарплата</button>
   </div>
 </section>
 
@@ -564,6 +566,12 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 <hr><h3>Ставки зарплаты</h3><div class="status">Ставка за смену может отличаться по филиалам. Ретушь получает только главный сотрудник смены.</div><div class="row"><div class="field"><label>Сотрудник</label><select id="rateEmployee"></select></div><div class="field"><label>Филиал</label><select id="rateBranch"></select></div><div class="field"><label>Ставка за смену, ₽</label><input id="rateShift" type="number" min="0" step="0.01"></div><div class="field"><label>За ретушь, ₽</label><input id="rateRetouch" type="number" min="0" step="0.01" value="100"></div></div><div class="actions" style="justify-content:flex-start"><button id="saveRateBtn" class="secondary">Сохранить ставку</button></div><div id="ratesRows" class="price-admin"></div>
 <hr><h3>Напоминания</h3><div class="row"><div class="field"><label>Филиал</label><select id="taskBranch"></select></div><div class="field"><label>Дата</label><input id="taskDate" type="date"></div></div><div class="row"><div class="field"><label>Задание</label><input id="taskTitle" placeholder="Например: Сделать уборку"></div><div class="field"><label>Подробности</label><input id="taskDescription"></div></div><div class="actions" style="justify-content:flex-start"><button id="addTaskBtn" class="secondary">＋ Добавить напоминание</button></div><div id="tasksRows" class="price-admin"></div>
 <div id="salesAdminStatus" class="status"></div><div class="actions"><button id="closeSalesAdmin">Закрыть</button></div></div></div>
+
+<div class="modal" id="templatesModal"><div class="dialog" style="max-width:820px"><h2 style="margin-top:0">💬 Шаблоны сообщений</h2><div class="status" style="margin-bottom:12px">Готовые ответы для переписки с клиентами. Нажмите «Копировать» и вставьте текст в мессенджер.</div>
+<div id="tplAdminBox" style="display:none"><div class="actions" style="justify-content:flex-start;margin:0 0 12px"><button id="tplNewBtn" class="primary">＋ Новый шаблон</button></div>
+<div id="tplForm" class="tpl-form" style="display:none"><input id="tplEditId" type="hidden"><h3 id="tplFormTitle" style="margin-top:0">Новый шаблон</h3><div class="row"><div class="field"><label for="tplTitle">Название *</label><input id="tplTitle" placeholder="Например: Приветствие"></div><div class="field"><label for="tplCategory">Категория</label><input id="tplCategory" list="tplCategoryList" placeholder="Например: Доставка"><datalist id="tplCategoryList"></datalist></div></div><div class="field"><label for="tplBody">Текст шаблона *</label><textarea id="tplBody" placeholder="Здравствуйте! …"></textarea></div><div id="tplFormStatus" class="status"></div><div class="actions" style="justify-content:flex-start;padding-right:0"><button id="tplSaveBtn" class="primary">Сохранить</button><button id="tplCancelBtn">Отмена</button></div></div></div>
+<div class="tpl-search"><input id="tplSearch" placeholder="Поиск по названию и тексту шаблона…"><select id="tplCategoryFilter"><option value="">Все категории</option></select></div>
+<div id="tplCount" class="count" style="margin:8px 0 0"></div><div id="tplList" class="tpl-list"></div><div class="actions"><button id="closeTemplates">Закрыть</button></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -2636,6 +2644,84 @@ async function initializePolaroid() {
 }
 initializePolaroid();
 
+</script>
+<script>
+// Шаблоны сообщений для переписки с клиентами.
+// Сотрудники видят и копируют шаблоны, администратор создаёт, редактирует и удаляет.
+let messageTemplates=[];
+async function loadTemplates(){
+  const r=await db.from('message_templates').select('*').order('category').order('title');
+  if(r.error){messageTemplates=[];$('tplList').innerHTML=`<div class="status">Не удалось загрузить шаблоны: ${esc(r.error.message)}</div>`;$('tplCount').textContent='';return false}
+  messageTemplates=r.data||[];return true;
+}
+function templateCategories(){return [...new Set(messageTemplates.map(t=>(t.category||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'))}
+function renderTemplateCategories(){
+  const cats=templateCategories(), cur=$('tplCategoryFilter').value;
+  $('tplCategoryFilter').innerHTML='<option value="">Все категории</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('tplCategoryFilter').value=cats.includes(cur)?cur:'';
+  $('tplCategoryList').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+}
+function renderTemplates(){
+  $('tplAdminBox').style.display=isAdmin?'block':'none';
+  if(!isAdmin)$('tplForm').style.display='none';
+  const words=$('tplSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), cat=$('tplCategoryFilter').value;
+  const list=messageTemplates.filter(t=>{
+    if(cat && (t.category||'').trim()!==cat) return false;
+    const hay=[t.title,t.category,t.body].join(' ').toLowerCase();
+    return words.every(w=>hay.includes(w));
+  });
+  $('tplCount').textContent=`Найдено шаблонов: ${list.length}`;
+  $('tplList').innerHTML=list.length?list.map(t=>`<div class="tpl-item">
+    <div class="tpl-head"><div><div class="tpl-title">${esc(t.title)}</div>${t.category?`<span class="tag">${esc(t.category)}</span>`:''}</div>
+    <div class="tpl-actions"><button class="primary" onclick="copyTemplate('${t.id}',this)">📋 Копировать</button>${isAdmin?`<button class="secondary" onclick="editTemplate('${t.id}')">Редактировать</button><button class="danger" onclick="deleteTemplate('${t.id}')">Удалить</button>`:''}</div></div>
+    <div class="tpl-text">${esc(t.body)}</div></div>`).join(''):'<div class="status">Шаблоны не найдены.</div>';
+}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);return true}catch(e){}
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();return ok;
+}
+window.copyTemplate=async(id,btn)=>{
+  const t=messageTemplates.find(x=>x.id===id);if(!t)return;
+  const ok=await copyText(t.body||'');const label=btn.textContent;
+  btn.textContent=ok?'✅ Скопировано':'Не удалось скопировать';setTimeout(()=>{btn.textContent=label},1500);
+};
+function showTemplateForm(t){
+  $('tplEditId').value=t?.id||'';$('tplTitle').value=t?.title||'';$('tplCategory').value=t?.category||'';$('tplBody').value=t?.body||'';
+  $('tplFormTitle').textContent=t?'Редактировать шаблон':'Новый шаблон';$('tplFormStatus').textContent='';
+  $('tplForm').style.display='block';$('tplTitle').focus();
+}
+window.editTemplate=id=>{if(!isAdmin)return;const t=messageTemplates.find(x=>x.id===id);if(t){showTemplateForm(t);$('tplForm').scrollIntoView({behavior:'smooth',block:'start'})}};
+window.deleteTemplate=async id=>{
+  if(!isAdmin)return;const t=messageTemplates.find(x=>x.id===id);
+  if(!t||!confirm(`Удалить шаблон «${t.title}»?`))return;
+  const r=await db.from('message_templates').delete().eq('id',id);
+  if(r.error){alert('Не удалось удалить шаблон: '+r.error.message);return}
+  await loadTemplates();renderTemplateCategories();renderTemplates();
+};
+async function saveTemplate(){
+  if(!isAdmin)return;
+  const id=$('tplEditId').value, row={title:$('tplTitle').value.trim(),category:$('tplCategory').value.trim()||null,body:$('tplBody').value.trim(),updated_at:new Date().toISOString()};
+  if(!row.title||!row.body){$('tplFormStatus').textContent='Заполните название и текст шаблона.';return}
+  $('tplSaveBtn').disabled=true;
+  const r=id?await db.from('message_templates').update(row).eq('id',id):await db.from('message_templates').insert(row);
+  $('tplSaveBtn').disabled=false;
+  if(r.error){$('tplFormStatus').textContent='Не удалось сохранить: '+r.error.message;return}
+  $('tplForm').style.display='none';
+  await loadTemplates();renderTemplateCategories();renderTemplates();
+}
+async function openTemplates(){
+  open('templatesModal');$('tplList').innerHTML='<div class="status">Загрузка…</div>';
+  if(await loadTemplates()){renderTemplateCategories();renderTemplates()}
+  $('tplSearch').focus();
+}
+$('templatesBtn').onclick=openTemplates;
+$('closeTemplates').onclick=()=>close('templatesModal');
+$('tplSearch').oninput=renderTemplates;
+$('tplCategoryFilter').onchange=renderTemplates;
+$('tplNewBtn').onclick=()=>showTemplateForm(null);
+$('tplCancelBtn').onclick=()=>{$('tplForm').style.display='none'};
+$('tplSaveBtn').onclick=saveTemplate;
 </script>
 </body>
 </html>
