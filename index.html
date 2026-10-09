@@ -467,7 +467,7 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
 
   <section class="calc-card calc-pane" role="tabpanel" aria-labelledby="plotterCalcTitle" hidden>
     <h2 id="plotterCalcTitle">Плоттерная резка</h2>
-    <div class="status">Цена плёнки берётся из «Цены листов». Стоимость размера считается по площади: доля от листа плёнки выбранного цвета × цена листа.</div>
+    <div class="status">Цена берётся из «Цены листов» по цвету плёнки и размерной ступени: до 10×15, до 15×21, до 21×28, до 28×40, до 28×60, до 28×100 см. Изделие можно повернуть, оно попадает в самую маленькую подходящую ступень.</div>
     <div class="row calc-row">
       <div class="field"><label for="plotterColor">Цвет плёнки</label><select id="plotterColor"><option value="">Выберите цвет</option></select></div>
     </div>
@@ -611,13 +611,12 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
   </div>
   <div class="actions" style="justify-content:flex-start"><button id="addServiceRule" class="secondary">＋ Добавить правило услуги</button><button id="cancelServiceEdit" class="small" style="display:none">Отмена редактирования</button></div>
   <h3>Плёнка для плоттерной резки</h3>
-  <div class="status">Цвет плёнки, размер листа (ширина × длина, см) и цена этого листа. Например: Белая, 30×100 (погонный метр) — 3000 ₽. Калькулятор «Плоттерная резка» считает стоимость размера пропорционально площади.</div>
+  <div class="status">Для каждого цвета плёнки укажите цену одного изделия в каждой размерной ступени. Изделие попадает в самую маленькую ступень, в которую помещается (его можно повернуть). Пустая ступень — цены нет.</div>
   <div class="row">
     <div class="field"><label>Цвет плёнки</label><input id="pfColor" placeholder="Белая"></div>
-    <div class="field"><label>Размер листа, см</label><input id="pfSize" placeholder="30×100"></div>
-    <div class="field"><label>Цена листа, ₽</label><input id="pfPrice" type="number" min="0" step="0.01"></div>
   </div>
-  <div class="actions" style="justify-content:flex-start"><button id="addPlotterPrice" class="secondary">＋ Добавить цвет</button><button id="cancelPlotterPriceEdit" class="small" style="display:none">Отмена редактирования</button></div>
+  <div class="row" id="pfTierInputs"></div>
+  <div class="actions" style="justify-content:flex-start"><button id="addPlotterPrice" class="secondary">＋ Сохранить цвет</button><button id="cancelPlotterPriceEdit" class="small" style="display:none">Отмена редактирования</button></div>
   <div id="plotterPriceRows" style="margin-top:12px"></div>
   <div id="priceStatus" class="status" style="margin-top:10px"></div>
   <div class="actions"><button id="closePriceAdmin">Закрыть</button></div>
@@ -1284,9 +1283,16 @@ $('shirtCalcBtn').onclick=async()=>{
   }
 };
 
-// Плоттерная резка: цена размера = площадь размера / площадь листа плёнки × цена листа.
-let plotterFilmPrices=[], plotterPriceEditId=null;
+// Плоттерная резка: цена изделия задаётся по цвету и размерной ступени «до W×L см».
+// Изделие (его можно повернуть) попадает в самую маленькую ступень, в которую помещается.
+// Строки таблицы plotter_film_prices: color + sheet_width_cm×sheet_length_cm (граница ступени) + price за изделие.
+const PLOTTER_TIERS=[{w:10,l:15},{w:15,l:21},{w:21,l:28},{w:28,l:40},{w:28,l:60},{w:28,l:100}];
+let plotterFilmPrices=[], plotterEditColor=null;
 window.plotterItems=[{size:'',qty:1}];
+function plotterTierKey(w,l){const x=normSheet(w,l);return `${x.w}x${x.h}`}
+function plotterTierFor(size){return PLOTTER_TIERS.find(t=>size.w<=t.w&&size.h<=t.l)||null}
+function plotterColors(){return [...new Set(plotterFilmPrices.map(r=>r.color))].sort((a,b)=>a.localeCompare(b,'ru'))}
+function plotterPriceRow(color,tier){return plotterFilmPrices.find(r=>r.color===color&&plotterTierKey(r.sheet_width_cm,r.sheet_length_cm)===plotterTierKey(tier.w,tier.l))||null}
 async function loadPlotterPrices(){
   const r=await db.from('plotter_film_prices').select('*').order('color');
   if(r.error){console.warn(r.error.message);return}
@@ -1295,9 +1301,9 @@ async function loadPlotterPrices(){
 }
 function renderPlotterColors(){
   const el=$('plotterColor'); if(!el)return;
-  const current=el.value;
-  el.innerHTML='<option value="">Выберите цвет</option>'+plotterFilmPrices.map(r=>`<option value="${esc(r.id)}">${esc(r.color)} — ${r.sheet_width_cm}×${r.sheet_length_cm} см, ${money(r.price)}</option>`).join('');
-  if(plotterFilmPrices.some(r=>String(r.id)===current))el.value=current;
+  const current=el.value, colors=plotterColors();
+  el.innerHTML='<option value="">Выберите цвет</option>'+colors.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(colors.includes(current))el.value=current;
 }
 function renderPlotterItems(){
   const box=$('plotterItems'); if(!box)return;
@@ -1311,51 +1317,74 @@ loadPlotterPrices();
 $('plotterCalcBtn').onclick=async()=>{
   const out=$('plotterCalcResult');
   await loadPlotterPrices();
-  const film=plotterFilmPrices.find(r=>String(r.id)===$('plotterColor').value);
-  if(!film){out.innerHTML='<b>Выберите цвет плёнки.</b>';return}
-  const sheetW=Number(film.sheet_width_cm), sheetL=Number(film.sheet_length_cm), sheetPrice=Number(film.price);
+  const color=$('plotterColor').value;
+  if(!color){out.innerHTML='<b>Выберите цвет плёнки.</b>';return}
   const lines=[];let total=0;
   for(let i=0;i<plotterItems.length;i++){
     const it=plotterItems[i], size=parsePair(it.size), qty=Math.floor(Number(it.qty));
     if(!size){out.innerHTML=`<b>Размер ${i+1}: введите размер, например 10×12.</b>`;return}
     if(!(qty>=1)){out.innerHTML=`<b>Размер ${i+1}: введите количество.</b>`;return}
-    const piece=size.w*size.h/(sheetW*sheetL)*sheetPrice, sum=piece*qty;
+    const tier=plotterTierFor(size);
+    if(!tier){out.innerHTML=`<b>Размер ${size.w} × ${size.h} см не помещается в самую большую ступень 28 × 100 см — такой размер считает администратор.</b>`;return}
+    const row=plotterPriceRow(color,tier);
+    if(!row){out.innerHTML=`<b>Для цвета «${esc(color)}» нет цены ступени до ${tier.w} × ${tier.l} см.</b><div class="calc-min">Администратору нужно указать её в «Цены листов».</div>`;return}
+    const piece=Number(row.price), sum=piece*qty;
     total+=sum;
-    const tooWide=size.w>Math.min(sheetW,sheetL);
-    lines.push(`<div>${size.w} × ${size.h} см: <b>${money(piece)}</b> × ${qty} шт. = <b>${money(sum)}</b>${tooWide?' <span class="calc-min">(больше ширины плёнки)</span>':''}</div>`);
+    lines.push(`<div>${size.w} × ${size.h} см (ступень до ${tier.w} × ${tier.l}): <b>${money(piece)}</b> × ${qty} шт. = <b>${money(sum)}</b></div>`);
   }
-  out.innerHTML=`<div>Плёнка: <b>${esc(film.color)}</b>, лист ${sheetW} × ${sheetL} см — ${money(sheetPrice)}</div>${lines.join('')}<div class="calc-total">Итого: ${money(total)}</div>`;
+  out.innerHTML=`<div>Плёнка: <b>${esc(color)}</b></div>${lines.join('')}<div class="calc-total">Итого: ${money(total)}</div>`;
 };
+function renderPlotterTierInputs(values={}){
+  $('pfTierInputs').innerHTML=PLOTTER_TIERS.map((t,i)=>`<div class="field"><label>До ${t.w}×${t.l} см, ₽</label><input id="pfTier${i}" type="number" min="0" step="0.01" value="${values[i]??''}"></div>`).join('');
+}
 function renderPlotterPriceRules(){
   const box=$('plotterPriceRows'); if(!box)return;
-  box.innerHTML=plotterFilmPrices.length?`<table class="price-table"><thead><tr><th>Цвет</th><th>Лист, см</th><th>Цена листа</th><th></th></tr></thead><tbody>`+plotterFilmPrices.map(r=>`<tr><td>${esc(r.color)}</td><td>${r.sheet_width_cm}×${r.sheet_length_cm}</td><td>${money(r.price)}</td><td><div class="price-row-actions"><button class="secondary small" onclick="editPlotterPrice('${r.id}')">Изменить</button><button class="danger small" onclick="deletePlotterPrice('${r.id}')">Удалить</button></div></td></tr>`).join('')+'</tbody></table>':'<div class="status">Цветов плёнки пока нет.</div>';
+  const colors=plotterColors();
+  box.innerHTML=colors.length?`<table class="price-table"><thead><tr><th>Цвет</th>${PLOTTER_TIERS.map(t=>`<th>до ${t.w}×${t.l}</th>`).join('')}<th></th></tr></thead><tbody>`+colors.map(c=>`<tr><td>${esc(c)}</td>${PLOTTER_TIERS.map(t=>{const r=plotterPriceRow(c,t);return `<td>${r?money(r.price):'—'}</td>`}).join('')}<td><div class="price-row-actions"><button class="secondary small" data-color="${esc(c)}" onclick="editPlotterPrice(this.dataset.color)">Изменить</button><button class="danger small" data-color="${esc(c)}" onclick="deletePlotterPrice(this.dataset.color)">Удалить</button></div></td></tr>`).join('')+'</tbody></table>':'<div class="status">Цветов плёнки пока нет.</div>';
 }
 function resetPlotterPriceForm(){
-  plotterPriceEditId=null; $('pfColor').value=''; $('pfSize').value=''; $('pfPrice').value='';
-  $('addPlotterPrice').textContent='＋ Добавить цвет'; $('cancelPlotterPriceEdit').style.display='none';
+  plotterEditColor=null; $('pfColor').value=''; renderPlotterTierInputs();
+  $('addPlotterPrice').textContent='＋ Сохранить цвет'; $('cancelPlotterPriceEdit').style.display='none';
 }
-window.editPlotterPrice=id=>{
-  const r=plotterFilmPrices.find(x=>String(x.id)===String(id)); if(!r)return;
-  plotterPriceEditId=String(id); $('pfColor').value=r.color; $('pfSize').value=`${r.sheet_width_cm}×${r.sheet_length_cm}`; $('pfPrice').value=r.price;
+window.editPlotterPrice=color=>{
+  plotterEditColor=color; $('pfColor').value=color;
+  const vals={}; PLOTTER_TIERS.forEach((t,i)=>{const r=plotterPriceRow(color,t);if(r)vals[i]=r.price});
+  renderPlotterTierInputs(vals);
   $('addPlotterPrice').textContent='Сохранить изменения'; $('cancelPlotterPriceEdit').style.display='inline-block';
 };
-window.deletePlotterPrice=async id=>{
-  if(!confirm('Удалить этот цвет плёнки?'))return;
-  const r=await db.from('plotter_film_prices').delete().eq('id',id);
+window.deletePlotterPrice=async color=>{
+  if(!confirm(`Удалить все цены цвета «${color}»?`))return;
+  const r=await db.from('plotter_film_prices').delete().eq('color',color);
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
   await loadPlotterPrices(); renderPlotterPriceRules(); $('priceStatus').textContent='Цвет плёнки удалён.';
 };
 $('cancelPlotterPriceEdit').onclick=resetPlotterPriceForm;
 $('addPlotterPrice').onclick=async()=>{
   const color=$('pfColor').value.trim();
-  const m=String($('pfSize').value||'').trim().replace(/,/g,'.').match(/^(\d+(?:\.\d+)?)\s*(?:x|х|×|\*)\s*(\d+(?:\.\d+)?)/i);
-  const price=Number($('pfPrice').value);
-  if(!color||!m||!(Number(m[1])>0)||!(Number(m[2])>0)||$('pfPrice').value===''||!(price>=0)){$('priceStatus').textContent='Укажите цвет, размер листа (например 30×100) и цену.';return}
-  const payload={color,sheet_width_cm:Number(m[1]),sheet_length_cm:Number(m[2]),price};
-  const r=plotterPriceEditId?await db.from('plotter_film_prices').update(payload).eq('id',plotterPriceEditId):await db.from('plotter_film_prices').insert(payload);
-  if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
-  resetPlotterPriceForm(); await loadPlotterPrices(); renderPlotterPriceRules(); $('priceStatus').textContent='Цена плёнки сохранена.';
+  if(!color){$('priceStatus').textContent='Укажите цвет плёнки.';return}
+  const prices=PLOTTER_TIERS.map((_,i)=>{const v=$('pfTier'+i).value.trim();return v===''?null:Number(v)});
+  if(prices.some(v=>v!==null&&!(v>=0))){$('priceStatus').textContent='Цена должна быть числом от 0.';return}
+  if(prices.every(v=>v===null)){$('priceStatus').textContent='Укажите цену хотя бы одной ступени.';return}
+  // Переименование цвета при редактировании: переносим строки на новое имя.
+  if(plotterEditColor&&plotterEditColor!==color){
+    const r=await db.from('plotter_film_prices').update({color}).eq('color',plotterEditColor);
+    if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+    await loadPlotterPrices();
+  }
+  // Строки этого цвета, которые не относятся ни к одной ступени (старый формат), убираем.
+  const stray=plotterFilmPrices.filter(r=>r.color===color&&!PLOTTER_TIERS.some(t=>plotterTierKey(t.w,t.l)===plotterTierKey(r.sheet_width_cm,r.sheet_length_cm)));
+  for(const r of stray){const d=await db.from('plotter_film_prices').delete().eq('id',r.id);if(d.error){$('priceStatus').textContent='Ошибка: '+d.error.message;return}}
+  for(let i=0;i<PLOTTER_TIERS.length;i++){
+    const t=PLOTTER_TIERS[i], row=plotterPriceRow(color,t), price=prices[i];
+    let r=null;
+    if(row&&price===null) r=await db.from('plotter_film_prices').delete().eq('id',row.id);
+    else if(row) r=await db.from('plotter_film_prices').update({price}).eq('id',row.id);
+    else if(price!==null) r=await db.from('plotter_film_prices').insert({color,sheet_width_cm:t.w,sheet_length_cm:t.l,price});
+    if(r&&r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
+  }
+  resetPlotterPriceForm(); await loadPlotterPrices(); renderPlotterPriceRules(); $('priceStatus').textContent='Цены плёнки сохранены.';
 };
+renderPlotterTierInputs();
 
 async function openPriceAdmin(){
   if(!isAdmin){open('loginModal');return}
