@@ -338,6 +338,115 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 .card.dragging{opacity:.4}
 .order-hint{font-size:13px;color:#6b7280;margin:-4px 0 10px}
 </style>
+<style>
+/* Касса v5: заказы «при получении», наличные, тесты по справочникам, объявления, сводка */
+.pickup-panel{position:fixed;right:0;top:96px;z-index:8;display:none;max-height:calc(100vh - 120px - var(--task-banner-h,0px));font-family:var(--f-body)}
+.pickup-panel.show{display:flex;align-items:flex-start}
+.pickup-panel .pp-tab{writing-mode:vertical-rl;transform:rotate(180deg);border-radius:0 var(--r-md) var(--r-md) 0;background:var(--ink);color:#fff;border:0;padding:14px 9px;font-size:13.5px;line-height:1.2;box-shadow:var(--shadow);min-height:0;display:block}
+.pickup-panel .pp-tab b{font-size:15px}
+.pickup-panel .pp-over{color:#FFC98A}
+.pickup-panel .pp-body{display:none;width:300px;max-height:inherit;overflow:auto;background:var(--surface);border:1px solid var(--line);border-right:0;border-radius:var(--r-md) 0 0 var(--r-md);box-shadow:0 18px 50px -18px rgba(23,25,30,.45);padding:12px}
+.pickup-panel.open .pp-body{display:block}
+.pickup-panel.open .pp-tab{display:none}
+.pp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.pp-head button{padding:4px 10px;min-height:0}
+.pp-sub{font-size:12.5px;color:var(--muted);line-height:1.35}
+.pp-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.pp-item{border:1px solid var(--line);border-left:4px solid var(--s-orange);border-radius:var(--r-sm);padding:9px 10px;background:var(--sunk);display:flex;flex-direction:column;gap:3px}
+.pp-item button{margin-top:6px;width:100%;justify-content:center;min-height:0}
+.pp-top{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums}
+.pp-client{font-size:13.5px;font-weight:600}
+.pickup-panel input{width:100%;margin-top:8px}
+.pp-debts{width:100%;margin-top:10px;background:var(--warn-bg);color:var(--warn-ink);border-color:#F2D29B;justify-content:center;min-height:0;white-space:normal;text-align:left}
+.tile-badge{position:absolute;top:10px;right:10px;background:var(--s-red);color:#fff;border-radius:999px;font-size:12px;font-weight:800;padding:2px 8px;font-variant-numeric:tabular-nums}
+.v5-box{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin:10px 0;background:var(--sunk)}
+.v5-box.warn{background:var(--warn-bg);border-color:#F2D29B;color:var(--warn-ink)}
+.v5-box.ok{background:var(--ok-bg);border-color:#BFE3CB;color:var(--ok-ink)}
+.v5-box.info{background:#EEF3FC;border-color:#C9D8F3;color:#1B3F7F}
+.v5-box .row{margin-top:8px}
+.pickup-debt-section{margin:14px 0 18px}
+.pickup-debt-section h3{margin:0 0 6px;font-size:16px}
+.pickup-debt-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #F2D29B;background:var(--warn-bg);border-radius:var(--r-sm);padding:10px 12px;margin-top:8px;color:var(--ink)}
+.pickup-debt-row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pickup-debt-row .acts button{min-height:0}
+.v5-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120%);z-index:70;background:var(--ink);color:#fff;padding:12px 18px;border-radius:var(--r-md);box-shadow:var(--shadow);font-weight:600;transition:transform .25s;max-width:calc(100vw - 32px)}
+.v5-toast.show{transform:translateX(-50%) translateY(0)}
+#cashOpenModal,#cashCloseModal,#annModal,#pickupRemindModal{z-index:12}
+#guideTestModal,#guideQModal{z-index:11}
+.cash-expected{font-size:15px;line-height:1.45}
+.cash-expected b{display:block;font-family:var(--f-display);font-size:30px;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.cash-lines{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-variant-numeric:tabular-nums;margin:8px 0}
+.cash-lines .tot{font-weight:800;border-top:1px solid var(--line);padding-top:4px}
+.cash-big-btn{width:100%;justify-content:center;font-size:16px;padding:14px;margin:6px 0 4px}
+.ann-card h3{margin:0 0 4px;font-size:20px}
+.ann-body{white-space:pre-wrap;font-size:15.5px;line-height:1.5;margin:12px 0;padding:14px;background:var(--sunk);border-radius:var(--r-md)}
+.ann-people{display:flex;flex-direction:column;gap:8px}
+.ann-people button{justify-content:center}
+.ann-item{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin-top:10px}
+.ann-item.off{opacity:.6}
+.ann-item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.ann-tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;background:var(--ok-bg);color:var(--ok-ink)}
+.ann-tag.off{background:var(--sunk);color:var(--muted)}
+.gt-badge{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 7px;background:#EEF3FC;color:#1B3F7F;white-space:nowrap}
+.gt-box{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:22px;padding:14px 16px;border-radius:var(--r-md);background:#EEF3FC;border:1px solid #C9D8F3}
+.gt-actions{display:flex;gap:8px;flex-wrap:wrap}
+.gt-q{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin:10px 0}
+.gt-q.missing{border-color:var(--s-orange);background:var(--warn-bg)}
+.gt-q.right{border-color:#BFE3CB;background:var(--ok-bg)}
+.gt-q.wrong{border-color:#F3C3BC;background:var(--bad-bg)}
+.gt-qt{font-weight:700;margin-bottom:8px;line-height:1.4}
+.gt-opt{display:flex;gap:10px;align-items:flex-start;padding:7px 4px;cursor:pointer;line-height:1.35}
+.gt-opt input{width:auto;margin-top:3px}
+.gt-fix{margin-top:6px;font-size:13.5px;color:var(--bad-ink)}
+.gt-score{font-family:var(--f-display);font-size:26px}
+.gq-row{border:1px solid var(--line);border-radius:var(--r-md);padding:12px;margin:10px 0;background:var(--sunk)}
+.gq-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.gq-head .acts{display:flex;gap:4px}
+.gq-head button{min-height:0;padding:5px 9px}
+.gq-row textarea{width:100%;min-height:54px}
+.gq-opt{display:flex;gap:8px;align-items:center;margin-top:6px}
+.gq-opt input[type=radio]{width:auto}
+.gq-opt input[type=text]{flex:1}
+.sum-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 14px}
+.sum-seg{display:flex;border:1px solid var(--line-2);border-radius:var(--r-sm);overflow:hidden}
+.sum-seg button{border:0;border-radius:0;min-height:0;padding:9px 12px;background:var(--surface)}
+.sum-seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.sum-controls input,.sum-controls select{width:auto}
+.sum-controls button{min-height:0}
+.sum-period{font-size:14px;color:var(--muted);margin:-4px 0 12px}
+.sum-period b{color:var(--ink)}
+.sum-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.sum-kpi{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;background:var(--surface)}
+.sum-kpi .k{font-size:12.5px;color:var(--muted)}
+.sum-kpi .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin:2px 0}
+.sum-kpi .p{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dup{color:var(--ok-ink);font-weight:700;white-space:nowrap}
+.ddown{color:var(--bad-ink);font-weight:700;white-space:nowrap}
+.d0{color:var(--muted);white-space:nowrap}
+.sum-ins{margin:14px 0;padding:14px 16px 14px 34px;background:var(--sunk);border-radius:var(--r-md);line-height:1.5}
+.sum-ins li{margin:3px 0}
+.sum-sec{margin-top:22px}
+.sum-sec h3{margin:0 0 8px;font-size:17px}
+.sum-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.sum-grid>div,.sum-sec{min-width:0}
+.sum-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--ink);margin:4px 0 6px}
+.sum-legend span{display:inline-flex;align-items:center;gap:6px}
+.sum-legend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.sum-legend i.ln{height:3px;width:18px;border-radius:2px}
+.sum-chart{width:100%;height:auto;display:block;overflow:visible}
+.sum-chart text{font-family:var(--f-body);font-size:11px;fill:var(--muted)}
+.sum-tip{position:fixed;z-index:80;pointer-events:none;background:var(--ink);color:#fff;font-size:12.5px;line-height:1.45;padding:8px 10px;border-radius:8px;display:none;font-variant-numeric:tabular-nums;max-width:260px}
+.sum-table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.sum-table th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px;background:var(--sunk)}
+.sum-table td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}
+.sum-table td.n,.sum-table th.n{text-align:right;white-space:nowrap}
+.sum-bar{height:8px;border-radius:0 4px 4px 0;background:#2F6FDB;min-width:2px}
+.sum-hbar{display:grid;grid-template-columns:44px 1fr 92px;gap:8px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums;margin:3px 0}
+.sum-hbar .n{text-align:right}
+.sum-scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+.sum-note{font-size:12.5px;color:var(--muted);margin-top:6px}
+@media(max-width:820px){.sum-grid{grid-template-columns:minmax(0,1fr)}.sum-seg{flex-wrap:wrap;width:100%}.sum-seg button{flex:1 1 auto}.sum-kpis{grid-template-columns:1fr 1fr}.sum-kpi .v{font-size:18px}.pickup-panel .pp-body{width:min(300px,86vw)}}
+</style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -911,6 +1020,23 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="tpl-search" style="margin-top:12px"><input id="debtSearch" placeholder="Поиск по имени или телефону клиента…"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="debtShowPaid" type="checkbox" style="width:auto"> Показать оплаченные</label></div>
 <div id="debtSummary" class="debt-summary"></div><div id="debtList"></div><div class="actions"><button id="closeDebts">Закрыть</button></div></div></div>
 
+
+<!-- Касса v5 -->
+<div id="pickupPanel" class="pickup-panel" aria-label="Заказы, ожидающие оплаты при получении"></div>
+<div id="v5Toast" class="v5-toast" role="status" aria-live="polite"></div>
+<div id="sumTip" class="sum-tip"></div>
+<div class="modal" id="cashOpenModal"><div class="dialog" style="max-width:520px"><h2 style="margin-top:0">💵 Наличные в кассе</h2><div id="cashOpenContent"></div></div></div>
+<div class="modal" id="cashCloseModal"><div class="dialog" style="max-width:560px"><h2 style="margin-top:0">Завершение смены</h2><div id="cashCloseContent"></div><div id="cashCloseStatus" class="status"></div><div class="actions"><button id="cashCloseCancel" class="secondary">Отмена</button><button id="cashCloseOk" class="danger">Завершить смену</button></div></div></div>
+<div class="modal" id="annModal"><div class="dialog" style="max-width:600px"><div id="annContent"></div></div></div>
+<div class="modal" id="pickupRemindModal"><div class="dialog" style="max-width:660px"><h2 style="margin-top:0">⚠ Клиенты не забрали заказы</h2><div id="pickupRemindContent"></div><div class="actions"><button id="pickupRemindOk" class="primary">Понятно</button></div></div></div>
+<div class="modal" id="annAdminModal"><div class="dialog" style="max-width:860px"><h2 style="margin-top:0">Объявления для сотрудников</h2><div class="status">Объявление покажется при открытии смены. Каждый сотрудник увидит его один раз и нажмёт «Прочитал(а)». Те, кто на выходном, увидят его в свою ближайшую смену.</div>
+<div class="v5-box"><div class="field"><label for="annTitle">Заголовок *</label><input id="annTitle" placeholder="Например: Новая позиция в прайсе"></div><div class="field"><label for="annBody">Текст</label><textarea id="annBody" rows="4" placeholder="Что изменилось и что нужно знать сотрудникам"></textarea></div><div class="actions" style="justify-content:flex-start"><button id="annPublish" class="primary">Опубликовать</button><span id="annStatus" class="status"></span></div></div>
+<div id="annAdminList"></div><div class="actions"><button id="closeAnnAdmin">Закрыть</button></div></div></div>
+<div class="modal" id="guideTestModal"><div class="dialog" style="max-width:760px"><h2 id="gtTitle" style="margin-top:0">Тест</h2><div id="gtContent"></div><div class="actions"><button id="closeGuideTest">Закрыть</button></div></div></div>
+<div class="modal" id="guideQModal"><div class="dialog" style="max-width:900px"><h2 id="gqTitle" style="margin-top:0">Вопросы теста</h2><div class="status">Отметьте кружком правильный ответ. Пустые варианты не сохраняются. Изменения увидят все после нажатия «Сохранить».</div><div id="gqList"></div><div class="actions" style="justify-content:flex-start"><button id="gqAdd" class="secondary">＋ Добавить вопрос</button></div><div id="gqStatus" class="status"></div><div class="actions"><button id="closeGuideQ">Закрыть</button><button id="gqSave" class="primary">Сохранить вопросы</button></div><h3>Последние результаты</h3><div id="gqResults" class="status">—</div></div></div>
+<div class="modal" id="summaryModal"><div class="dialog" style="max-width:1200px"><h2 style="margin-top:0">Сводка</h2>
+<div class="sum-controls"><div class="sum-seg" id="sumSeg" role="group" aria-label="Период"><button data-p="day">День</button><button data-p="week">Неделя</button><button data-p="month">Месяц</button><button data-p="quarter">Квартал</button><button data-p="year">Год</button></div><button id="sumPrev" class="secondary" aria-label="Предыдущий период">←</button><input id="sumDate" type="date"><button id="sumNext" class="secondary" aria-label="Следующий период">→</button><select id="sumBranch"><option value="">Все филиалы</option></select><button id="sumReload" class="secondary">Обновить</button></div>
+<div id="sumBody"></div><div class="actions"><button id="closeSummary">Закрыть</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -3335,6 +3461,665 @@ document.querySelectorAll('.calc-tab').forEach(tab=>{
     document.querySelectorAll('.calc-pane').forEach(p=>{p.hidden=p.getAttribute('aria-labelledby')!==tab.dataset.calc});
   };
 });
+</script>
+<script>
+// ===== Касса v5 =====
+// 1) Оплата «при получении»: продажа откладывается и не попадает в отчёт, пока клиент не оплатит.
+// 2) Наличные в кассе: остаток при закрытии смены и сверка при открытии следующей.
+// 3) Объявления: каждый сотрудник один раз подтверждает прочтение в своей смене.
+const PICKUP_OVERDUE_MS=2*24*3600*1000;
+let pickupOrders=[],salePickup=null,pickupRpcOverride=null,pickupLastResult=null,pickupQuery='',shiftChecksRunning=false;
+let pickupPanelOpen=(()=>{try{const v=localStorage.getItem('pickupPanelOpen');return v==null?window.innerWidth>=1700:v==='1'}catch(e){return window.innerWidth>=1700}})();
+function fmtRub(v){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Number(v||0)))+' ₽'}
+function v5Date(v){return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+function v5Toast(msg){const t=$('v5Toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),4500)}
+function v5Digits(v){return String(v||'').replace(/\D/g,'').slice(-10)}
+
+// --- Заказы «при получении» ---
+function pickupClient(o){return o.customer_name?`💳 ${o.customer_name}${o.customer_phone?' · '+o.customer_phone:''}`:([o.client_name,o.client_phone].filter(Boolean).join(' · ')||'Клиент не указан')}
+function pickupItemsText(o){return (o.items||[]).map(i=>`${i.name} × ${Number(i.quantity)}`).join(', ')}
+function pickupIsOverdue(o){return Date.now()-new Date(o.created_at).getTime()>=PICKUP_OVERDUE_MS}
+function pickupDays(o){return Math.floor((Date.now()-new Date(o.created_at).getTime())/86400000)}
+function pickupMatches(o,words){const hay=[o.order_number,o.customer_name,o.customer_phone,o.client_name,o.client_phone,o.comment,o.branch_name,pickupItemsText(o)].join(' ').toLowerCase();return words.every(w=>hay.includes(w))}
+function branchPickups(){const b=salesSession?.branchId;return pickupOrders.filter(o=>o.status==='pending'&&(!b||Number(o.branch_id)===Number(b)))}
+async function loadPickups(){
+  const r=await db.rpc('pickup_list',{p_branch_id:null,p_include_closed:false});
+  if(r.error){console.warn('pickup_list',r.error);return false}
+  pickupOrders=r.data||[];drawPickupPanel();drawPickupBadge();return true;
+}
+function drawPickupBadge(){
+  const btn=$('debtsBtn');if(!btn)return;
+  const n=(salesSession?.branchId?branchPickups():pickupOrders.filter(o=>o.status==='pending')).filter(pickupIsOverdue).length;
+  let b=btn.querySelector('.tile-badge');
+  if(!n){b?.remove();return}
+  if(!b){b=document.createElement('span');b.className='tile-badge';btn.appendChild(b)}
+  b.textContent=n;b.title='Заказов «при получении», которые не забрали больше 2 дней: '+n;
+}
+function drawPickupPanel(){
+  const p=$('pickupPanel');if(!p)return;
+  const all=salesSession?.shiftId?branchPickups():[],fresh=all.filter(o=>!pickupIsOverdue(o)),over=all.filter(pickupIsOverdue);
+  if(!fresh.length&&!over.length){p.classList.remove('show');return}
+  if(document.activeElement?.id==='pickupSearch'){drawPickupList();return}
+  p.innerHTML=`<button class="pp-tab" onclick="togglePickupPanel()" title="Показать заказы, которые ждут оплаты">🕓 Ждут оплаты: <b>${fresh.length}</b>${over.length?` <span class="pp-over">· в долгах ${over.length}</span>`:''}</button>
+  <div class="pp-body"><div class="pp-head"><b>Ждут оплаты: ${fresh.length}</b><button class="secondary" onclick="togglePickupPanel()" aria-label="Свернуть список">Свернуть ›</button></div>
+  <div class="pp-sub">Эти продажи пробиты «при получении» и ещё не попали в отчёт. Клиент пришёл — нажмите «Оплатить».</div>
+  ${fresh.length>3?`<input id="pickupSearch" placeholder="Имя, телефон или №" value="${esc(pickupQuery)}" oninput="pickupQuery=this.value;drawPickupList()">`:''}
+  <div id="pickupList" class="pp-list"></div>
+  ${over.length?`<button class="pp-debts" onclick="openPickupDebts()">⚠ Не забрали больше 2 дней: ${over.length}. Они в «Долгах клиентов» →</button>`:''}</div>`;
+  p.classList.add('show');p.classList.toggle('open',pickupPanelOpen);drawPickupList();
+}
+function drawPickupList(){
+  const el=$('pickupList');if(!el)return;
+  const words=pickupQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  const list=branchPickups().filter(o=>!pickupIsOverdue(o)&&pickupMatches(o,words)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  el.innerHTML=list.length?list.map(o=>`<div class="pp-item"><div class="pp-top"><b>№${esc(o.order_number)}</b><b>${salesMoney(o.total)}</b></div><div class="pp-client">${esc(pickupClient(o))}</div><div class="pp-sub">${esc(pickupItemsText(o))}</div><div class="pp-sub">${v5Date(o.created_at)}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — оплатить</button></div>`).join(''):'<div class="pp-sub">Ничего не найдено.</div>';
+}
+window.togglePickupPanel=()=>{pickupPanelOpen=!pickupPanelOpen;try{localStorage.setItem('pickupPanelOpen',pickupPanelOpen?'1':'0')}catch(e){}$('pickupPanel').classList.toggle('open',pickupPanelOpen)};
+window.openPickupDebts=()=>{$('debtsBtn').click()};
+
+// Способ оплаты «при получении» и поля клиента.
+(()=>{
+  const sel=$('salePayment');
+  if(!sel.querySelector('option[value="on_pickup"]'))sel.insertAdjacentHTML('beforeend','<option value="on_pickup">🕓 При получении (оплата позже)</option>');
+  const grid=sel.closest('.sale-payment-grid')||sel.closest('.field');
+  grid.insertAdjacentHTML('afterend',`<div id="salePickupHoldBox" class="v5-box info" style="display:none"><b>🕓 Оплата при получении</b><div style="margin-top:4px">Продажа сохранится в списке «Ждут оплаты» справа и <b>не попадёт</b> в продажи за сегодня и отчёт. Когда клиент придёт, найдите заказ, выберите способ оплаты и клубную карту — только тогда продажа попадёт в отчёт. Баллы списываются при оплате.</div><div class="row" id="salePickupClientRow"><div class="field"><label for="salePickupName">Имя клиента</label><input id="salePickupName" placeholder="Чтобы потом найти заказ"></div><div class="field"><label for="salePickupPhone">Телефон</label><input id="salePickupPhone" placeholder="Номер телефона"></div></div><div class="pp-sub" id="salePickupClientHint">Если у клиента клубная карта — отметьте её выше, имя и телефон возьмутся оттуда.</div></div>`);
+  $('saleOrderPreview').closest('.sale-order-title').insertAdjacentHTML('afterend','<div id="salePickupBanner" class="v5-box warn" style="display:none"></div>');
+  const prevChange=sel.onchange;
+  sel.onchange=()=>{prevChange?.();syncPickupHoldBox()};
+  const prevClub=$('saleClubEnabled').onchange;
+  $('saleClubEnabled').onchange=()=>{prevClub?.();syncPickupHoldBox()};
+})();
+function syncPickupHoldBox(){
+  const on=$('salePayment').value==='on_pickup';
+  $('salePickupHoldBox').style.display=on?'block':'none';
+  const club=$('saleClubEnabled').checked;
+  $('salePickupClientRow').style.display=club?'none':'grid';
+  $('salePickupClientHint').textContent=club?'Клиент возьмётся из клубной карты.':'Если у клиента клубная карта — отметьте её выше, имя и телефон возьмутся оттуда.';
+}
+function setPickupOptionAvailable(on){const o=$('salePayment').querySelector('option[value="on_pickup"]');if(o){o.hidden=!on;o.disabled=!on}}
+
+// Перехватываем вызов sales_create_sale из штатной кнопки «Оформить», чтобы не дублировать все проверки формы.
+(()=>{const raw=db.rpc.bind(db);window.v5Rpc=raw;db.rpc=(fn,args,opts)=>{if(fn==='sales_create_sale'&&pickupRpcOverride){const f=pickupRpcOverride;pickupRpcOverride=null;return f(args)}return raw(fn,args,opts)}})();
+
+const v5BaseOpenSale=openSaleV4;
+openSaleV4=async function(){
+  salePickup=null;
+  await v5BaseOpenSale();
+  setPickupOptionAvailable(true);
+  $('salePickupBanner').style.display='none';
+  $('salePickupName').value='';$('salePickupPhone').value='';
+  syncPickupHoldBox();
+};
+$('salesBtn').onclick=()=>openSaleV4();
+
+const v5BaseSave=$('saveSale').onclick;
+$('saveSale').onclick=async()=>{
+  if($('saveSale').disabled)return;
+  const pay=$('salePayment').value,club=$('saleClubEnabled').checked;
+  pickupLastResult=null;
+  if(pay==='on_pickup'){
+    if(salePickup){$('saleStatus').textContent='Этот заказ уже ждёт оплаты. Выберите, как клиент платит сейчас.';return}
+    if(salePointsUsed()>0){$('saleStatus').textContent='При оплате «при получении» баллы списать нельзя. Спишите их, когда клиент будет оплачивать.';return}
+    const name=$('salePickupName').value.trim(),phone=$('salePickupPhone').value.trim();
+    if(!club&&!name&&!phone){$('saleStatus').textContent='Укажите имя или телефон клиента (или клубную карту), чтобы потом найти заказ.';$('salePickupName').focus();return}
+    pickupRpcOverride=a=>v5Rpc('sales_hold_pickup',{p_shift_id:a.p_shift_id,p_employee_id:a.p_employee_id,p_items:a.p_items,p_discount_percent:a.p_discount_percent,p_comment:a.p_comment,p_order_number:a.p_order_number,p_customer_id:a.p_loyalty_customer_id,p_client_name:club?a.p_loyalty_name:name,p_client_phone:club?a.p_loyalty_phone:phone}).then(r=>{if(!r.error)pickupLastResult={kind:'hold',no:r.data};return r});
+  }else if(salePickup){
+    const o=salePickup;
+    pickupRpcOverride=a=>{const x={...a,p_pickup_id:o.id};delete x.p_order_number;return v5Rpc('sales_pay_pickup',x).then(r=>{if(!r.error)pickupLastResult={kind:'pay',no:r.data};return r})};
+  }
+  try{await v5BaseSave()}finally{pickupRpcOverride=null}
+  if(pickupLastResult){
+    v5Toast(pickupLastResult.kind==='hold'?`Заказ №${pickupLastResult.no} отложен до оплаты. Он в списке «Ждут оплаты» справа.`:`Заказ №${pickupLastResult.no} оплачен и попал в отчёт смены.`);
+    loadPickups();
+  }
+};
+
+window.startPickupPayment=async id=>{
+  let o=pickupOrders.find(x=>Number(x.id)===Number(id));
+  if(!o||o.status!=='pending'){await loadPickups();o=pickupOrders.find(x=>Number(x.id)===Number(id))}
+  if(!o||o.status!=='pending'){alert('Этот заказ уже оплачен или отменён.');return}
+  if(!salesSession?.shiftId){alert('Сначала откройте смену: оплата попадёт в отчёт текущей смены.');close('debtsModal');await openSalesWorkspace();return}
+  if($('saleModal').classList.contains('show')&&!salePickup&&saleDraft.length&&!confirm(`Корзина текущей продажи будет заменена заказом №${o.order_number}. Продолжить?`))return;
+  close('debtsModal');close('pickupRemindModal');
+  await openSaleV4();
+  if(!$('saleModal').classList.contains('show'))return;
+  salePickup=o;
+  saleDraft=(o.items||[]).map(i=>({catalogId:Number(i.catalog_id),quantity:Number(i.quantity),unitPrice:Number(i.unit_price)}));
+  $('saleDiscountPercent').value=String(Number(o.discount_percent||0));
+  $('saleComment').value=o.comment||'';
+  setPickupOptionAvailable(false);$('salePayment').value='';$('salePayment').onchange();
+  $('saleOrderPreview').textContent=`№ ${o.order_number} (заказ при получении)`;
+  const otherBranch=Number(o.branch_id)!==Number(salesSession.branchId);
+  $('salePickupBanner').innerHTML=`<b>Оплата заказа №${esc(o.order_number)} от ${v5Date(o.created_at)}</b> · ${esc(pickupClient(o))}<br>Сумма была ${salesMoney(o.total)}. Проверьте позиции, выберите способ оплаты и при необходимости клубную карту, затем нажмите «Оформить». Продажа попадёт в отчёт текущей смены.${otherBranch?`<br>Заказ оформлен в филиале «${esc(o.branch_name||'')}», здесь у продажи будет новый номер.`:''}`;
+  $('salePickupBanner').style.display='block';
+  if(!o.customer_id){$('saleClubNewName').value=o.client_name||'';$('saleClubNewPhone').value=o.client_phone||''}
+  renderSaleDraft();
+  if(o.customer_id&&o.customer_phone){
+    const r=await db.rpc('loyalty_find_customers',{p_query:o.customer_phone});
+    const c=(r.data||[]).find(x=>String(x.customer_id)===String(o.customer_id));
+    if(c&&salePickup===o){$('saleClubEnabled').checked=true;$('saleLoyaltyFields').style.display='block';selectSaleLoyaltyCustomer(c);syncPickupHoldBox()}
+  }
+};
+
+// При выборе клубной карты напоминаем о неоплаченных заказах клиента.
+const v5BaseSelectLoyalty=selectSaleLoyaltyCustomer;
+selectSaleLoyaltyCustomer=function(c){
+  v5BaseSelectLoyalty(c);
+  if(salePickup)return;
+  const ph=v5Digits(c.customer_phone);
+  const pend=pickupOrders.filter(o=>o.status==='pending'&&(String(o.customer_id)===String(c.customer_id)||(ph&&v5Digits(o.client_phone)===ph)));
+  if(pend.length)$('saleClubResults').insertAdjacentHTML('beforeend',`<div class="sales-warning" style="margin-top:8px;padding:10px;border-radius:10px">⚠ У клиента есть неоплаченный заказ «при получении»:${pend.map(o=>`<div style="margin-top:6px">№${esc(o.order_number)} на ${salesMoney(o.total)} от ${v5Date(o.created_at)}${o.branch_name?' · '+esc(o.branch_name):''} <button class="primary small" onclick="startPickupPayment(${o.id})">Пробить его</button></div>`).join('')}</div>`);
+};
+
+// «Долги клиентов»: заказы, которые не забрали больше 2 дней.
+(()=>{$('debtSummary').insertAdjacentHTML('beforebegin','<div id="pickupDebts" class="pickup-debt-section"></div>')})();
+const v5BaseLoadDebts=loadDebts,v5BaseRenderDebts=renderDebts;
+loadDebts=async function(){await Promise.all([v5BaseLoadDebts(),loadPickups()]);renderPickupDebts()};
+renderDebts=function(){v5BaseRenderDebts();renderPickupDebts()};
+function renderPickupDebts(){
+  const box=$('pickupDebts');if(!box)return;
+  const words=$('debtSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const all=pickupOrders.filter(o=>o.status==='pending'&&pickupIsOverdue(o)),list=all.filter(o=>pickupMatches(o,words));
+  if(!all.length){box.innerHTML='';return}
+  const sum=all.reduce((a,o)=>a+Number(o.total||0),0);
+  box.innerHTML=`<h3>🕓 Не забрали заказ «при получении» (больше 2 дней): ${all.length} на ${salesMoney(sum)}</h3><div class="status">Эти продажи не в отчёте. Когда клиент придёт за заказом, нажмите «Клиент пришёл — пробить», выберите способ оплаты и клубную карту. Если клиент отказался — «Отменить заказ».</div>
+  ${list.length?list.map(o=>`<div class="pickup-debt-row"><div><b>Заказ №${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))}</div><div class="status">${v5Date(o.created_at)} (${pickupDays(o)} дн. назад) · ${esc(o.branch_name||'')}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div></div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button><button class="secondary small" onclick="cancelPickup(${o.id})">Отменить заказ</button></div></div>`).join(''):'<div class="status">По поиску ничего не найдено.</div>'}`;
+}
+window.cancelPickup=async id=>{
+  const o=pickupOrders.find(x=>Number(x.id)===Number(id));if(!o)return;
+  const reason=prompt(`Отменить заказ №${o.order_number} на ${salesMoney(o.total)}? Он исчезнет из списка и не попадёт в отчёт.\n\nНапишите причину (например: клиент отказался):`);
+  if(reason===null)return;
+  if(!reason.trim()){alert('Напишите причину отмены.');return}
+  const r=await db.rpc('sales_cancel_pickup',{p_pickup_id:o.id,p_reason:reason.trim()});
+  if(r.error){alert('Не удалось отменить: '+r.error.message);return}
+  await loadPickups();renderPickupDebts();v5Toast(`Заказ №${o.order_number} отменён.`);
+};
+$('debtsBtn').onclick=()=>{open('debtsModal');$('debtSearch').value='';loadDebts()};
+$('debtSearch').oninput=renderDebts;
+$('debtShowPaid').onchange=loadDebts;
+
+function showOverduePickupReminder(){
+  return new Promise(resolve=>{
+    const sid=salesSession?.shiftId;if(!sid){resolve();return}
+    const key='pickupRemind_'+sid;try{if(localStorage.getItem(key)){resolve();return}}catch(e){}
+    const over=branchPickups().filter(pickupIsOverdue);
+    if(!over.length){resolve();return}
+    try{localStorage.setItem(key,'1')}catch(e){}
+    $('pickupRemindContent').innerHTML=`<div class="status">Эти клиенты не забрали заказы «при получении» больше 2 дней. Если клиент придёт — не пробивайте заказ заново, а найдите его здесь или в «Долгах клиентов» и нажмите «Клиент пришёл — пробить».</div>${over.map(o=>`<div class="pickup-debt-row"><div><b>№${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))} · ${pickupDays(o)} дн. назад</div></div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button></div></div>`).join('')}`;
+    $('pickupRemindOk').onclick=()=>{close('pickupRemindModal');resolve()};
+    open('pickupRemindModal');
+  });
+}
+
+// --- Наличные в кассе ---
+function askOpenCash(info){
+  return new Promise(resolve=>{
+    const exp=info.prev?.closeCash,has=exp!=null&&exp!=='';
+    $('cashOpenContent').innerHTML=(has
+      ?`<div class="cash-expected">По данным закрытия прошлой смены${info.prev.closedBy?` (закрыл(а) ${esc(info.prev.closedBy)}${info.prev.endedAt?', '+v5Date(info.prev.endedAt):''})`:''} в кассе должно быть:<b>${salesMoney(exp)}</b></div><p class="status">Пересчитайте наличные. Если сумма совпадает — подтвердите, если нет — напишите, сколько лежит по факту.</p><button id="cashOpenConfirm" class="primary cash-big-btn">✓ Да, в кассе ровно ${salesMoney(exp)}</button>`
+      :`<p>Пересчитайте наличные в кассе и напишите сумму. Данных о прошлой смене пока нет — со следующей смены программа будет подсказывать, сколько должно быть.</p>`)
+      +`<div class="field" style="margin-top:12px"><label for="cashOpenActual">${has?'В кассе другая сумма? Сколько лежит по факту':'Сколько наличных в кассе'}</label><input id="cashOpenActual" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Например 5000"></div><div class="actions" style="justify-content:flex-start"><button id="cashOpenSave" class="${has?'secondary':'primary'}">Сохранить сумму</button></div><div id="cashOpenStatus" class="status"></div>`;
+    const save=async amount=>{
+      if(!(amount>=0)){$('cashOpenStatus').textContent='Напишите сумму наличных в кассе (можно 0).';return}
+      if(has&&Math.abs(amount-Number(exp))>=0.01&&!confirm(`В кассе ${salesMoney(amount)}, а должно быть ${salesMoney(exp)}.\nРазница: ${amount>exp?'+':'−'}${salesMoney(Math.abs(amount-exp))}.\n\nАдминистратор увидит расхождение в сводке. Сохранить?`))return;
+      const sess=salesSession;if(!sess?.shiftId){close('cashOpenModal');resolve();return}
+      $('cashOpenStatus').textContent='Сохраняю…';
+      const r=await db.rpc('sales_set_open_cash',{p_shift_id:sess.shiftId,p_employee_id:sess.employeeId,p_amount:Math.round(amount*100)/100});
+      if(r.error){$('cashOpenStatus').textContent='Ошибка: '+r.error.message;return}
+      close('cashOpenModal');resolve();
+    };
+    if(has)$('cashOpenConfirm').onclick=()=>save(Number(exp));
+    $('cashOpenSave').onclick=()=>{const v=$('cashOpenActual').value.trim().replace(',','.');save(v===''?NaN:Number(v))};
+    open('cashOpenModal');
+  });
+}
+function askCloseCash(snapshot,carry,info){
+  return new Promise(resolve=>{
+    const openC=info?.openCash,cashSales=Number(info?.cashSales||0),pend=branchPickups();
+    $('cashCloseContent').innerHTML=`<p>Завершить общую смену №${snapshot.shiftId} филиала «${esc(snapshot.branchName)}»? Это завершит работу всех её кассиров.</p>
+      <div class="v5-box"><div class="cash-lines"><span>Наличные на начало смены</span><b>${openC!=null?salesMoney(openC):'не указаны'}</b><span>Продажи наличными за смену</span><b>${salesMoney(cashSales)}</b>${openC!=null?`<span class="tot">Должно быть в кассе</span><b class="tot">${salesMoney(Number(openC)+cashSales)}</b>`:''}</div><div class="pp-sub">Без учёта возвратов, выдач и инкассации наличных.</div></div>
+      <div class="field"><label for="cashCloseActual">Сколько наличных остаётся в кассе *</label><input id="cashCloseActual" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Пересчитайте и напишите сумму"></div>
+      ${pend.length?`<div class="v5-box warn">Ждут оплаты «при получении»: ${pend.length}. Они останутся в списке на следующую смену.</div>`:''}
+      ${carry?`<div class="v5-box warn">Невыполненных личных заданий: ${carry}. Они перейдут на следующую смену этих сотрудников.</div>`:''}`;
+    $('cashCloseStatus').textContent='';
+    $('cashCloseOk').onclick=()=>{
+      const v=$('cashCloseActual').value.trim().replace(',','.'),amount=Number(v);
+      if(v===''||!(amount>=0)){$('cashCloseStatus').textContent='Напишите, сколько наличных остаётся в кассе (можно 0). Без этого смену не закрыть.';$('cashCloseActual').focus();return}
+      close('cashCloseModal');resolve(Math.round(amount*100)/100);
+    };
+    $('cashCloseCancel').onclick=()=>{close('cashCloseModal');resolve(null)};
+    open('cashCloseModal');setTimeout(()=>$('cashCloseActual')?.focus(),50);
+  });
+}
+closeCurrentSalesShift=async function(){
+  if($('closeShiftBtn').disabled)return;
+  $('closeShiftBtn').disabled=true;
+  try{
+    if(!(await validateSalesSession())){alert('Смена уже закрыта или кассир недоступен.');return}
+    const snapshot={...salesSession};
+    $('closeShiftBtn').disabled=true;
+    if(!(await showShiftTasks(snapshot.branchId,snapshot.shiftId,snapshot.employeeId))){closeShiftPending=snapshot.shiftId;return}
+    closeShiftPending=null;
+    const carry=(window.taskBannerState?.personal||[]).length;
+    const ci=await db.rpc('sales_shift_cash_info',{p_shift_id:snapshot.shiftId});
+    if(ci.error)throw ci.error;
+    await loadPickups();
+    const amount=await askCloseCash(snapshot,carry,ci.data);
+    if(amount==null)return;
+    if(!(await checkLinkReceiptsBeforeClose(snapshot.shiftId)))return;
+    const c=await db.rpc('sales_set_close_cash',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId,p_amount:amount});
+    if(c.error)throw c.error;
+    const r=await db.rpc('sales_close_team_shift',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId});
+    if(r.error)throw r.error;
+    salesSession=null;saleContext=null;persistSalesSession();updateSalesSessionUI();drawPickupPanel();drawPickupBadge();
+    await buildShiftReport(snapshot.shiftId);
+  }catch(e){alert('Не удалось завершить смену: '+e.message)}
+  finally{updateSalesSessionUI()}
+};
+$('closeShiftBtn').onclick=closeCurrentSalesShift;
+
+const v5BaseShiftReport=buildShiftReport;
+buildShiftReport=async function(shiftId){
+  await v5BaseShiftReport(shiftId);
+  try{
+    const [ci,po]=await Promise.all([db.rpc('sales_shift_cash_info',{p_shift_id:shiftId}),db.from('pickup_orders').select('order_number,total,status').eq('shift_id',shiftId)]);
+    if(ci.error||!ci.data)return;
+    const d=ci.data,open_=d.openCash,exp=d.openCashExpected,cs=Number(d.cashSales||0),pend=(po.data||[]).filter(x=>x.status==='pending'),paid=(po.data||[]).filter(x=>x.status==='paid');
+    const diff=open_!=null&&exp!=null?Number(open_)-Number(exp):0;
+    $('shiftReportContent').insertAdjacentHTML('beforeend',`<div class="v5-box" style="margin-top:16px"><b>💵 Наличные в кассе</b><div class="cash-lines"><span>На начало смены (пересчитали)</span><b>${open_!=null?salesMoney(open_):'не указано'}</b>${exp!=null?`<span>Ожидалось по прошлой смене</span><b>${salesMoney(exp)}</b>`:''}${Math.abs(diff)>=0.01?`<span style="color:var(--bad-ink)">Расхождение при открытии</span><b style="color:var(--bad-ink)">${diff>0?'+':'−'}${salesMoney(Math.abs(diff))}</b>`:''}<span>Продажи наличными</span><b>${salesMoney(cs)}</b>${open_!=null?`<span>Должно быть на конец</span><b>${salesMoney(Number(open_)+cs)}</b>`:''}<span class="tot">Остаток на конец (указали)</span><b class="tot">${d.closeCash!=null?salesMoney(d.closeCash):'ещё не указан'}</b></div></div>${po.data?.length?`<div class="v5-box"><b>🕓 Заказы «при получении», оформленные в эту смену</b><div class="cash-lines"><span>Ждут оплаты</span><b>${pend.length} · ${salesMoney(pend.reduce((a,x)=>a+Number(x.total),0))}</b><span>Уже оплачены</span><b>${paid.length}</b></div><div class="pp-sub">В выручку смены они не входят, пока клиент не оплатит.</div></div>`:''}`);
+  }catch(e){console.warn(e)}
+};
+
+// --- Объявления ---
+let annShowing=false;
+function annText(s){return esc(s||'').replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>')}
+async function showAnnouncements(){
+  const sess=salesSession;
+  if(annShowing||!sess?.shiftId)return;
+  const parts=(sess.participants||[]).filter(p=>p.isActive!==false&&p.personId);
+  if(!parts.length)return;
+  const [a,r]=await Promise.all([db.from('announcements').select('*').eq('is_active',true).order('created_at'),db.from('announcement_reads').select('announcement_id,person_id').in('person_id',parts.map(p=>p.personId))]);
+  if(a.error||r.error){console.warn(a.error||r.error);return}
+  const read=new Set((r.data||[]).map(x=>x.announcement_id+':'+x.person_id));
+  const queue=(a.data||[]).map(x=>({...x,unread:parts.filter(p=>!read.has(x.id+':'+p.personId))})).filter(x=>x.unread.length);
+  if(!queue.length)return;
+  annShowing=true;
+  try{for(let i=0;i<queue.length;i++){if(await showOneAnnouncement(queue[i],i,queue.length,sess)==='later')break}}
+  finally{annShowing=false}
+}
+function showOneAnnouncement(x,i,n,sess){
+  return new Promise(resolve=>{
+    const draw=()=>{
+      $('annContent').innerHTML=`<div class="ann-card"><div class="status">📢 Объявление${n>1?` ${i+1} из ${n}`:''} · ${new Date(x.created_at).toLocaleDateString('ru-RU')}</div><h3>${esc(x.title)}</h3>${x.body?`<div class="ann-body">${annText(x.body)}</div>`:''}<div class="status" style="margin-bottom:8px">Каждый сотрудник смены отмечает, что прочитал(а). Больше это объявление ему не покажется.</div><div class="ann-people">${x.unread.map(p=>`<button class="primary" data-person="${p.personId}">✓ ${esc(p.name)}: прочитал(а)</button>`).join('')}</div><div id="annStatus2" class="status"></div><div class="actions"><button id="annLater" class="secondary">Напомнить позже</button></div></div>`;
+      $('annContent').querySelectorAll('[data-person]').forEach(b=>b.onclick=async()=>{
+        b.disabled=true;const pid=Number(b.dataset.person);
+        const r=await db.rpc('announcement_mark_read',{p_announcement_id:x.id,p_shift_id:sess.shiftId,p_person_id:pid});
+        if(r.error){b.disabled=false;$('annStatus2').textContent='Ошибка: '+r.error.message;return}
+        x.unread=x.unread.filter(p=>Number(p.personId)!==pid);
+        if(!x.unread.length){close('annModal');resolve('done')}else draw();
+      });
+      $('annLater').onclick=()=>{close('annModal');resolve('later')};
+    };
+    draw();open('annModal');
+  });
+}
+async function openAnnAdmin(){
+  open('annAdminModal');$('annStatus').textContent='';
+  await loadSalesSetup();await renderAnnAdmin();
+}
+async function renderAnnAdmin(){
+  $('annAdminList').innerHTML='<div class="status">Загрузка…</div>';
+  const [a,r]=await Promise.all([db.from('announcements').select('*').order('created_at',{ascending:false}).limit(50),db.from('announcement_reads').select('announcement_id,person_id,read_at')]);
+  if(a.error||r.error){$('annAdminList').innerHTML=`<div class="status">Ошибка: ${esc((a.error||r.error).message)}</div>`;return}
+  const people=salesPeople.filter(p=>p.is_active!==false),byAnn={};
+  (r.data||[]).forEach(x=>(byAnn[x.announcement_id]=byAnn[x.announcement_id]||new Set()).add(Number(x.person_id)));
+  $('annAdminList').innerHTML=(a.data||[]).length?(a.data||[]).map(x=>{const rd=byAnn[x.id]||new Set(),yes=people.filter(p=>rd.has(Number(p.id))),no=people.filter(p=>!rd.has(Number(p.id)));return `<div class="ann-item${x.is_active?'':' off'}"><b>${esc(x.title)}</b><span class="ann-tag${x.is_active?'':' off'}">${x.is_active?'показывается':'снято'}</span><div class="status">${new Date(x.created_at).toLocaleString('ru-RU')}</div>${x.body?`<div class="ann-body" style="margin:8px 0">${annText(x.body)}</div>`:''}<div class="status">✅ Прочитали (${yes.length} из ${people.length}): ${yes.map(p=>esc(p.name)).join(', ')||'пока никто'}</div>${no.length?`<div class="status">⏳ Ещё не видели: ${no.map(p=>esc(p.name)).join(', ')}</div>`:''}<div class="acts"><button class="secondary small" onclick="toggleAnn(${x.id},${!x.is_active})">${x.is_active?'Снять с показа':'Показывать снова'}</button><button class="danger small" onclick="deleteAnn(${x.id})">Удалить</button></div></div>`}).join(''):'<div class="status">Объявлений пока нет.</div>';
+}
+$('annPublish').onclick=async()=>{
+  const title=$('annTitle').value.trim(),body=$('annBody').value.trim();
+  if(!title){$('annStatus').textContent='Напишите заголовок.';return}
+  $('annPublish').disabled=true;
+  const r=await db.from('announcements').insert({title,body:body||null});
+  $('annPublish').disabled=false;
+  if(r.error){$('annStatus').textContent='Ошибка: '+r.error.message;return}
+  $('annTitle').value='';$('annBody').value='';$('annStatus').textContent='Опубликовано. Сотрудники увидят его при открытии смены.';
+  renderAnnAdmin();
+};
+window.toggleAnn=async(id,on)=>{const r=await db.from('announcements').update({is_active:on}).eq('id',id);if(r.error){alert(r.error.message);return}renderAnnAdmin()};
+window.deleteAnn=async id=>{if(!confirm('Удалить объявление вместе с отметками о прочтении?'))return;const r=await db.from('announcements').delete().eq('id',id);if(r.error){alert(r.error.message);return}renderAnnAdmin()};
+$('closeAnnAdmin').onclick=()=>close('annAdminModal');
+
+// --- Проверки при открытии смены: наличные → объявления → забытые заказы ---
+async function runShiftOpenChecks(){
+  if(shiftChecksRunning||!salesSession?.shiftId)return;
+  shiftChecksRunning=true;
+  try{
+    const ci=await db.rpc('sales_shift_cash_info',{p_shift_id:salesSession.shiftId});
+    if(ci.error)console.warn(ci.error);else if(ci.data&&ci.data.openCash==null)await askOpenCash(ci.data);
+    await loadPickups();
+    await showAnnouncements();
+    await showOverduePickupReminder();
+  }catch(e){console.error(e)}
+  finally{shiftChecksRunning=false}
+}
+const v5BaseStartShift=$('startShiftBtn').onclick;
+$('startShiftBtn').onclick=async()=>{
+  await v5BaseStartShift();
+  if(salesSession?.shiftId&&!$('salesWorkspaceModal').classList.contains('show'))runShiftOpenChecks();
+};
+const v5BaseUpdateSessionUI=updateSalesSessionUI;
+updateSalesSessionUI=function(){v5BaseUpdateSessionUI();drawPickupPanel();drawPickupBadge()};
+setInterval(()=>{if(document.hidden)return;loadPickups();if(salesSession?.shiftId&&!document.querySelector('.modal.show'))showAnnouncements()},10*60000);
+setInterval(()=>{if(!document.hidden&&salesSession?.shiftId)loadPickups()},60000);
+</script>
+<script>
+// ===== Касса v5: тесты по справочникам =====
+let guideQCounts=new Map(),gtState=null,gqState=null;
+async function loadGuideQCounts(){
+  const m=new Map();
+  for(let from=0;;from+=1000){
+    const r=await db.from('guide_questions').select('product_id').range(from,from+999);
+    if(r.error){console.warn('guide_questions',r.error);return}
+    (r.data||[]).forEach(x=>m.set(x.product_id,(m.get(x.product_id)||0)+1));
+    if((r.data||[]).length<1000)break;
+  }
+  guideQCounts=m;render();
+}
+const v5BaseRender=render;
+render=function(){
+  v5BaseRender();
+  document.querySelectorAll('#grid .card[data-id]').forEach(card=>{
+    const n=guideQCounts.get(card.dataset.id);
+    if(n&&!card.querySelector('.gt-badge'))card.querySelector('.meta')?.insertAdjacentHTML('beforeend',` <span class="gt-badge" title="После справочника есть тест: ${n} вопросов">📝 тест</span>`);
+  });
+};
+$('search').oninput=render;$('category').onchange=render;
+const v5BaseView=window.viewProduct;
+window.viewProduct=id=>{
+  v5BaseView(id);
+  const n=guideQCounts.get(id)||0;
+  if(!n&&!isAdmin)return;
+  $('viewContent').insertAdjacentHTML('beforeend',`<div class="gt-box"><div><b>📝 Тест по справочнику</b><div class="status">${n?`${n} ${v5Plural(n,'вопрос','вопроса','вопросов')}. Прочитали справочник — проверьте себя.`:'Вопросов пока нет. Добавьте их кнопкой справа.'}</div></div><div class="gt-actions">${n?`<button class="primary" onclick="openGuideTest('${esc(id)}')">Пройти тест</button>`:''}${isAdmin?`<button class="secondary" onclick="openGuideQEditor('${esc(id)}')">✏️ Вопросы теста</button>`:''}</div></div>`);
+};
+function v5Plural(n,a,b,c){n=Math.abs(n)%100;const d=n%10;if(n>10&&n<20)return c;if(d>1&&d<5)return b;if(d===1)return a;return c}
+function v5Shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+window.openGuideTest=async pid=>{
+  const p=products.find(x=>x.id===pid);if(!p)return;
+  $('gtTitle').textContent='Тест: '+(p.name||'справочник');$('gtContent').innerHTML='<div class="status">Загрузка…</div>';open('guideTestModal');
+  const [q]=await Promise.all([db.from('guide_questions').select('*').eq('product_id',pid).order('sort_order').order('id'),salesPeople.length?null:loadSalesSetup()]);
+  if(q.error){$('gtContent').innerHTML=`<div class="status">Ошибка: ${esc(q.error.message)}</div>`;return}
+  gtState={pid,questions:(q.data||[]).map(x=>({...x,order:v5Shuffle((x.options||[]).map((_,i)=>i))}))};
+  drawGuideTest();
+};
+function drawGuideTest(){
+  const s=gtState,me=salesSession?.personId,people=salesPeople.filter(p=>p.is_active!==false);
+  if(!s.questions.length){$('gtContent').innerHTML='<div class="status">Вопросов пока нет.</div>';return}
+  $('gtContent').innerHTML=`<div id="gtResult"></div><div class="field"><label for="gtPerson">Кто проходит тест *</label><select id="gtPerson"><option value="">Выберите себя…</option>${people.map(p=>`<option value="${p.id}" ${Number(p.id)===Number(me)?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="other">Другой человек — ввести имя</option></select><input id="gtPersonName" placeholder="Имя и фамилия" style="display:none;margin-top:6px"></div>
+  ${s.questions.map((x,i)=>`<div class="gt-q" id="gtq${i}"><div class="gt-qt">${i+1}. ${esc(x.question)}</div>${x.order.map(oi=>`<label class="gt-opt"><input type="radio" name="gtq${i}" value="${oi}"><span>${esc(x.options[oi])}</span></label>`).join('')}<div class="gt-fix" style="display:none"></div></div>`).join('')}
+  <div id="gtStatus" class="status"></div><div class="actions" style="justify-content:flex-start"><button id="gtSubmit" class="primary">Проверить ответы</button></div>`;
+  $('gtPerson').onchange=()=>{$('gtPersonName').style.display=$('gtPerson').value==='other'?'block':'none'};
+  $('gtSubmit').onclick=submitGuideTest;
+}
+async function submitGuideTest(){
+  const s=gtState,sel=$('gtPerson').value;
+  const name=sel==='other'?$('gtPersonName').value.trim():(salesPeople.find(p=>String(p.id)===sel)?.name||'');
+  if(!name){$('gtStatus').textContent='Выберите, кто проходит тест.';$('gtPerson').focus();return}
+  const answers=s.questions.map((_,i)=>{const c=document.querySelector(`input[name="gtq${i}"]:checked`);return c?Number(c.value):null});
+  const missing=answers.map((a,i)=>a==null?i:-1).filter(i=>i>=0);
+  document.querySelectorAll('.gt-q').forEach((el,i)=>el.classList.toggle('missing',missing.includes(i)));
+  if(missing.length){$('gtStatus').textContent=`Ответьте на все вопросы. Осталось: ${missing.length}.`;$('gtq'+missing[0]).scrollIntoView({behavior:'smooth',block:'center'});return}
+  let score=0;const wrong=[];
+  s.questions.forEach((x,i)=>{
+    const ok=answers[i]===Number(x.correct_index),el=$('gtq'+i);
+    el.classList.remove('missing');el.classList.add(ok?'right':'wrong');
+    el.querySelectorAll('input').forEach(inp=>inp.disabled=true);
+    if(ok)score++;else{wrong.push({q:x.question,answer:x.options[answers[i]],correct:x.options[x.correct_index]});const f=el.querySelector('.gt-fix');f.style.display='block';f.textContent='Правильный ответ: '+x.options[x.correct_index]}
+  });
+  const total=s.questions.length,pct=Math.round(score/total*100);
+  $('gtStatus').textContent='';$('gtSubmit').style.display='none';$('gtPerson').disabled=true;$('gtPersonName').disabled=true;
+  $('gtResult').innerHTML=`<div class="v5-box ${pct>=80?'ok':'warn'}"><div class="gt-score">${score} из ${total} · ${pct}%</div><div>${pct===100?'Отлично, все ответы верные!':pct>=80?'Хороший результат. Посмотрите ошибки ниже.':'Стоит перечитать справочник и пройти тест ещё раз. Ошибки отмечены ниже.'}</div><div class="actions" style="justify-content:flex-start"><button class="secondary" onclick="openGuideTest('${esc(s.pid)}')">Пройти ещё раз</button></div><div id="gtSaved" class="status">Сохраняю результат…</div></div>`;
+  $('guideTestModal').querySelector('.dialog').scrollTop=0;
+  const r=await db.from('guide_test_results').insert({product_id:s.pid,person_id:sel==='other'?null:Number(sel),person_name:name,score,total,wrong});
+  $('gtSaved').textContent=r.error?'Результат не сохранился: '+r.error.message:'Результат сохранён — администратор увидит его в сводке.';
+}
+$('closeGuideTest').onclick=()=>close('guideTestModal');
+
+window.openGuideQEditor=async pid=>{
+  if(!isAdmin)return;
+  const p=products.find(x=>x.id===pid);
+  $('gqTitle').textContent='Вопросы теста: '+(p?.name||'');$('gqList').innerHTML='<div class="status">Загрузка…</div>';$('gqStatus').textContent='';open('guideQModal');
+  const [q,res]=await Promise.all([db.from('guide_questions').select('*').eq('product_id',pid).order('sort_order').order('id'),db.from('guide_test_results').select('*').eq('product_id',pid).order('created_at',{ascending:false}).limit(30)]);
+  if(q.error){$('gqList').innerHTML=`<div class="status">Ошибка: ${esc(q.error.message)}</div>`;return}
+  gqState={pid,rows:(q.data||[]).map(x=>({id:x.id,question:x.question,options:[...(x.options||[])],correct:Number(x.correct_index)})),deleted:[]};
+  gqState.rows.forEach(r=>{while(r.options.length<4)r.options.push('')});
+  drawGuideQ();
+  $('gqResults').innerHTML=res.data?.length?`<table class="sum-table"><thead><tr><th>Кто</th><th class="n">Результат</th><th>Когда</th><th>Ошибки</th></tr></thead><tbody>${res.data.map(x=>`<tr><td>${esc(x.person_name)}</td><td class="n">${x.score} из ${x.total}</td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${(x.wrong||[]).map(w=>esc(w.q)).join('<br>')||'—'}</td></tr>`).join('')}</tbody></table>`:'Тест по этому справочнику ещё никто не проходил.';
+};
+function drawGuideQ(){
+  const s=gqState;
+  $('gqList').innerHTML=s.rows.length?s.rows.map((r,i)=>`<div class="gq-row"><div class="gq-head"><b>Вопрос ${i+1}</b><span class="acts"><button class="secondary" title="Выше" onclick="gqMove(${i},-1)" ${i?'':'disabled'}>↑</button><button class="secondary" title="Ниже" onclick="gqMove(${i},1)" ${i<s.rows.length-1?'':'disabled'}>↓</button><button class="danger" title="Удалить вопрос" onclick="gqDel(${i})">🗑</button></span></div><textarea placeholder="Текст вопроса" oninput="gqState.rows[${i}].question=this.value">${esc(r.question)}</textarea>${r.options.map((o,j)=>`<label class="gq-opt"><input type="radio" name="gqc${i}" ${r.correct===j?'checked':''} onchange="gqState.rows[${i}].correct=${j}" title="Правильный ответ"><input type="text" value="${esc(o)}" placeholder="Вариант ${j+1}${j>1?' (необязательно)':''}" oninput="gqState.rows[${i}].options[${j}]=this.value"></label>`).join('')}</div>`).join(''):'<div class="status">Вопросов нет. Нажмите «Добавить вопрос».</div>';
+}
+window.gqMove=(i,d)=>{const a=gqState.rows,j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];drawGuideQ()};
+window.gqDel=i=>{const r=gqState.rows[i];if(!confirm(`Удалить вопрос ${i+1}?`))return;if(r.id)gqState.deleted.push(r.id);gqState.rows.splice(i,1);drawGuideQ()};
+$('gqAdd').onclick=()=>{gqState.rows.push({id:null,question:'',options:['','','',''],correct:0});drawGuideQ();const all=$('gqList').querySelectorAll('textarea');all[all.length-1]?.focus()};
+$('gqSave').onclick=async()=>{
+  const s=gqState,rows=[];
+  for(let i=0;i<s.rows.length;i++){
+    const r=s.rows[i],q=r.question.trim();
+    const kept=r.options.map((o,j)=>({t:String(o||'').trim(),j})).filter(o=>o.t);
+    if(!q){$('gqStatus').textContent=`Вопрос ${i+1}: напишите текст вопроса или удалите его.`;return}
+    if(kept.length<2){$('gqStatus').textContent=`Вопрос ${i+1}: нужно минимум 2 варианта ответа.`;return}
+    const ci=kept.findIndex(o=>o.j===r.correct);
+    if(ci<0){$('gqStatus').textContent=`Вопрос ${i+1}: отметьте кружком правильный ответ (он не может быть пустым).`;return}
+    rows.push({id:r.id,product_id:s.pid,question:q,options:kept.map(o=>o.t),correct_index:ci,sort_order:i,updated_at:new Date().toISOString()});
+  }
+  $('gqSave').disabled=true;$('gqStatus').textContent='Сохраняю…';
+  try{
+    if(s.deleted.length){const d=await db.from('guide_questions').delete().in('id',s.deleted);if(d.error)throw d.error}
+    const old=rows.filter(r=>r.id),fresh=rows.filter(r=>!r.id).map(({id,...r})=>r);
+    if(old.length){const u=await db.from('guide_questions').upsert(old);if(u.error)throw u.error}
+    if(fresh.length){const n=await db.from('guide_questions').insert(fresh);if(n.error)throw n.error}
+    $('gqStatus').textContent='Сохранено.';
+    await openGuideQEditor(s.pid);$('gqStatus').textContent='Сохранено.';
+    loadGuideQCounts();
+  }catch(e){$('gqStatus').textContent='Ошибка: '+e.message}
+  finally{$('gqSave').disabled=false}
+};
+$('closeGuideQ').onclick=()=>close('guideQModal');
+</script>
+<script>
+// ===== Касса v5: сводка для администратора =====
+// Текущий период сравнивается с прошлым: день — с тем же днём недели неделю назад, остальные — с предыдущим периодом.
+// Если период ещё идёт, сравнение берётся за такой же отрезок прошлого периода.
+const SUM_CUR='#2F6FDB',SUM_PREV='#D9822B';
+const SUM_WD=['','Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+let sumState={period:'month',date:salesTodayISO(),branch:''},sumData=null,sumSeq=0;
+function sumAddDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function sumRange(period,dateStr){
+  const d=new Date(dateStr+'T00:00:00'),y=d.getFullYear(),m=d.getMonth();let from,to,pFrom,pTo,bucket;
+  if(period==='day'){from=d;to=sumAddDays(d,1);pFrom=sumAddDays(d,-7);pTo=sumAddDays(pFrom,1);bucket='hour'}
+  else if(period==='week'){from=sumAddDays(d,-((d.getDay()+6)%7));to=sumAddDays(from,7);pFrom=sumAddDays(from,-7);pTo=from;bucket='day'}
+  else if(period==='month'){from=new Date(y,m,1);to=new Date(y,m+1,1);pFrom=new Date(y,m-1,1);pTo=from;bucket='day'}
+  else if(period==='quarter'){const q=Math.floor(m/3)*3;from=new Date(y,q,1);to=new Date(y,q+3,1);pFrom=new Date(y,q-3,1);pTo=from;bucket='week'}
+  else{from=new Date(y,0,1);to=new Date(y+1,0,1);pFrom=new Date(y-1,0,1);pTo=from;bucket='month'}
+  const now=new Date(),fullTo=to,fullPTo=pTo;let partial=false;
+  if(now>from&&now<to){partial=true;to=now;pTo=new Date(Math.min(pTo.getTime(),pFrom.getTime()+(now-from)))}
+  return {from,to,pFrom,pTo,fullTo,fullPTo,bucket,partial,future:from>now};
+}
+function sumShift(dir){
+  const d=new Date(sumState.date+'T00:00:00'),p=sumState.period;
+  if(p==='day')d.setDate(d.getDate()+dir);else if(p==='week')d.setDate(d.getDate()+7*dir);
+  else{d.setDate(1);d.setMonth(d.getMonth()+(p==='month'?1:p==='quarter'?3:12)*dir)}
+  sumState.date=salesTodayISO(d);$('sumDate').value=sumState.date;loadSummary();
+}
+function sumFmtDay(d,withYear){return d.toLocaleDateString('ru-RU',withYear?{day:'numeric',month:'long',year:'numeric'}:{day:'numeric',month:'long'})}
+function sumLabel(period,from,toExcl){
+  const last=new Date(toExcl.getTime()-1);
+  if(period==='day')return from.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  if(period==='month'&&from.getDate()===1&&toExcl.getDate()===1&&toExcl.getMonth()!==from.getMonth())return from.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  if(period==='quarter'&&from.getDate()===1&&toExcl.getDate()===1&&(toExcl.getMonth()-from.getMonth()+12)%12===3)return `${Math.floor(from.getMonth()/3)+1} квартал ${from.getFullYear()}`;
+  if(period==='year'&&from.getMonth()===0&&from.getDate()===1&&toExcl.getMonth()===0&&toExcl.getDate()===1)return `${from.getFullYear()} год`;
+  const sameDay=from.toDateString()===last.toDateString();
+  return sameDay?sumFmtDay(from,true):`${sumFmtDay(from,from.getFullYear()!==last.getFullYear())} – ${sumFmtDay(last,true)}`;
+}
+function sumPct(cur,prev){cur=Number(cur)||0;prev=Number(prev)||0;if(!prev)return null;return (cur-prev)/Math.abs(prev)*100}
+function sumDelta(cur,prev,lowerIsBetter){
+  cur=Number(cur)||0;prev=Number(prev)||0;
+  if(!prev&&!cur)return '<span class="d0">—</span>';
+  if(!prev)return '<span class="d0">не было</span>';
+  const p=sumPct(cur,prev),a=Math.abs(p);
+  if(a<0.5)return '<span class="d0">≈ без изменений</span>';
+  const good=lowerIsBetter?p<0:p>0;
+  return `<span class="${good?'dup':'ddown'}">${p>0?'▲':'▼'} ${a.toFixed(a<10?1:0).replace('.',',')}%</span>`;
+}
+function sumDiffRub(cur,prev){const d=(Number(cur)||0)-(Number(prev)||0);return (d>0?'+':d<0?'−':'')+fmtRub(Math.abs(d))}
+function sumBucketLabel(b,bucket,long){
+  const d=new Date(b.replace(' ','T'));
+  if(bucket==='hour')return long?`${String(d.getHours()).padStart(2,'0')}:00–${String(d.getHours()+1).padStart(2,'0')}:00`:String(d.getHours());
+  if(bucket==='day')return long?d.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'long'}):String(d.getDate());
+  if(bucket==='week')return (long?'неделя с ':'')+d.toLocaleDateString('ru-RU',{day:'numeric',month:long?'long':'2-digit'});
+  return d.toLocaleDateString('ru-RU',{month:long?'long':'short'}).replace('.','');
+}
+async function openSummary(){
+  open('summaryModal');
+  await loadSalesSetup();
+  $('sumBranch').innerHTML='<option value="">Все филиалы</option>'+salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  $('sumBranch').value=sumState.branch;$('sumDate').value=sumState.date;
+  sumSyncSeg();loadSummary();
+}
+function sumSyncSeg(){$('sumSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.p===sumState.period?'true':'false'))}
+async function loadSummary(){
+  const seq=++sumSeq,rg=sumRange(sumState.period,sumState.date);
+  $('sumBody').innerHTML='<div class="status">Считаю…</div>';
+  if(rg.future){$('sumBody').innerHTML='<div class="status">Этот период ещё не начался.</div>';return}
+  let tz='Europe/Moscow';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||tz}catch(e){}
+  const r=await db.rpc('admin_period_summary',{p_from:rg.from.toISOString(),p_to:rg.to.toISOString(),p_prev_from:rg.pFrom.toISOString(),p_prev_to:rg.pTo.toISOString(),p_branch_id:sumState.branch?Number(sumState.branch):null,p_bucket:rg.bucket,p_tz:tz});
+  if(seq!==sumSeq)return;
+  if(r.error){$('sumBody').innerHTML=`<div class="v5-box warn">Не удалось посчитать сводку: ${esc(r.error.message)}</div>`;return}
+  sumData={d:r.data,rg};renderSummary(r.data,rg);
+}
+function sumKpi(label,cur,prev,fmt,opts={}){
+  return `<div class="sum-kpi"><div class="k">${label}</div><div class="v">${fmt(cur)}</div><div class="p">${sumDelta(cur,prev,opts.lower)} · было ${fmt(prev)}</div>${opts.note?`<div class="p">${opts.note}</div>`:''}</div>`;
+}
+function sumInsights(d,rg,prevName){
+  const c=d.cur,p=d.prev,out=[];
+  const avgC=c.count?c.revenue/c.count:0,avgP=p.count?p.revenue/p.count:0;
+  if(p.revenue>0){
+    const pc=sumPct(c.revenue,p.revenue);
+    out.push(`Выручка ${pc>=0?'выросла':'снизилась'} на <b>${Math.abs(pc).toFixed(1).replace('.',',')}%</b> (${sumDiffRub(c.revenue,p.revenue)}) по сравнению с ${prevName}.`);
+    const pcc=sumPct(c.count,p.count),pca=sumPct(avgC,avgP);
+    if(pcc!=null&&pca!=null&&Math.abs(pc)>=3)out.push(Math.abs(pcc)>=Math.abs(pca)?`Главная причина — ${pcc>=0?'больше':'меньше'} продаж (${c.count} против ${p.count}); средний чек ${pca>=0?'вырос':'снизился'} на ${Math.abs(pca).toFixed(0)}%.`:`Главная причина — средний чек ${pca>=0?'вырос':'снизился'} (${fmtRub(avgC)} против ${fmtRub(avgP)}); продаж ${pcc>=0?'больше':'меньше'} на ${Math.abs(pcc).toFixed(0)}%.`);
+  }else if(c.revenue>0)out.push(`За ${prevName} продаж не было, сравнивать не с чем.`);
+  const items=d.items||[],withPrev=items.filter(x=>x.prev>0||x.rev>0);
+  const up=[...withPrev].sort((a,b)=>(b.rev-b.prev)-(a.rev-a.prev)).filter(x=>x.rev-x.prev>0).slice(0,3);
+  const down=[...withPrev].sort((a,b)=>(a.rev-a.prev)-(b.rev-b.prev)).filter(x=>x.rev-x.prev<0).slice(0,3);
+  if(p.revenue>0&&up.length)out.push(`Сильнее всего выросли: ${up.map(x=>`<b>${esc(x.name)}</b> (${sumDiffRub(x.rev,x.prev)})`).join(', ')}.`);
+  if(p.revenue>0&&down.length)out.push(`Сильнее всего упали: ${down.map(x=>`<b>${esc(x.name)}</b> (${sumDiffRub(x.rev,x.prev)})`).join(', ')}.`);
+  if(p.revenue>0){const gone=items.filter(x=>x.prev>0&&!x.rev).sort((a,b)=>b.prev-a.prev);if(gone.length)out.push(`Перестали покупать: ${gone.slice(0,4).map(x=>esc(x.name)).join(', ')}${gone.length>4?` и ещё ${gone.length-4}`:''} (раньше было ${fmtRub(gone.reduce((a,x)=>a+x.prev,0))}).`)}
+  if(items[0])out.push(`Больше всего денег принесла позиция <b>${esc(items[0].name)}</b>: ${fmtRub(items[0].rev)} (${c.revenue?Math.round(items[0].rev/c.revenue*100):0}% выручки).`);
+  const emp=(d.employees||[]).filter(e=>e.cnt>0);
+  if(emp.length>1){const best=emp[0],bestAvg=[...emp].filter(e=>e.cnt>=5).sort((a,b)=>b.rev/b.cnt-a.rev/a.cnt)[0];out.push(`Больше всех продал(а) <b>${esc(best.name)}</b> — ${fmtRub(best.rev)}${bestAvg&&bestAvg.name!==best.name?`; самый высокий средний чек у <b>${esc(bestAvg.name)}</b> — ${fmtRub(bestAvg.rev/bestAvg.cnt)}`:''}.`)}
+  if(rg.bucket!=='hour'&&(d.weekdays||[]).length>2){const w=[...d.weekdays].sort((a,b)=>b.rev-a.rev);out.push(`Самый сильный день недели — <b>${SUM_WD[w[0].d]}</b>, самый слабый — <b>${SUM_WD[w[w.length-1].d]}</b>.`)}
+  if((d.hours||[]).length>2){const h=[...d.hours].sort((a,b)=>b.rev-a.rev)[0];out.push(`Пик продаж — с ${h.h}:00 до ${h.h+1}:00.`)}
+  if(c.noCostItems>0)out.push(`У ${c.noCostItems} проданных позиций не указана себестоимость, поэтому прибыль посчитана не полностью.`);
+  if((d.cashIssues||[]).length)out.push(`⚠ Расхождения наличных при открытии смены: <b>${d.cashIssues.length}</b> (подробности ниже).`);
+  if(d.pickups?.overdue)out.push(`⚠ Не забрали заказы «при получении» больше 2 дней: <b>${d.pickups.overdue}</b> на ${fmtRub(d.pickups.overdueSum)}.`);
+  const weak=(d.tests||[]).filter(t=>t.pct<70);if(weak.length)out.push(`Тесты, где сотрудники ошибаются чаще всего: ${weak.slice(0,3).map(t=>`${esc(t.name)} (${t.pct}% верных)`).join(', ')}.`);
+  return out;
+}
+function sumChart(d,rg){
+  const cur=d.series||[],prev=d.prevSeries||[],n=Math.max(cur.length,prev.length);
+  if(!n)return '';
+  const W=900,H=260,L=64,R=12,T=14,B=30,pw=W-L-R,ph=H-T-B,band=pw/n,bw=Math.max(3,Math.min(28,band*.62));
+  const max=Math.max(1,...cur.map(x=>x.rev),...prev.map(x=>x.rev));
+  const step=Math.pow(10,Math.floor(Math.log10(max/4))),nice=[1,2,2.5,5,10].map(k=>k*step).find(s=>max/s<=5)||step*10,top=Math.ceil(max/nice)*nice;
+  const y=v=>T+ph-(v/top)*ph,base=T+ph;
+  let g='';
+  for(let v=0;v<=top+1e-9;v+=nice)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#E6E9EE" stroke-width="1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end">${v>=1000?(v/1000).toLocaleString('ru-RU')+' тыс':v}</text>`;
+  const every=Math.ceil(n/14);
+  cur.forEach((x,i)=>{const cx=L+band*i+band/2,h=base-y(x.rev);if(h>0){const r=Math.min(4,bw/2,h),x0=cx-bw/2,y0=base-h;g+=`<path d="M${x0},${base}V${y0+r}Q${x0},${y0} ${x0+r},${y0}H${x0+bw-r}Q${x0+bw},${y0} ${x0+bw},${y0+r}V${base}Z" fill="${SUM_CUR}"/>`}});
+  cur.forEach((x,i)=>{if(i%every===0)g+=`<text x="${L+band*i+band/2}" y="${H-10}" text-anchor="middle">${esc(sumBucketLabel(x.b,rg.bucket))}</text>`});
+  if(prev.length){const pts=prev.map((x,i)=>`${L+band*i+band/2},${y(x.rev)}`);g+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${SUM_PREV}" stroke-width="2" stroke-linejoin="round"/>`;if(n<=40)prev.forEach((x,i)=>g+=`<circle cx="${L+band*i+band/2}" cy="${y(x.rev)}" r="4" fill="${SUM_PREV}" stroke="#fff" stroke-width="2"/>`)}
+  g+=`<line x1="${L}" x2="${W-R}" y1="${base}" y2="${base}" stroke="#C9CED7"/>`;
+  for(let i=0;i<n;i++)g+=`<rect class="sum-hit" data-i="${i}" x="${L+band*i}" y="${T}" width="${band}" height="${ph}" fill="transparent"/>`;
+  return `<svg class="sum-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Выручка по ${rg.bucket==='hour'?'часам':rg.bucket==='day'?'дням':rg.bucket==='week'?'неделям':'месяцам'}">${g}</svg>`;
+}
+function sumTable(head,rows){return `<div style="overflow-x:auto"><table class="sum-table"><thead><tr>${head.map(h=>`<th class="${h.n?'n':''}">${h.t}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${head.length}" class="status">Нет данных</td></tr>`}</tbody></table></div>`}
+function sumPeopleTable(list){return sumTable([{t:'Название'},{t:'Выручка',n:1},{t:'Продаж',n:1},{t:'Средний чек',n:1},{t:'Изменение',n:1}],list.filter(x=>x.rev||x.prev).map(x=>`<tr><td>${esc(x.name)}</td><td class="n">${fmtRub(x.rev)}</td><td class="n">${x.cnt||0}</td><td class="n">${x.cnt?fmtRub(x.rev/x.cnt):'—'}</td><td class="n">${sumDelta(x.rev,x.prev)}</td></tr>`))}
+function sumHBars(list,label,maxV){return list.map(x=>`<div class="sum-hbar"><span>${label(x)}</span><div><div class="sum-bar" style="width:${maxV?Math.max(1,x.rev/maxV*100):0}%"></div></div><span class="n">${fmtRub(x.rev)}</span></div>`).join('')}
+function renderSummary(d,rg){
+  const c=d.cur,p=d.prev,per=sumState.period;
+  const curName=sumLabel(per,rg.from,rg.partial?rg.fullTo:rg.to),prevName=sumLabel(per,rg.pFrom,rg.partial?rg.fullPTo:rg.pTo);
+  const prevShort=per==='day'?`тем же днём неделю назад (${sumFmtDay(rg.pFrom,false)})`:`прошлым периодом (${prevName})`;
+  const avg=x=>x.count?x.revenue/x.count:0,margin=x=>x.revenue-x.cost,clubShare=x=>x.count?x.club/x.count*100:0;
+  const items=d.items||[];
+  const movers=items.filter(x=>x.prev>0||x.rev>0).map(x=>({...x,diff:x.rev-x.prev}));
+  const up=[...movers].sort((a,b)=>b.diff-a.diff).filter(x=>x.diff>0).slice(0,8),down=[...movers].sort((a,b)=>a.diff-b.diff).filter(x=>x.diff<0).slice(0,8);
+  const moverRows=list=>list.map(x=>`<tr><td>${esc(x.name)}</td><td class="n">${fmtRub(x.prev)} → ${fmtRub(x.rev)}</td><td class="n">${sumDiffRub(x.rev,x.prev)}</td><td class="n">${sumDelta(x.rev,x.prev)}</td></tr>`);
+  const payLabel=m=>m==='on_pickup'?'При получении':(V4_PAY_LABELS[m]||m);
+  const payTotal=(d.payments||[]).reduce((a,x)=>a+Number(x.amt||0),0);
+  const catMax=Math.max(0,...(d.cats||[]).map(x=>x.rev));
+  const hMax=Math.max(0,...(d.hours||[]).map(x=>x.rev)),wMax=Math.max(0,...(d.weekdays||[]).map(x=>x.rev));
+  const ins=sumInsights(d,rg,per==='day'?'тем же днём прошлой недели':'прошлым периодом');
+  $('sumBody').innerHTML=`<div class="sum-period"><b>${esc(curName)}</b>${rg.partial?' (период ещё идёт — данные по текущий момент)':''} · сравнение с ${esc(prevShort)}${rg.partial?', за такой же отрезок времени':''}${sumState.branch?` · филиал «${esc(salesBranches.find(b=>String(b.id)===String(sumState.branch))?.name||'')}»`:' · все филиалы'}</div>
+  <div class="sum-kpis">
+    ${sumKpi('Выручка',c.revenue,p.revenue,fmtRub)}
+    ${sumKpi('Продаж (чеков)',c.count,p.count,v=>Number(v||0).toLocaleString('ru-RU'))}
+    ${sumKpi('Средний чек',avg(c),avg(p),fmtRub)}
+    ${sumKpi('Валовая прибыль',margin(c),margin(p),fmtRub,{note:c.noCostItems?`без ${c.noCostItems} поз. без себестоимости`:''})}
+    ${sumKpi('Скидки и баллы',Number(c.discount)+Number(c.points),Number(p.discount)+Number(p.points),fmtRub,{lower:1})}
+    ${sumKpi('Продажи по клубной карте',clubShare(c),clubShare(p),v=>Math.round(v)+'%')}
+    ${sumKpi('Новые клиенты клуба',c.newCustomers,p.newCustomers,v=>Number(v||0).toLocaleString('ru-RU'))}
+    ${sumKpi('Возвраты',c.returns,p.returns,fmtRub,{lower:1,note:c.returnsCount?`${c.returnsCount} шт.`:''})}
+    ${per!=='day'?sumKpi('Выручка за смену',c.shifts?c.revenue/c.shifts:0,p.shifts?p.revenue/p.shifts:0,fmtRub,{note:`смен: ${c.shifts}`}):''}
+  </div>
+  ${ins.length?`<ul class="sum-ins">${ins.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+  <div class="sum-sec"><h3>Выручка по ${rg.bucket==='hour'?'часам':rg.bucket==='day'?'дням':rg.bucket==='week'?'неделям':'месяцам'}</h3>
+    <div class="sum-legend"><span><i style="background:${SUM_CUR}"></i>${esc(curName)}</span><span><i class="ln" style="background:${SUM_PREV}"></i>${esc(per==='day'?sumFmtDay(rg.pFrom,true):prevName)}</span></div>
+    <div id="sumChartWrap">${sumChart(d,rg)||'<div class="status">Нет данных.</div>'}</div>
+    <details><summary class="status" style="cursor:pointer">Показать таблицей</summary>${sumTable([{t:'Период'},{t:'Выручка',n:1},{t:'Продаж',n:1},{t:'Было',n:1},{t:'Изменение',n:1}],(d.series||[]).map((x,i)=>{const pv=d.prevSeries?.[i];return `<tr><td>${esc(sumBucketLabel(x.b,rg.bucket,true))}</td><td class="n">${fmtRub(x.rev)}</td><td class="n">${x.cnt}</td><td class="n">${pv?fmtRub(pv.rev):'—'}</td><td class="n">${pv?sumDelta(x.rev,pv.rev):'—'}</td></tr>`}))}</details>
+  </div>
+  <div class="sum-sec sum-grid"><div><h3>📈 Что выросло</h3>${sumTable([{t:'Позиция'},{t:'Было → стало',n:1},{t:'Разница',n:1},{t:'',n:1}],moverRows(up))}</div><div><h3>📉 Что упало</h3>${sumTable([{t:'Позиция'},{t:'Было → стало',n:1},{t:'Разница',n:1},{t:'',n:1}],moverRows(down))}</div></div>
+  <div class="sum-sec"><h3>Все позиции</h3><input id="sumItemSearch" placeholder="Поиск позиции…" style="max-width:320px;margin-bottom:8px"><div class="sum-scroll" id="sumItems"></div></div>
+  <div class="sum-sec sum-grid"><div><h3>Категории</h3>${sumTable([{t:'Категория'},{t:'Выручка',n:1},{t:'Доля'},{t:'Изменение',n:1}],(d.cats||[]).filter(x=>x.rev||x.prev).map(x=>`<tr><td>${esc(x.name)}</td><td class="n">${fmtRub(x.rev)}</td><td style="min-width:90px"><div class="sum-bar" style="width:${catMax?Math.max(1,x.rev/catMax*100):0}%"></div></td><td class="n">${sumDelta(x.rev,x.prev)}</td></tr>`))}</div>
+    <div><h3>Способы оплаты</h3>${sumTable([{t:'Способ'},{t:'Сумма',n:1},{t:'Доля',n:1},{t:'Изменение',n:1}],(d.payments||[]).filter(x=>x.amt||x.prev).map(x=>`<tr><td>${esc(payLabel(x.method))}</td><td class="n">${fmtRub(x.amt)}</td><td class="n">${payTotal?Math.round(x.amt/payTotal*100):0}%</td><td class="n">${sumDelta(x.amt,x.prev)}</td></tr>`))}</div></div>
+  <div class="sum-sec sum-grid"><div><h3>Сотрудники</h3>${sumPeopleTable(d.employees||[])}</div><div><h3>Филиалы</h3>${sumPeopleTable(d.branches||[])}</div></div>
+  <div class="sum-sec sum-grid">${rg.bucket!=='hour'?`<div><h3>Дни недели</h3>${sumHBars([1,2,3,4,5,6,7].map(k=>(d.weekdays||[]).find(x=>x.d===k)||{d:k,rev:0}),x=>SUM_WD[x.d],wMax)}</div>`:''}<div><h3>Часы</h3>${(d.hours||[]).length?sumHBars(d.hours,x=>`${x.h}:00`,hMax):'<div class="status">Нет данных.</div>'}</div></div>
+  <div class="sum-sec"><h3>Контроль</h3><div class="sum-grid"><div>
+    <div class="v5-box ${d.cashIssues?.length?'warn':''}"><b>💵 Наличные при открытии смены</b>${d.cashIssues?.length?sumTable([{t:'Когда'},{t:'Филиал'},{t:'Должно быть',n:1},{t:'Оказалось',n:1},{t:'Разница',n:1}],d.cashIssues.map(x=>`<tr><td>${v5Date(x.at)}</td><td>${esc(x.branch||'')}</td><td class="n">${salesMoney(x.expected)}</td><td class="n">${salesMoney(x.actual)}</td><td class="n">${Number(x.actual)>Number(x.expected)?'+':'−'}${salesMoney(Math.abs(x.actual-x.expected))}</td></tr>`)):'<div class="status">Расхождений нет.</div>'}</div></div><div>
+    <div class="v5-box ${d.pickups?.overdue?'warn':''}"><b>🕓 Заказы «при получении» сейчас</b><div class="cash-lines"><span>Ждут оплаты</span><b>${d.pickups?.count||0} · ${fmtRub(d.pickups?.sum)}</b><span>Из них больше 2 дней</span><b>${d.pickups?.overdue||0} · ${fmtRub(d.pickups?.overdueSum)}</b></div></div>
+    <div class="v5-box"><b>📒 Долги по расчётному счёту сейчас</b><div class="cash-lines"><span>Не оплачено клиентами</span><b>${fmtRub(d.debts)}</b></div></div></div></div></div>
+  <div class="sum-sec"><h3>📝 Тесты по справочникам за период</h3>${(d.tests||[]).length?sumTable([{t:'Справочник'},{t:'Попыток',n:1},{t:'Верных ответов',n:1}],d.tests.map(t=>`<tr><td>${esc(t.name||'')}</td><td class="n">${t.cnt}</td><td class="n">${t.pct}%</td></tr>`)):'<div class="status">За этот период тесты не проходили.</div>'}</div>`;
+  const drawItems=()=>{const w=($('sumItemSearch').value||'').trim().toLowerCase();const list=items.filter(x=>!w||String(x.name).toLowerCase().includes(w)||String(x.cat||'').toLowerCase().includes(w));$('sumItems').innerHTML=sumTable([{t:'Позиция'},{t:'Категория'},{t:'Кол-во',n:1},{t:'Выручка',n:1},{t:'Было',n:1},{t:'Изменение',n:1},{t:'Прибыль',n:1}],list.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.cat||'')}</td><td class="n">${Number(x.qty).toLocaleString('ru-RU')}</td><td class="n">${fmtRub(x.rev)}</td><td class="n">${fmtRub(x.prev)}</td><td class="n">${sumDelta(x.rev,x.prev)}</td><td class="n">${x.cost?fmtRub(x.rev-x.cost):'—'}</td></tr>`))};
+  $('sumItemSearch').oninput=drawItems;drawItems();
+  const svg=$('sumChartWrap').querySelector('svg');
+  if(svg){
+    const tip=$('sumTip');
+    svg.addEventListener('mousemove',e=>{const r=e.target.closest('.sum-hit');if(!r){tip.style.display='none';return}const i=Number(r.dataset.i),x=d.series?.[i],pv=d.prevSeries?.[i];tip.innerHTML=`${x?`<b>${esc(sumBucketLabel(x.b,rg.bucket,true))}</b><br><span style="color:#9DBDF5">■</span> ${fmtRub(x.rev)} · ${x.cnt} продаж`:''}${pv?`<br><span style="color:#F2B27A">●</span> ${esc(sumBucketLabel(pv.b,rg.bucket,true))}: ${fmtRub(pv.rev)}`:''}${x&&pv?`<br>${sumDelta(x.rev,pv.rev).replace(/class="(dup|ddown|d0)"/,'style="color:#fff"')}`:''}`;tip.style.display='block';const tx=Math.min(window.innerWidth-tip.offsetWidth-10,e.clientX+14);tip.style.left=tx+'px';tip.style.top=(e.clientY+14)+'px'});
+    svg.addEventListener('mouseleave',()=>tip.style.display='none');
+  }
+}
+$('sumSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{sumState.period=b.dataset.p;sumSyncSeg();loadSummary()});
+$('sumPrev').onclick=()=>sumShift(-1);$('sumNext').onclick=()=>sumShift(1);
+$('sumDate').onchange=()=>{if($('sumDate').value){sumState.date=$('sumDate').value;loadSummary()}};
+$('sumBranch').onchange=()=>{sumState.branch=$('sumBranch').value;loadSummary()};
+$('sumReload').onclick=loadSummary;
+$('closeSummary').onclick=()=>{close('summaryModal');$('sumTip').style.display='none'};
+
+// Кнопки в панели администратора.
+(()=>{
+  const ref=$('refreshBtn');
+  ref.insertAdjacentHTML('beforebegin','<button id="summaryBtn" class="secondary">Сводка</button><button id="annBtn" class="secondary">Объявления</button>');
+  $('summaryBtn').onclick=openSummary;$('annBtn').onclick=openAnnAdmin;
+})();
+
+// Старт: вопросы тестов, заказы «при получении» и проверки открытой смены после перезагрузки страницы.
+loadGuideQCounts();
+(async()=>{
+  await new Promise(r=>setTimeout(r,700));
+  await loadPickups();
+  try{if(salesSession?.shiftId&&await validateSalesSession())runShiftOpenChecks()}catch(e){console.warn(e)}
+})();
 </script>
 </body>
 </html>
