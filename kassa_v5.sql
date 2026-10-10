@@ -267,8 +267,9 @@ begin
 end $fn$;
 grant execute on function public.sales_shift_cash_info(bigint), public.sales_set_open_cash(bigint,bigint,numeric), public.sales_set_close_cash(bigint,bigint,numeric) to anon, authenticated;
 
--- Закрытие смены теперь требует указать остаток наличных (kassa_v5_close_requires_cash, применяется после выкладки сайта):
--- CREATE OR REPLACE FUNCTION public.sales_close_team_shift ... if v_shift.close_cash is null then raise exception 'Укажите остаток наличных в кассе'; end if;
+-- Закрытие смены требует указать остаток наличных (миграция kassa_v5_close_requires_cash, применена после выкладки сайта).
+-- В public.sales_close_team_shift перед закрытием добавлена проверка:
+--   if v_shift.close_cash is null then raise exception 'Укажите остаток наличных в кассе. Если окна для суммы нет — обновите страницу (Ctrl+F5).'; end if;
 
 -- ============ 3. Тесты по справочникам ============
 create table if not exists public.guide_questions(
