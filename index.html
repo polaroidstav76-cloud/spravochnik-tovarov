@@ -313,6 +313,30 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
   .sale-order-title{font-size:18px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.card:hover,.card:nth-child(even):hover{transform:none}}
+
+/* Задания смены: постоянная панель внизу экрана во время смены */
+#taskBanner{position:fixed;left:0;right:0;bottom:0;z-index:60;display:none;background:#fff7d6;border-top:4px solid #f59e0b;box-shadow:0 -10px 30px rgba(15,23,42,.25);padding:12px 18px;max-height:42vh;overflow:auto;color:#1f2937}
+#taskBanner.show{display:block}
+#taskBanner .tb-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:20px;font-weight:800;margin-bottom:8px}
+#taskBanner .tb-toggle{background:#fde68a;border:1px solid #f59e0b;color:#78350f;border-radius:10px;padding:6px 12px;font-weight:700;cursor:pointer}
+#taskBanner .tb-item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:2px solid #fbbf24;border-radius:12px;padding:10px 14px;margin:6px 0}
+#taskBanner .tb-title{font-size:20px;font-weight:800;line-height:1.25}
+#taskBanner .tb-sub{font-size:14px;color:#6b7280;margin-top:2px}
+#taskBanner .tb-who{display:inline-block;background:#1e40af;color:#fff;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;margin-right:6px;vertical-align:middle}
+#taskBanner .tb-who.branch{background:#047857}
+#taskBanner .tb-carry{display:inline-block;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;margin-left:6px;vertical-align:middle}
+#taskBanner .tb-done{background:#16a34a;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:16px;font-weight:800;cursor:pointer;white-space:nowrap}
+#taskBanner.collapsed .tb-list{display:none}
+#taskBanner.collapsed .tb-head{margin-bottom:0}
+body.has-task-banner{padding-bottom:var(--task-banner-h,0px)}
+body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)}
+@media (max-width:700px){#taskBanner .tb-title{font-size:17px}#taskBanner .tb-item{flex-direction:column;align-items:stretch}}
+/* Ручной порядок справочников (админ) */
+.card.pinned-card{outline:2px solid #f59e0b;outline-offset:-2px}
+.pin-badge{display:inline-block;background:#f59e0b;color:#fff;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700;margin-right:6px}
+.card.drag-over{outline:3px dashed #2563eb;outline-offset:-3px}
+.card.dragging{opacity:.4}
+.order-hint{font-size:13px;color:#6b7280;margin:-4px 0 10px}
 </style>
 </head>
 <body>
@@ -488,8 +512,10 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
     <button id="clearBtn">Сбросить</button>
   </div>
   <div class="count" id="count">Загрузка…</div>
+  <div class="order-hint" id="orderHint" style="display:none">Админ: перетащите карточку мышкой на нужное место, и она закрепится там (📌 и номер места). Остальные справочники заполняют свободные места по алфавиту.</div>
   <div class="grid" id="grid"></div>
 </section>
+<div id="taskBanner"></div>
 </main>
 
 <div class="modal" id="loginModal"><div class="dialog">
@@ -872,7 +898,7 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
 <hr><h3>Карточка товара / услуги</h3><input id="catalogEditId" type="hidden"><div class="sales-product-card-form"><div class="row"><div class="field"><label>Тип *</label><select id="catalogType"><option value="product">Товар</option><option value="service">Услуга</option></select></div><div class="field"><label>Наименование *</label><input id="catalogName" placeholder="Например: Фото 21×30"></div><div class="field"><label>Артикул</label><input id="catalogSku"></div></div><div class="row"><div class="field"><label>Категория</label><input id="catalogCategory" placeholder="Фото, Сувениры, Ретушь…"></div><div class="field"><label>Розничная цена, ₽ *</label><input id="catalogPrice" type="number" min="0" step="0.01"></div><div class="field"><label>Себестоимость, ₽</label><input id="catalogCostPrice" type="number" min="0" step="0.01"></div></div><div class="field"><label>Комментарий для сотрудника</label><textarea id="catalogComment" placeholder="Информация, которую сотрудник увидит при двойном клике по позиции в продаже или при открытии позиции в «Товары и услуги». Себестоимость там не показывается."></textarea></div><div class="field"><label>Оптовые цены по количеству</label><div class="status">Например: от 10 шт — 10 ₽; от 30 шт — 8 ₽. Все пороги хранятся в этой же карточке.</div><div id="wholesaleTierRows"></div><button type="button" id="addWholesaleTier" class="secondary small">＋ Добавить оптовый порог</button></div><div class="actions" style="justify-content:flex-start"><button id="addCatalogBtn" class="primary">Сохранить карточку</button><button id="cancelCatalogEdit" class="secondary" style="display:none">Отмена</button></div></div><div id="catalogAdminRows" class="price-admin"></div>
 <hr><h3>Допродажи</h3><div class="status">Пример: Фото 21×30, количество 1–5 → предложить Фоторамку. При 100 фото подсказка не появится. Правила можно менять.</div><div class="row"><div class="field"><label>Основной товар</label><select id="upsellSource"></select></div><div class="field"><label>Предлагаемый товар</label><select id="upsellSuggested"></select></div></div><div class="row"><div class="field"><label>От количества</label><input id="upsellMin" type="number" min="0.001" step="0.001" value="1"></div><div class="field"><label>До количества</label><input id="upsellMax" type="number" min="0.001" step="0.001" placeholder="Например 5"></div><div class="field"><label>Подсказка</label><input id="upsellQuestion" value="Предложить клиенту дополнительный товар?"></div></div><div class="actions" style="justify-content:flex-start"><button id="addUpsellBtn" class="secondary">＋ Сохранить правило</button></div><div id="upsellRows" class="price-admin"></div>
 <hr><h3>Ставки зарплаты</h3><div class="status">Ставка за смену может отличаться по филиалам. Ретушь получает только главный сотрудник смены.</div><div class="row"><div class="field"><label>Сотрудник</label><select id="rateEmployee"></select></div><div class="field"><label>Филиал</label><select id="rateBranch"></select></div><div class="field"><label>Ставка за смену, ₽</label><input id="rateShift" type="number" min="0" step="0.01"></div><div class="field"><label>За ретушь, ₽</label><input id="rateRetouch" type="number" min="0" step="0.01" value="100"></div></div><div class="actions" style="justify-content:flex-start"><button id="saveRateBtn" class="secondary">Сохранить ставку</button></div><div id="ratesRows" class="price-admin"></div>
-<hr><h3>Напоминания</h3><div class="row"><div class="field"><label>Филиал</label><select id="taskBranch"></select></div><div class="field"><label>Дата</label><input id="taskDate" type="date"></div></div><div class="row"><div class="field"><label>Задание</label><input id="taskTitle" placeholder="Например: Сделать уборку"></div><div class="field"><label>Подробности</label><input id="taskDescription"></div></div><div class="actions" style="justify-content:flex-start"><button id="addTaskBtn" class="secondary">＋ Добавить напоминание</button></div><div id="tasksRows" class="price-admin"></div>
+<hr><h3>Задания</h3><div class="status" style="margin-bottom:8px">«На филиал» показывается всем, кто работает на филиале в выбранный день. «На сотрудника» показывается ему на каждой смене на любом филиале, пока он не отметит выполнение.</div><div class="row"><div class="field"><label>Кому</label><select id="taskTarget"><option value="branch">На филиал</option><option value="person">На сотрудника</option></select></div><div class="field" id="taskBranchField"><label>Филиал</label><select id="taskBranch"></select></div><div class="field" id="taskPersonField" style="display:none"><label>Сотрудник</label><select id="taskPerson"></select></div><div class="field"><label id="taskDateLabel">Дата</label><input id="taskDate" type="date"></div></div><div class="row"><div class="field"><label>Задание</label><input id="taskTitle" placeholder="Например: Сделать уборку"></div><div class="field"><label>Подробности</label><input id="taskDescription"></div></div><div class="actions" style="justify-content:flex-start"><button id="addTaskBtn" class="secondary">＋ Добавить задание</button></div><div id="tasksRows" class="price-admin"></div>
 <div id="salesAdminStatus" class="status"></div><div class="actions"><button id="closeSalesAdmin">Закрыть</button></div></div></div>
 
 <div class="modal" id="templatesModal"><div class="dialog" style="max-width:820px"><h2 style="margin-top:0">Шаблоны сообщений</h2><div class="status" style="margin-bottom:12px">Готовые ответы для переписки с клиентами. Нажмите «Копировать» и вставьте текст в мессенджер.</div>
@@ -955,8 +981,10 @@ function addImageBlock(){editorBlocks.push({type:'image',url:'',file:null,fileNa
 async function load(){
   const {data,error}=await db.from('products').select('*').order('name');
   if(error){ $('count').textContent='Ошибка загрузки: '+error.message; return; }
-  products=data||[]; renderCategories(); render();
+  products=sortProducts(data||[]); renderCategories(); render();
 }
+// Закреплённый админом справочник стоит на своём месте (sort_order = номер места), остальные заполняют свободные места по алфавиту.
+function sortProducts(list){const pins=list.filter(p=>p.sort_order!=null).sort((a,b)=>a.sort_order-b.sort_order),rest=list.filter(p=>p.sort_order==null).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ru')),out=[];while(pins.length||rest.length){if(pins.length&&(pins[0].sort_order<=out.length+1||!rest.length))out.push(pins.shift());else out.push(rest.shift())}return out}
 function renderCategories(){
   const cats=[...new Set(products.map(p=>p.category).filter(Boolean))].sort();
   const cur=$('category').value;
@@ -971,14 +999,16 @@ function render(){
   });
   $('count').textContent=`Найдено: ${list.length} из ${products.length}`;
   $('grid').innerHTML=list.map(p=>`
-    <article class="card" onclick="viewProduct('${p.id}')">
+    <article class="card${isAdmin&&p.sort_order!=null?' pinned-card':''}" onclick="viewProduct('${p.id}')" data-id="${p.id}"${isAdmin?' draggable="true"':''}>
       <div class="photo">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`:'<span class="placeholder">Нет фото</span>'}</div>
       <div class="body">
-        <div class="name">${esc(p.name)}</div>
+        <div class="name">${isAdmin&&p.sort_order!=null?'<span class="pin-badge">📌 '+(products.indexOf(p)+1)+'</span>':''}${esc(p.name)}</div>
         <div class="meta">${p.sku?'Артикул: '+esc(p.sku):''}${p.category?' · '+esc(p.category):''}</div>
-        ${isAdmin?`<div class="actions"><button class="secondary" onclick="event.stopPropagation();editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="event.stopPropagation();deleteProduct('${p.id}')">Удалить</button></div>`:''}
+        ${isAdmin?`<div class="actions">${p.sort_order!=null?`<button class="secondary" onclick="event.stopPropagation();unpinProduct('${p.id}')">Открепить</button>`:''}<button class="secondary" onclick="event.stopPropagation();editProduct('${p.id}')">Редактировать</button><button class="danger" onclick="event.stopPropagation();deleteProduct('${p.id}')">Удалить</button></div>`:''}
       </div>
     </article>`).join('');
+  $('orderHint').style.display=isAdmin?'block':'none';
+  if(isAdmin) bindProductDrag();
 }
 function open(id){const m=$(id);if(!m)return;m.classList.add('show');const d=m.querySelector('.dialog');if(d&&!d.querySelector('.sticky-dialog-close')){const original=d.querySelector('button[id^="close"]');if(original&&original.id!=='closeSale'){const sticky=original.cloneNode(true);sticky.id=original.id+'_sticky';sticky.classList.add('sticky-dialog-close');sticky.setAttribute('aria-label',original.textContent.trim()||'Закрыть');sticky.onclick=()=>original.click();d.insertBefore(sticky,d.firstChild)}}} function close(id){$(id).classList.remove('show')}
 window.viewProduct=id=>{
@@ -2575,6 +2605,7 @@ function updateSalesSessionUI() {
   $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
   $('salesBtn').disabled=false; $('shiftReportBtn').disabled=!active; $('closeShiftBtn').disabled=!active;
   $('salesSelectBtn').textContent=active?'Состав смены / рабочее место':'Выбрать филиал и сотрудника';
+  if(typeof refreshTaskBanner==='function') refreshTaskBanner();
 }
 async function ensureEmployeeRow(personId,branchId) {
   const r=await db.rpc('sales_ensure_employee',{p_person_id:personId,p_branch_id:branchId});
@@ -2680,7 +2711,7 @@ $('startShiftBtn').onclick=async()=>{
   );
 };
 
-async function completeShiftTasks(){const shiftId=Number($('salesTaskModal').dataset.shiftId),employeeId=Number($('salesTaskModal').dataset.employeeId);const checks=[...$('salesTaskContent').querySelectorAll('[data-task-id]')];if(checks.some(x=>!x.checked)){alert('Отметьте все задания как выполненные.');return false}for(const x of checks){const r=await db.from('sales_shift_task_completions').upsert({task_id:Number(x.dataset.taskId),shift_id:shiftId,completed_by_employee_id:employeeId},{onConflict:'task_id,shift_id'});if(r.error){alert(r.error.message);return false}}close('salesTaskModal');return true}
+async function completeShiftTasks(){const shiftId=Number($('salesTaskModal').dataset.shiftId),employeeId=Number($('salesTaskModal').dataset.employeeId);const checks=[...$('salesTaskContent').querySelectorAll('[data-task-id]')];if(checks.some(x=>!x.checked)){alert('Отметьте все задания как выполненные.');return false}for(const x of checks){const r=await db.from('sales_shift_task_completions').upsert({task_id:Number(x.dataset.taskId),shift_id:shiftId,completed_by_employee_id:employeeId},{onConflict:'task_id,shift_id'});if(r.error){alert(r.error.message);return false}}close('salesTaskModal');refreshTaskBanner();return true}
 
 function normalizeSaleSearchText(v){return String(v||'').toLowerCase().replace(/[хx×*]/g,'x').replace(/ё/g,'е').replace(/[^a-zа-я0-9x]+/g,' ').replace(/\s+/g,' ').trim()}
 function saleCatalogMatches(item,query){const q=normalizeSaleSearchText(query);if(!q)return true;const hay=normalizeSaleSearchText([item.name,item.sku,item.category,item.description].filter(Boolean).join(' '));return q.split(' ').filter(Boolean).every(token=>hay.includes(token))}
@@ -2970,10 +3001,10 @@ $('cancelCatalogEdit').onclick=clearCatalogForm;
 $('addCatalogBtn').onclick=async()=>{const obj=readCatalogForm();if(!obj.name||!(obj.price>=0)||obj.cost_price!=null&&!(obj.cost_price>=0)){alert('Укажите название, розничную цену и корректную себестоимость.');return}const id=$('catalogEditId').value;const r=id?await db.from('sales_catalog').update(obj).eq('id',id):await db.from('sales_catalog').insert(obj);if(r.error){$('salesAdminStatus').textContent='Ошибка: '+r.error.message;return}$('salesAdminStatus').textContent=id?'Карточка обновлена.':'Карточка добавлена.';clearCatalogForm();await loadSalesSetup()};
 window.deleteSalesCatalog=async id=>{if(!confirm('Удалить товар/услугу из продаж? Старые продажи сохранятся.'))return;const r=await db.from('sales_catalog').update({is_active:false}).eq('id',id);if(r.error)alert(r.error.message);else loadSalesSetup()};
 
-async function renderSalesAdminV4(){if(!isAdmin)return;const bc=await db.from('sales_branch_order_counters').select('*');salesBranches=salesBranches.map(b=>({...b,next_number:(bc.data||[]).find(x=>Number(x.branch_id)===Number(b.id))?.next_number||1000}));const people=uniquePeople();$('employeesAdminRows').innerHTML=people.length?`<table class="customer-table"><thead><tr><th>Сотрудник</th><th></th></tr></thead><tbody>${people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><button class="danger small" onclick="deleteSalesEmployee(${p.id})">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Сотрудников пока нет.</div>';$('branchesAdminRows').innerHTML=salesBranches.map(b=>`<div class="block"><div style="display:grid;grid-template-columns:1fr 170px auto;gap:8px;align-items:end"><div><b>${esc(b.name)}</b></div><div><label class="status">Следующий номер</label><input id="branchCounter_${b.id}" type="number" min="1" value="${Number(b.next_number||1000)}"></div><button class="secondary small" onclick="saveBranchCounter(${b.id})">Сохранить</button></div></div>`).join('')||'<div class="status">Нет филиалов.</div>';$('upsellSource').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('upsellSuggested').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('rateEmployee').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');$('rateBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');$('taskBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+async function renderSalesAdminV4(){if(!isAdmin)return;const bc=await db.from('sales_branch_order_counters').select('*');salesBranches=salesBranches.map(b=>({...b,next_number:(bc.data||[]).find(x=>Number(x.branch_id)===Number(b.id))?.next_number||1000}));const people=uniquePeople();$('employeesAdminRows').innerHTML=people.length?`<table class="customer-table"><thead><tr><th>Сотрудник</th><th></th></tr></thead><tbody>${people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><button class="danger small" onclick="deleteSalesEmployee(${p.id})">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Сотрудников пока нет.</div>';$('branchesAdminRows').innerHTML=salesBranches.map(b=>`<div class="block"><div style="display:grid;grid-template-columns:1fr 170px auto;gap:8px;align-items:end"><div><b>${esc(b.name)}</b></div><div><label class="status">Следующий номер</label><input id="branchCounter_${b.id}" type="number" min="1" value="${Number(b.next_number||1000)}"></div><button class="secondary small" onclick="saveBranchCounter(${b.id})">Сохранить</button></div></div>`).join('')||'<div class="status">Нет филиалов.</div>';$('upsellSource').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('upsellSuggested').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('rateEmployee').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');$('rateBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');$('taskBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');$('taskPerson').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
  const ups=await db.from('sales_upsell_rules').select('*').eq('is_active',true);$('upsellRows').innerHTML=(ups.data||[]).map(r=>{const src=salesCatalog.find(c=>Number(c.id)===Number(r.source_catalog_id)),sg=salesCatalog.find(c=>Number(c.id)===Number(r.suggested_catalog_id));return `<div class="block">${esc(src?.name||'')} → <b>${esc(sg?.name||'')}</b> · ${r.min_quantity}–${r.max_quantity??'∞'} шт <button class="danger small" onclick="deleteUpsell(${r.id})">Удалить</button></div>`}).join('')||'<div class="status">Правил пока нет.</div>';
  const rates=await db.from('sales_pay_rates').select('*');$('ratesRows').innerHTML=(rates.data||[]).map(r=>{const emp=people.find(p=>Number(p.id)===Number(r.employee_id));const br=salesBranches.find(b=>Number(b.id)===Number(r.branch_id));return `<div class="block" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><b>${esc(emp?.name||('Сотрудник #'+r.employee_id))}</b> · ${esc(br?.name||('Филиал #'+r.branch_id))} · смена ${salesMoney(r.shift_rate)} · ретушь ${salesMoney(r.retouch_rate)}</span><span><button class="secondary small" onclick="editPayRate(${r.employee_id},${r.branch_id},${Number(r.shift_rate)||0},${Number(r.retouch_rate)||0})">Изменить</button> <button class="danger small" onclick="deletePayRate(${r.employee_id},${r.branch_id})">Удалить</button></span></div>`}).join('')||'<div class="status">Ставок пока нет.</div>';
- const tasks=await db.from('sales_shift_tasks').select('*,sales_branches(name)').eq('is_active',true).order('task_date');$('tasksRows').innerHTML=(tasks.data||[]).map(t=>`<div class="block">${new Date(t.task_date+'T00:00:00').toLocaleDateString('ru-RU')} · ${esc(t.sales_branches?.name||'')} · <b>${esc(t.title)}</b> <button class="danger small" onclick="deleteTask(${t.id})">Удалить</button></div>`).join('')||'<div class="status">Напоминаний нет.</div>';$('taskDate').value=$('taskDate').value||salesTodayISO();
+ const tasks=await db.from('sales_shift_tasks').select('*,sales_branches(name)').eq('is_active',true).order('task_date');$('tasksRows').innerHTML=(tasks.data||[]).map(t=>`<div class="block">🏪 ${new Date(t.task_date+'T00:00:00').toLocaleDateString('ru-RU')} · ${esc(t.sales_branches?.name||'')} · <b>${esc(t.title)}</b> <button class="danger small" onclick="deleteTask(${t.id})">Удалить</button></div>`).join('')||'<div class="status">Заданий на филиал нет.</div>';$('taskDate').value=$('taskDate').value||salesTodayISO();await renderPersonTasksAdmin(people);
  const catalogGroups={};salesCatalog.forEach(c=>{const cat=(c.category||'Без категории').trim()||'Без категории';(catalogGroups[cat]||(catalogGroups[cat]=[])).push(c)});
  const escCat=v=>String(v??'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
  $('catalogAdminRows').innerHTML=salesCatalog.length?Object.entries(catalogGroups).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([cat,items],gi)=>{const key='catalogCat_'+gi;return `<div class="catalog-category-block" style="border:1px solid #d7dce5;border-radius:12px;margin:8px 0;overflow:hidden;background:#fff"><button type="button" class="secondary" style="width:100%;text-align:left;border:0;border-radius:0;padding:13px 16px;font-weight:700" onclick="toggleCatalogCategory('${key}')">▸ ${escCat(cat)} <span style="float:right;font-weight:500">${items.length} поз.</span></button><div id="${key}" style="display:none;padding:0 10px 10px"><table class="customer-table"><thead><tr><th>Тип</th><th>Название</th><th>Розница</th><th>Опт</th><th>Себестоимость</th><th></th></tr></thead><tbody>${items.map(c=>`<tr><td>${c.item_type==='service'?'Услуга':'Товар'}</td><td><b>${esc(c.name)}</b>${c.sku?`<div class="status">Артикул: ${esc(c.sku)}</div>`:''}</td><td>${salesMoney(c.price)}</td><td>${v4Tiers(c).map(t=>`от ${t.min_qty}: ${salesMoney(t.price)}`).join('<br>')||'—'}</td><td>${c.cost_price==null?'—':salesMoney(c.cost_price)}</td><td><button class="secondary small" onclick="editSalesCatalog(${c.id})">Изменить</button> <button class="danger small" onclick="deleteSalesCatalog(${c.id})">Удалить</button></td></tr>`).join('')}</tbody></table></div></div>`}).join(''):'<div class="status">Товаров и услуг пока нет.</div>';
@@ -2984,7 +3015,7 @@ $('addBranchBtn').onclick=async()=>{const name=$('branchName').value.trim(),star
 $('addEmployeeBtn').onclick=async()=>{const name=$('employeeName').value.trim();if(!name)return;const existing=salesPeople.find(p=>p.name.toLowerCase()===name.toLowerCase());if(existing){$('salesAdminStatus').textContent='Такой сотрудник уже есть.';return}const r=await db.from('sales_people').insert({name,retouch_lead_default:$('employeeLeadDefault').value==='true'}).select().single();if(r.error)alert(r.error.message);else{await loadSalesSetup();$('employeeName').value=''}};
 $('addUpsellBtn').onclick=async()=>{const r=await db.from('sales_upsell_rules').insert({source_catalog_id:Number($('upsellSource').value),suggested_catalog_id:Number($('upsellSuggested').value),min_quantity:Number($('upsellMin').value)||1,max_quantity:$('upsellMax').value.trim()===''?null:Number($('upsellMax').value),question:$('upsellQuestion').value.trim()||'Предложить дополнительный товар?'});if(r.error)alert(r.error.message);else loadSalesSetup()};window.deleteUpsell=async id=>{await db.from('sales_upsell_rules').update({is_active:false}).eq('id',id);loadSalesSetup()};
 window.editPayRate=(employeeId,branchId,shiftRate,retouchRate)=>{ $('rateEmployee').value=String(employeeId); $('rateBranch').value=String(branchId); $('rateShift').value=shiftRate; $('rateRetouch').value=retouchRate; $('rateShift').focus(); }; window.deletePayRate=async(employeeId,branchId)=>{if(!confirm('Удалить эту ставку?'))return;const q=await db.from('sales_pay_rates').delete().eq('employee_id',employeeId).eq('branch_id',branchId);if(q.error)alert(q.error.message);else loadSalesSetup()}; $('saveRateBtn').onclick=async()=>{const pid=Number($('rateEmployee').value),branch=Number($('rateBranch').value),r=await ensureEmployeeRow(pid,branch);const q=await db.from('sales_pay_rates').upsert({employee_id:r.id,branch_id:branch,shift_rate:Number($('rateShift').value)||0,retouch_rate:Number($('rateRetouch').value)||0},{onConflict:'employee_id,branch_id'});if(q.error)alert(q.error.message);else loadSalesSetup()};
-$('addTaskBtn').onclick=async()=>{const r=await db.from('sales_shift_tasks').insert({branch_id:Number($('taskBranch').value),task_date:$('taskDate').value,title:$('taskTitle').value.trim(),description:$('taskDescription').value.trim()||null});if(r.error)alert(r.error.message);else{ $('taskTitle').value='';$('taskDescription').value='';loadSalesSetup()}};window.deleteTask=async id=>{await db.from('sales_shift_tasks').update({is_active:false}).eq('id',id);loadSalesSetup()};
+$('addTaskBtn').onclick=async()=>{const title=$('taskTitle').value.trim();if(!title){alert('Введите текст задания.');return}const description=$('taskDescription').value.trim()||null;const date=$('taskDate').value||salesTodayISO();const r=$('taskTarget').value==='person'?await db.from('sales_person_tasks').insert({person_id:Number($('taskPerson').value),start_date:date,title,description}):await db.from('sales_shift_tasks').insert({branch_id:Number($('taskBranch').value),task_date:date,title,description});if(r.error)alert(r.error.message);else{ $('taskTitle').value='';$('taskDescription').value='';loadSalesSetup()}};window.deleteTask=async id=>{await db.from('sales_shift_tasks').update({is_active:false}).eq('id',id);loadSalesSetup()};
 
 // Оплата по ссылке: красная строка до оплаты; после оплаты — зелёная. Неоплата закрывает продажу из выручки.
 window.markLinkPaid=async id=>{const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:true});if(r.error)alert(r.error.message);else renderMovement()};window.markLinkUnpaid=async id=>{if(!confirm('Отметить как НЕ оплачено? Продажа будет исключена из выручки.'))return;const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:false});if(r.error)alert(r.error.message);else renderMovement()};
@@ -3040,7 +3071,7 @@ async function closeCurrentSalesShift() {
     $('closeShiftBtn').disabled=true;
     if(!(await showShiftTasks(snapshot.branchId,snapshot.shiftId,snapshot.employeeId))) {closeShiftPending=snapshot.shiftId;return;}
     closeShiftPending=null;
-    if(!confirm('Завершить общую смену №'+snapshot.shiftId+' филиала «'+snapshot.branchName+'»? Это завершит работу всех её кассиров.')) return;
+    const carry=(window.taskBannerState?.personal||[]).length;if(!confirm('Завершить общую смену №'+snapshot.shiftId+' филиала «'+snapshot.branchName+'»? Это завершит работу всех её кассиров.'+(carry?'\n\nНевыполненных личных заданий: '+carry+'. Они перейдут на следующую смену этих сотрудников.':''))) return;
     if(!(await checkLinkReceiptsBeforeClose(snapshot.shiftId))) return;
     const r=await db.rpc('sales_close_team_shift',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId});
     if(r.error) throw r.error;
@@ -3066,6 +3097,98 @@ $('reportsHomeBtn').onclick=openReports;
 $('saleCatalogSearch').oninput=renderSaleCatalog;
 $('saleUsePoints').onchange=()=>{$('salePointsFields').style.display=$('saleUsePoints').checked?'grid':'none';updateSaleTotal();};
 $('salePointsToUse').oninput=()=>updateSaleTotal();
+
+
+// ===== Ручной порядок справочников (админ) =====
+let dragProductId=null;
+function bindProductDrag(){
+  const filtered=!!($('search').value.trim()||$('category').value);
+  $('orderHint').textContent=filtered?'Чтобы менять порядок справочников, сбросьте поиск и категорию.':'Админ: перетащите карточку мышкой на нужное место, и она закрепится там (📌 и номер места). Остальные справочники заполняют свободные места по алфавиту.';
+  document.querySelectorAll('#grid .card[data-id]').forEach(card=>{
+    if(filtered){card.removeAttribute('draggable');return}
+    card.ondragstart=e=>{dragProductId=card.dataset.id;card.classList.add('dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragProductId)}catch(_){}};
+    card.ondragend=()=>{card.classList.remove('dragging');document.querySelectorAll('#grid .drag-over').forEach(x=>x.classList.remove('drag-over'))};
+    card.ondragover=e=>{if(!dragProductId||dragProductId===card.dataset.id)return;e.preventDefault();card.classList.add('drag-over')};
+    card.ondragleave=()=>card.classList.remove('drag-over');
+    card.ondrop=e=>{e.preventDefault();card.classList.remove('drag-over');const id=dragProductId;dragProductId=null;if(id&&id!==card.dataset.id)moveProductTo(id,card.dataset.id)};
+  });
+}
+async function moveProductTo(id,targetId){
+  const d=products.find(p=>p.id===id),pos=products.findIndex(p=>p.id===targetId)+1;
+  if(!d||pos<1)return;
+  const before=new Map(products.map(p=>[p.id,p.sort_order??null]));
+  d.sort_order=pos;
+  // Другие закреплённые справочники на этом и следующих местах сдвигаются вниз, если места совпали.
+  let cur=pos;
+  products.filter(p=>p!==d&&p.sort_order!=null&&p.sort_order>=pos).sort((a,b)=>a.sort_order-b.sort_order).forEach(p=>{if(p.sort_order<=cur)p.sort_order=cur+1;cur=p.sort_order});
+  await saveProductOrder(before);
+}
+window.unpinProduct=async id=>{const p=products.find(x=>x.id===id);if(!p)return;const before=new Map(products.map(x=>[x.id,x.sort_order??null]));p.sort_order=null;await saveProductOrder(before)};
+async function saveProductOrder(before){
+  const changed=products.filter(p=>(p.sort_order??null)!==before.get(p.id));
+  products=sortProducts(products);render();
+  const res=await Promise.all(changed.map(p=>db.from('products').update({sort_order:p.sort_order??null}).eq('id',p.id)));
+  const err=res.find(r=>r.error);
+  if(err){alert('Не удалось сохранить порядок: '+err.error.message);await load()}
+}
+
+// ===== Задания на сотрудника (админ) =====
+$('taskTarget').onchange=()=>{const person=$('taskTarget').value==='person';$('taskBranchField').style.display=person?'none':'';$('taskPersonField').style.display=person?'':'none';$('taskDateLabel').textContent=person?'Показывать с даты':'Дата'};
+async function renderPersonTasksAdmin(people){
+  const r=await db.from('sales_person_tasks').select('*').eq('is_active',true).order('created_at',{ascending:false}).limit(200);
+  if(r.error){$('tasksRows').insertAdjacentHTML('beforeend',`<div class="status">Задания на сотрудников: ${esc(r.error.message)}</div>`);return}
+  const name=id=>people.find(p=>Number(p.id)===Number(id))?.name||'Сотрудник';
+  const open=(r.data||[]).filter(t=>!t.completed_at),done=(r.data||[]).filter(t=>t.completed_at).slice(0,15);
+  const row=t=>`<div class="block">👤 <b>${esc(name(t.person_id))}</b> · с ${new Date(t.start_date+'T00:00:00').toLocaleDateString('ru-RU')} · <b>${esc(t.title)}</b>${t.description?` <span class="status">${esc(t.description)}</span>`:''} ${t.completed_at?`<span class="status">✅ выполнено ${new Date(t.completed_at).toLocaleString('ru-RU')}</span>`:'<span class="status">⏳ не выполнено</span>'} <button class="danger small" onclick="deletePersonTask(${t.id})">Удалить</button></div>`;
+  $('tasksRows').insertAdjacentHTML('beforeend',`<h4 style="margin:14px 0 6px">Задания на сотрудников</h4>${open.map(row).join('')||'<div class="status">Невыполненных заданий на сотрудников нет.</div>'}${done.length?`<details style="margin-top:8px"><summary class="status">Недавно выполненные (${done.length})</summary>${done.map(row).join('')}</details>`:''}`);
+}
+window.deletePersonTask=async id=>{if(!confirm('Удалить задание?'))return;const r=await db.from('sales_person_tasks').update({is_active:false}).eq('id',id);if(r.error)alert(r.error.message);loadSalesSetup()};
+
+// ===== Постоянная панель заданий во время смены =====
+window.taskBannerState={branch:[],personal:[]};
+let taskBannerSeq=0,taskBannerCollapsed=false;
+async function refreshTaskBanner(){
+  const seq=++taskBannerSeq,sess=salesSession;
+  if(!sess?.shiftId){window.taskBannerState={branch:[],personal:[]};drawTaskBanner();return}
+  try{
+    const today=salesTodayISO(),parts=(sess.participants||[]).filter(p=>p.isActive!==false&&p.personId);
+    const personIds=[...new Set(parts.map(p=>Number(p.personId)))];
+    const [bt,bc,pt]=await Promise.all([
+      db.from('sales_shift_tasks').select('*').eq('branch_id',sess.branchId).eq('task_date',today).eq('is_active',true).order('id'),
+      db.from('sales_shift_task_completions').select('task_id').eq('shift_id',sess.shiftId),
+      personIds.length?db.from('sales_person_tasks').select('*').in('person_id',personIds).is('completed_at',null).eq('is_active',true).lte('start_date',today).order('start_date').order('id'):Promise.resolve({data:[]})
+    ]);
+    if(seq!==taskBannerSeq)return;
+    const done=new Set((bc.data||[]).map(x=>Number(x.task_id)));
+    window.taskBannerState={
+      branch:(bt.data||[]).filter(t=>!done.has(Number(t.id))),
+      personal:(pt.data||[]).map(t=>({...t,who:parts.find(p=>Number(p.personId)===Number(t.person_id))})).filter(t=>t.who)
+    };
+  }catch(e){console.error(e);return}
+  drawTaskBanner();
+}
+function drawTaskBanner(){
+  const b=$('taskBanner'),st=window.taskBannerState,total=st.branch.length+st.personal.length;
+  if(!total){b.classList.remove('show');document.body.classList.remove('has-task-banner');document.body.style.removeProperty('--task-banner-h');return}
+  const today=salesTodayISO();
+  const item=(kind,t)=>`<div class="tb-item"><div><div class="tb-title">${kind==='branch'?'<span class="tb-who branch">Филиал</span>':`<span class="tb-who">${esc(t.who.name)}</span>`}${esc(t.title)}${kind==='person'&&t.start_date<today?'<span class="tb-carry">перенесено</span>':''}</div>${t.description?`<div class="tb-sub">${esc(t.description)}</div>`:''}</div><button class="tb-done" onclick="completeBannerTask('${kind}',${t.id})">✓ Выполнено</button></div>`;
+  b.innerHTML=`<div class="tb-head"><span>📋 Задания на смену: ${total}</span><button class="tb-toggle" onclick="toggleTaskBanner()">${taskBannerCollapsed?'Развернуть':'Свернуть'}</button></div><div class="tb-list">${st.personal.map(t=>item('person',t)).join('')}${st.branch.map(t=>item('branch',t)).join('')}</div>`;
+  b.classList.toggle('collapsed',taskBannerCollapsed);b.classList.add('show');document.body.classList.add('has-task-banner');
+  document.body.style.setProperty('--task-banner-h',b.offsetHeight+'px');
+}
+window.toggleTaskBanner=()=>{taskBannerCollapsed=!taskBannerCollapsed;drawTaskBanner()};
+window.completeBannerTask=async(kind,id)=>{
+  const sess=salesSession;if(!sess?.shiftId)return;
+  const st=window.taskBannerState,t=(kind==='branch'?st.branch:st.personal).find(x=>Number(x.id)===Number(id));if(!t)return;
+  if(!confirm(`Отметить задание «${t.title}» выполненным?`))return;
+  const r=kind==='branch'
+    ?await db.from('sales_shift_task_completions').upsert({task_id:t.id,shift_id:sess.shiftId,completed_by_employee_id:sess.employeeId},{onConflict:'task_id,shift_id'})
+    :await db.rpc('sales_complete_person_task',{p_task_id:t.id,p_shift_id:sess.shiftId,p_employee_id:t.who.employeeId});
+  if(r.error){alert('Не удалось отметить: '+r.error.message);return}
+  refreshTaskBanner();
+};
+window.addEventListener('resize',()=>{if($('taskBanner').classList.contains('show'))document.body.style.setProperty('--task-banner-h',$('taskBanner').offsetHeight+'px')});
+setInterval(()=>{if(salesSession?.shiftId&&!document.hidden)refreshTaskBanner()},60000);
 
 async function initializePolaroid() {
   persistSalesSession(); updateSalesSessionUI();
