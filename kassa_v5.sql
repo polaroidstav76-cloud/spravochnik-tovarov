@@ -449,3 +449,10 @@ create or replace function public.admin_summary(p_from timestamptz, p_to timesta
 language sql stable security definer set search_path to 'public' as $fn$
   select public.admin_period_summary(p_from,p_to,p_prev_from,p_from,p_branch_id,p_bucket,p_tz);
 $fn$;
+
+-- ============ 6. Контакт клиента для заказов «при получении» (миграция kassa_v5_pickup_contact) ============
+-- Клубная карта не обязательна: достаточно контакта (Telegram, Max или телефон). Можно указать свой номер заказа.
+alter table public.pickup_orders add column if not exists client_order_ref text;
+-- sales_hold_pickup_v2(... p_client_name = контакт, p_client_phone = телефон если контакт — номер, p_client_order_ref) — обёртка над sales_hold_pickup,
+--   требует контакт или клубную карту и сохраняет client_order_ref.
+-- pickup_list_v2(p_branch_id, p_include_closed) — то же, что pickup_list, плюс client_order_ref.

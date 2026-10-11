@@ -3476,14 +3476,15 @@ function v5Toast(msg){const t=$('v5Toast');t.textContent=msg;t.classList.add('sh
 function v5Digits(v){return String(v||'').replace(/\D/g,'').slice(-10)}
 
 // --- Заказы «при получении» ---
-function pickupClient(o){return o.customer_name?`💳 ${o.customer_name}${o.customer_phone?' · '+o.customer_phone:''}`:([o.client_name,o.client_phone].filter(Boolean).join(' · ')||'Клиент не указан')}
+function pickupClient(o){return (o.client_order_ref?`Заказ ${o.client_order_ref} · `:'')+pickupClientOnly(o)}
+function pickupClientOnly(o){return o.customer_name?`💳 ${o.customer_name}${o.customer_phone?' · '+o.customer_phone:''}`:([...new Set([o.client_name,o.client_phone].filter(Boolean))].join(' · ')||'Клиент не указан')}
 function pickupItemsText(o){return (o.items||[]).map(i=>`${i.name} × ${Number(i.quantity)}`).join(', ')}
 function pickupIsOverdue(o){return Date.now()-new Date(o.created_at).getTime()>=PICKUP_OVERDUE_MS}
 function pickupDays(o){return Math.floor((Date.now()-new Date(o.created_at).getTime())/86400000)}
-function pickupMatches(o,words){const hay=[o.order_number,o.customer_name,o.customer_phone,o.client_name,o.client_phone,o.comment,o.branch_name,pickupItemsText(o)].join(' ').toLowerCase();return words.every(w=>hay.includes(w))}
+function pickupMatches(o,words){const hay=[o.order_number,o.client_order_ref,o.customer_name,o.customer_phone,o.client_name,o.client_phone,o.comment,o.branch_name,pickupItemsText(o)].join(' ').toLowerCase();return words.every(w=>hay.includes(w))}
 function branchPickups(){const b=salesSession?.branchId;return pickupOrders.filter(o=>o.status==='pending'&&(!b||Number(o.branch_id)===Number(b)))}
 async function loadPickups(){
-  const r=await db.rpc('pickup_list',{p_branch_id:null,p_include_closed:false});
+  const r=await db.rpc('pickup_list_v2',{p_branch_id:null,p_include_closed:false});
   if(r.error){console.warn('pickup_list',r.error);return false}
   pickupOrders=r.data||[];drawPickupPanel();drawPickupBadge();return true;
 }
@@ -3522,7 +3523,7 @@ window.openPickupDebts=()=>{$('debtsBtn').click()};
   const sel=$('salePayment');
   if(!sel.querySelector('option[value="on_pickup"]'))sel.insertAdjacentHTML('beforeend','<option value="on_pickup">🕓 При получении (оплата позже)</option>');
   const grid=sel.closest('.sale-payment-grid')||sel.closest('.field');
-  grid.insertAdjacentHTML('afterend',`<div id="salePickupHoldBox" class="v5-box info" style="display:none"><b>🕓 Оплата при получении</b><div style="margin-top:4px">Продажа сохранится в списке «Ждут оплаты» справа и <b>не попадёт</b> в продажи за сегодня и отчёт. Когда клиент придёт, найдите заказ, выберите способ оплаты и клубную карту — только тогда продажа попадёт в отчёт. Баллы списываются при оплате.</div><div class="row" id="salePickupClientRow"><div class="field"><label for="salePickupName">Имя клиента</label><input id="salePickupName" placeholder="Чтобы потом найти заказ"></div><div class="field"><label for="salePickupPhone">Телефон</label><input id="salePickupPhone" placeholder="Номер телефона"></div></div><div class="pp-sub" id="salePickupClientHint">Если у клиента клубная карта — отметьте её выше, имя и телефон возьмутся оттуда.</div></div>`);
+  $('saleClubEnabled').closest('.sale-loyalty-box').insertAdjacentHTML('beforebegin',`<div id="salePickupHoldBox" class="v5-box info" style="display:none"><b>👤 Контакт клиента</b><div class="row"><div class="field"><label for="salePickupContact">Telegram, Max или телефон *</label><input id="salePickupContact" placeholder="Например: @ivan, «Иван» в Max или +7 900…"></div><div class="field"><label for="salePickupRef">Номер заказа</label><input id="salePickupRef" placeholder="Например: 125 или Т-55"></div></div><div class="pp-sub">Клубная карта не обязательна. По контакту и номеру заказа его легко найти в списке «Ждут оплаты».</div><div style="margin-top:10px"><b>🕓 Оплата при получении.</b> Продажа сохранится в списке «Ждут оплаты» справа и <b>не попадёт</b> в продажи за сегодня и отчёт. Когда клиент придёт, найдите заказ, выберите способ оплаты и клубную карту — только тогда продажа попадёт в отчёт. Баллы списываются при оплате.</div></div>`);
   $('saleOrderPreview').closest('.sale-order-title').insertAdjacentHTML('afterend','<div id="salePickupBanner" class="v5-box warn" style="display:none"></div>');
   const prevChange=sel.onchange;
   sel.onchange=()=>{prevChange?.();syncPickupHoldBox()};
@@ -3532,9 +3533,6 @@ window.openPickupDebts=()=>{$('debtsBtn').click()};
 function syncPickupHoldBox(){
   const on=$('salePayment').value==='on_pickup';
   $('salePickupHoldBox').style.display=on?'block':'none';
-  const club=$('saleClubEnabled').checked;
-  $('salePickupClientRow').style.display=club?'none':'grid';
-  $('salePickupClientHint').textContent=club?'Клиент возьмётся из клубной карты.':'Если у клиента клубная карта — отметьте её выше, имя и телефон возьмутся оттуда.';
 }
 function setPickupOptionAvailable(on){const o=$('salePayment').querySelector('option[value="on_pickup"]');if(o){o.hidden=!on;o.disabled=!on}}
 
@@ -3547,7 +3545,7 @@ openSaleV4=async function(){
   await v5BaseOpenSale();
   setPickupOptionAvailable(true);
   $('salePickupBanner').style.display='none';
-  $('salePickupName').value='';$('salePickupPhone').value='';
+  $('salePickupContact').value='';$('salePickupRef').value='';
   syncPickupHoldBox();
 };
 $('salesBtn').onclick=()=>openSaleV4();
@@ -3560,9 +3558,9 @@ $('saveSale').onclick=async()=>{
   if(pay==='on_pickup'){
     if(salePickup){$('saleStatus').textContent='Этот заказ уже ждёт оплаты. Выберите, как клиент платит сейчас.';return}
     if(salePointsUsed()>0){$('saleStatus').textContent='При оплате «при получении» баллы списать нельзя. Спишите их, когда клиент будет оплачивать.';return}
-    const name=$('salePickupName').value.trim(),phone=$('salePickupPhone').value.trim();
-    if(!club&&!name&&!phone){$('saleStatus').textContent='Укажите имя или телефон клиента (или клубную карту), чтобы потом найти заказ.';$('salePickupName').focus();return}
-    pickupRpcOverride=a=>v5Rpc('sales_hold_pickup',{p_shift_id:a.p_shift_id,p_employee_id:a.p_employee_id,p_items:a.p_items,p_discount_percent:a.p_discount_percent,p_comment:a.p_comment,p_order_number:a.p_order_number,p_customer_id:a.p_loyalty_customer_id,p_client_name:club?a.p_loyalty_name:name,p_client_phone:club?a.p_loyalty_phone:phone}).then(r=>{if(!r.error)pickupLastResult={kind:'hold',no:r.data};return r});
+    const contact=$('salePickupContact').value.trim(),ref=$('salePickupRef').value.trim(),isPhone=/^[+\d\s()\-]{10,}$/.test(contact)&&v5Digits(contact).length>=10;
+    if(!contact&&!(club&&saleLoyaltyCustomerId)){$('saleStatus').textContent='Укажите контакт клиента: Telegram, Max или телефон.';$('salePickupContact').focus();return}
+    pickupRpcOverride=a=>v5Rpc('sales_hold_pickup_v2',{p_shift_id:a.p_shift_id,p_employee_id:a.p_employee_id,p_items:a.p_items,p_discount_percent:a.p_discount_percent,p_comment:a.p_comment,p_order_number:a.p_order_number,p_customer_id:a.p_loyalty_customer_id,p_client_name:contact||(club?a.p_loyalty_name:null),p_client_phone:isPhone?contact:(club?a.p_loyalty_phone:null),p_client_order_ref:ref||null}).then(r=>{if(!r.error)pickupLastResult={kind:'hold',no:r.data};return r});
   }else if(salePickup){
     const o=salePickup;
     pickupRpcOverride=a=>{const x={...a,p_pickup_id:o.id};delete x.p_order_number;return v5Rpc('sales_pay_pickup',x).then(r=>{if(!r.error)pickupLastResult={kind:'pay',no:r.data};return r})};
@@ -3592,7 +3590,7 @@ window.startPickupPayment=async id=>{
   const otherBranch=Number(o.branch_id)!==Number(salesSession.branchId);
   $('salePickupBanner').innerHTML=`<b>Оплата заказа №${esc(o.order_number)} от ${v5Date(o.created_at)}</b> · ${esc(pickupClient(o))}<br>Сумма была ${salesMoney(o.total)}. Проверьте позиции, выберите способ оплаты и при необходимости клубную карту, затем нажмите «Оформить». Продажа попадёт в отчёт текущей смены.${otherBranch?`<br>Заказ оформлен в филиале «${esc(o.branch_name||'')}», здесь у продажи будет новый номер.`:''}`;
   $('salePickupBanner').style.display='block';
-  if(!o.customer_id){$('saleClubNewName').value=o.client_name||'';$('saleClubNewPhone').value=o.client_phone||''}
+  if(!o.customer_id&&o.client_phone){$('saleClubNewName').value=o.client_name!==o.client_phone?(o.client_name||''):'';$('saleClubNewPhone').value=o.client_phone}
   renderSaleDraft();
   if(o.customer_id&&o.customer_phone){
     const r=await db.rpc('loyalty_find_customers',{p_query:o.customer_phone});
