@@ -4843,5 +4843,64 @@ runShiftOpenChecks=async function(){const r=await stkBaseShiftChecks.apply(this,
 setTimeout(()=>{stkLoad();stkFlushPending()},2500);
 setInterval(()=>{if(!document.hidden){stkLoad();stkFlushPending()}},10*60000);
 </script>
+<script>
+// ===== Автообновление сайта =====
+// GitHub Pages отдаёт Last-Modified со временем последней выкладки. Сравниваем его с тем, когда
+// была выложена открытая сейчас страница (document.lastModified). Если на сервере новее,
+// перед открытием смены сайт сам обновляется и снова открывает выбор филиала и сотрудника,
+// поэтому смена открывается уже в свежей версии со всеми проверками. Неотправленные продажи
+// и открытая смена лежат в localStorage и при перезагрузке не теряются.
+(()=>{
+  const RESUME='siteUpdResume',TRY='siteUpdTry';
+  const pageUrl=()=>location.href.split('#')[0];
+  const loaded=Date.parse(document.lastModified)||0;
+  let available=false;
+  async function siteUpdateAvailable(){
+    if(available)return true;
+    if(!loaded||!navigator.onLine)return false;
+    try{
+      const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),5000);
+      const r=await fetch(pageUrl(),{method:'HEAD',cache:'no-store',signal:ctl.signal});clearTimeout(t);
+      const srv=Date.parse(r.headers.get('last-modified')||'');
+      available=r.ok&&srv>loaded+1000;
+    }catch(e){return false}
+    return available;
+  }
+  function recentlyTried(){try{return Date.now()-Number(sessionStorage.getItem(TRY)||0)<3*60000}catch(e){return true}}
+  async function applySiteUpdate(resume){
+    if(recentlyTried())return false; // защита от бесконечной перезагрузки, если кэш ещё отдаёт старую версию
+    try{sessionStorage.setItem(TRY,String(Date.now()));if(resume)sessionStorage.setItem(RESUME,resume)}catch(e){return false}
+    document.body.insertAdjacentHTML('beforeend','<div id="siteUpdOverlay" style="position:fixed;inset:0;z-index:999999;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;color:#1B3F7F;text-align:center;padding:16px">Обновляю сайт до новой версии…</div>');
+    try{await Promise.all([fetch(pageUrl(),{cache:'reload'}),fetch('config.js',{cache:'reload'})])}catch(e){}
+    location.reload();
+    return true;
+  }
+  window.siteUpdateAvailable=siteUpdateAvailable;window.applySiteUpdate=applySiteUpdate;
+
+  // Перед открытием смены: если вышла новая версия, сначала обновляемся.
+  const baseOpenWorkspace=openSalesWorkspace;
+  openSalesWorkspace=async function(){
+    if(!salesSession?.shiftId&&await siteUpdateAvailable()&&await applySiteUpdate('workspace'))return;
+    return baseOpenWorkspace.apply(this,arguments);
+  };
+  $('salesSelectBtn').onclick=openSalesWorkspace;
+
+  // Если смена уже открыта, сами не перезагружаем: показываем кнопку «Обновить».
+  document.body.insertAdjacentHTML('beforeend','<div id="siteUpdBar" style="display:none;position:fixed;right:16px;bottom:16px;z-index:99991;max-width:min(380px,calc(100% - 32px));padding:10px 14px;border-radius:12px;background:#EEF3FC;color:#1B3F7F;border:1px solid #C9D8F3;box-shadow:0 6px 24px rgba(0,0,0,.18);font-size:14px;align-items:center;gap:10px;flex-wrap:wrap"><span>Вышла новая версия сайта.</span><button id="siteUpdBtn" class="primary" style="padding:6px 12px">Обновить</button></div>');
+  $('siteUpdBtn').onclick=()=>{try{sessionStorage.removeItem(TRY)}catch(e){}applySiteUpdate('')};
+  async function idleCheck(){
+    if(document.hidden||!(await siteUpdateAvailable()))return;
+    if(!salesSession?.shiftId&&!document.querySelector('.modal.show')&&await applySiteUpdate(''))return;
+    $('siteUpdBar').style.display='flex';
+  }
+  setTimeout(idleCheck,1500);
+  setInterval(idleCheck,10*60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)idleCheck()});
+
+  // После обновления продолжаем открытие смены с того же места.
+  let resume='';try{resume=sessionStorage.getItem(RESUME)||'';sessionStorage.removeItem(RESUME)}catch(e){}
+  if(resume==='workspace')setTimeout(()=>{if(!salesSession?.shiftId)openSalesWorkspace()},1000);
+})();
+</script>
 </body>
 </html>
