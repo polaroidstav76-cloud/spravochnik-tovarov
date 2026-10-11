@@ -4119,5 +4119,176 @@ loadGuideQCounts();
   try{if(salesSession?.shiftId&&await validateSalesSession())runShiftOpenChecks()}catch(e){console.warn(e)}
 })();
 </script>
+<div id="kassaNetBar" class="kassa-net" role="status" aria-live="polite" style="display:none"></div>
+<div id="kassaQueueModal" class="modal"><div class="dialog" style="max-width:640px"><h2>Продажи, сохранённые без связи</h2><div id="kassaQueueList"></div><div class="actions"><button id="kassaQueueSync" class="primary">Отправить сейчас</button><button id="kassaQueueClose" class="secondary">Закрыть</button></div></div></div>
+<style>
+.kassa-net{position:fixed;left:16px;bottom:16px;z-index:99990;max-width:min(400px,calc(100% - 32px));padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.35;box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.kassa-net.off{background:var(--warn-bg,#FFF4E0);color:var(--warn-ink,#7A4B00);border:1px solid #F2D29B}
+.kassa-net.sync{background:#EEF3FC;color:#1B3F7F;border:1px solid #C9D8F3}
+.kassa-net.err{background:#FDECEC;color:#8A1F1F;border:1px solid #F1BDBD}
+.kassa-net button{padding:5px 10px;font-size:13px}
+.kq-item{border:1px solid var(--line,#ddd);border-radius:10px;padding:10px 12px;margin:8px 0}
+.kq-item .kq-err{color:#8A1F1F;font-size:13px;margin-top:4px}
+</style>
+<script>
+// ===== Касса v6: запасной режим без связи =====
+// Если база недоступна, продажа сохраняется в этом браузере и сама уходит в отчёт, когда связь вернётся.
+// У каждой продажи свой идентификатор (client_uid), поэтому повторная отправка не создаёт дубль.
+const KQ_KEY='kassaOfflineQueue_v1',KQ_CACHE='kassaSetupCache_v1',KQ_TIMEOUT=20000;
+let kassaOffline=false,kqSyncing=false,kqSyncSeq=0;
+function kqRead(){try{return JSON.parse(localStorage.getItem(KQ_KEY)||'[]')||[]}catch(e){return[]}}
+function kqWrite(q){try{localStorage.setItem(KQ_KEY,JSON.stringify(q));return true}catch(e){console.warn('kassa queue',e);return false}}
+function kqUid(){if(crypto.randomUUID)return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=b[6]&15|64;b[8]=b[8]&63|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`}
+// Ошибка связи, а не ошибка в данных: сеть, таймаут, база на паузе или перегружена.
+function kqIsNetErr(err,status){
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return true;
+  if(status===0||status===502||status===503||status===504||status>=520)return true;
+  const m=String(err?.message||err||'');
+  return /Failed to fetch|NetworkError|Load failed|fetch failed|Network request failed|AbortError|aborted|timeout|ERR_|ECONN/i.test(m);
+}
+function kqWithTimeout(p,ms){let t;return Promise.race([p,new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error('timeout')),ms)})]).finally(()=>clearTimeout(t))}
+async function kqCall(fn,args){
+  const ctl=typeof AbortController!=='undefined'?new AbortController():null;
+  let q=v5Rpc(fn,args);if(ctl&&q.abortSignal)q=q.abortSignal(ctl.signal);
+  const t=setTimeout(()=>ctl?.abort(),KQ_TIMEOUT);
+  try{const r=await q;return r}catch(e){return {data:null,error:e,status:0}}finally{clearTimeout(t)}
+}
+function kqSetOffline(v){if(kassaOffline!==v){kassaOffline=v}kqDrawBar()}
+function kqNextKey(b){return 'kassaNextKnown_'+b}
+function kqOfflineNumber(branchId){
+  let n=Number(localStorage.getItem(kqNextKey(branchId))||0);
+  for(const it of kqRead())if(Number(it.branchId)===Number(branchId)&&it.orderNo)n=Math.max(n,Number(it.orderNo)+1);
+  return n||null;
+}
+
+// Справочники кассы: при успешной загрузке кладём копию в браузер, без связи берём её.
+const kqBaseLoadSetup=loadSalesSetup;
+function kqUseCache(){
+  let c=null;try{c=JSON.parse(localStorage.getItem(KQ_CACHE)||'null')}catch(x){}
+  if(!c)return false;
+  salesBranches=c.salesBranches||[];salesPeople=c.salesPeople||[];salesCatalog=c.salesCatalog||[];v4Upsells=c.v4Upsells||[];salesEmployees=c.salesEmployees||[];
+  return true;
+}
+function kqSaveCache(){try{localStorage.setItem(KQ_CACHE,JSON.stringify({at:Date.now(),salesBranches,salesPeople,salesCatalog,v4Upsells,salesEmployees}))}catch(e){}}
+loadSalesSetup=async function(){
+  // Связь уже известна как пропавшая: не ждём повторных попыток, сразу открываем сохранённые справочники.
+  if(kassaOffline&&kqUseCache()){kqBaseLoadSetup().then(kqSaveCache).catch(()=>{});return}
+  try{
+    await kqWithTimeout(kqBaseLoadSetup(),15000);
+    kqSaveCache();
+  }catch(e){
+    if(!kqIsNetErr(e)||!kqUseCache())throw e;
+    kqSetOffline(true);
+  }
+};
+// Открытая смена: без связи доверяем данным, сохранённым в этой вкладке.
+const kqBaseValidate=validateSalesSession;
+validateSalesSession=async function(){
+  try{const ok=await kqWithTimeout(kqBaseValidate(),12000);if(kassaOffline&&!kqQueueCount())kqSetOffline(false);return ok}
+  catch(e){
+    if(kqIsNetErr(e)&&salesSession?.shiftId&&salesSession.participants?.length){kqSetOffline(true);return true}
+    throw e;
+  }
+};
+const kqBaseShiftChecks=runShiftOpenChecks;
+runShiftOpenChecks=async function(){if(kassaOffline)return;return kqBaseShiftChecks.apply(this,arguments)};
+
+// Продажа: идёт через sales_create_sale_v6 с идентификатором. Нет связи — кладём в очередь.
+(()=>{
+  const inner=db.rpc;
+  db.rpc=(fn,args,opts)=>{
+    if(fn==='sales_next_order_number')return (async()=>{
+      const r=await kqCall(fn,args);
+      if(!r.error){try{localStorage.setItem(kqNextKey(args.p_branch_id),String(r.data))}catch(e){}return r}
+      if(kqIsNetErr(r.error,r.status)){const n=kqOfflineNumber(args.p_branch_id);if(n){kqSetOffline(true);return {data:n,error:null}}}
+      return r;
+    })();
+    if(fn==='sales_create_sale'&&!pickupRpcOverride)return kqCreateSale(args);
+    if(fn==='sales_create_sale')return Promise.resolve(inner(fn,args,opts)).then(r=>{
+      if(r?.error&&kqIsNetErr(r.error,r.status)){kqSetOffline(true);return {...r,error:{message:'Нет связи с базой. «При получении» и оплата отложенных заказов работают только при связи. Можно оформить обычную продажу.'}}}
+      return r;
+    });
+    return inner(fn,args,opts);
+  };
+})();
+async function kqCreateSale(args){
+  const uid=kqUid(),at=new Date().toISOString();
+  const r=await kqCall('sales_create_sale_v6',{p_client_uid:uid,p_offline_at:null,...args});
+  if(!r.error){
+    try{localStorage.setItem(kqNextKey(salesSession?.branchId||saleContext?.branchId),String(Number(r.data)+1))}catch(e){}
+    if(kassaOffline){kqSetOffline(false);kqSync()}
+    return r;
+  }
+  if(!kqIsNetErr(r.error,r.status))return r;
+  if(Number(args.p_loyalty_points)>0)return {data:null,error:{message:'Нет связи с базой: списать баллы сейчас нельзя (не проверить остаток). Уберите списание баллов — продажа сохранится и уйдёт в отчёт, когда связь вернётся.'}};
+  const ctx=saleContext||salesSession||{};
+  const total=saleDraft.reduce((a,x)=>a+Number(x.quantity)*Number(x.unitPrice),0)*(1-Number(args.p_discount_percent||0)/100);
+  const item={uid,createdAt:at,branchId:ctx.branchId,branchName:ctx.branchName,shiftId:args.p_shift_id,orderNo:args.p_order_number,total:Math.round(total*100)/100,
+    payment:args.p_payment_method,employeeName:ctx.employeeName,items:saleDraft.map(x=>({name:(salesCatalog.find(c=>Number(c.id)===Number(x.catalogId))||{}).name||'',quantity:x.quantity})),args,attempts:0,lastError:null};
+  const q=kqRead();q.push(item);
+  if(!kqWrite(q))return {data:null,error:{message:'Нет связи с базой, и браузер не дал сохранить продажу. Запишите её на бумаге.'}};
+  kqSetOffline(true);
+  setTimeout(()=>v5Toast(`Нет связи с базой. Продажа №${args.p_order_number||'—'} сохранена на этом компьютере и сама попадёт в отчёт, когда связь вернётся.`),300);
+  return {data:args.p_order_number,error:null};
+}
+function kqQueueCount(shiftId){return kqRead().filter(x=>!shiftId||Number(x.shiftId)===Number(shiftId)).length}
+
+// Отправка сохранённых продаж. Одновременно работает только одна вкладка (navigator.locks), а повтор всё равно безопасен.
+async function kqSync(){
+  if(kqSyncing||!kqRead().length){kqDrawBar();return}
+  const run=async()=>{
+    kqSyncing=true;kqDrawBar();
+    try{
+      for(const it of kqRead()){
+        const r=await kqCall('sales_create_sale_v6',{...it.args,p_client_uid:it.uid,p_offline_at:it.createdAt});
+        const q=kqRead(),i=q.findIndex(x=>x.uid===it.uid);
+        if(!r.error){if(i>=0){q.splice(i,1);kqWrite(q)}try{const k=kqNextKey(it.branchId),n=Number(localStorage.getItem(k)||0);if(Number(r.data)+1>n)localStorage.setItem(k,String(Number(r.data)+1))}catch(e){}kqSetOffline(false);continue}
+        if(kqIsNetErr(r.error,r.status)){kqSetOffline(true);break}
+        if(i>=0){q[i].attempts=(q[i].attempts||0)+1;q[i].lastError=r.error.message||String(r.error);kqWrite(q)}
+        kqSetOffline(false);
+      }
+    }finally{kqSyncing=false;kqDrawBar();if($('kassaQueueModal').classList.contains('show'))kqDrawList()}
+  };
+  if(navigator.locks?.request)await navigator.locks.request('kassa-offline-sync',{ifAvailable:true},l=>l?run():null);else await run();
+}
+function kqDrawBar(){
+  const bar=$('kassaNetBar');if(!bar)return;
+  const q=kqRead(),n=q.length,errs=q.filter(x=>x.lastError).length;
+  if(!kassaOffline&&!n){bar.style.display='none';return}
+  let cls='off',txt;
+  if(kassaOffline)txt=`⚠ Нет связи с базой. Продажи оформляйте как обычно: они сохраняются на этом компьютере${n?` (сейчас ${n})`:''} и сами уйдут в отчёт, когда связь вернётся. Не чистите браузер.`;
+  else if(errs){cls='err';txt=`⚠ ${errs} из ${n} сохранённых продаж не принимаются базой. Нажмите «Показать», чтобы увидеть причину.`}
+  else{cls='sync';txt=kqSyncing?`Отправляю сохранённые продажи: ${n}…`:`Сохранённых продаж ждут отправки: ${n}.`}
+  bar.className='kassa-net '+cls;bar.style.display='flex';
+  bar.innerHTML=`<span>${esc(txt)}</span>${n?'<button class="secondary" onclick="kqOpenList()">Показать</button>':''}`;
+}
+const KQ_PAY={cash:'Наличные',card:'Карта',qr:'QR-код',link:'Ссылка',bank_account:'Расчётный счёт',transfer:'Перевод',split:'Раздельная'};
+function kqDrawList(){
+  const q=kqRead();
+  $('kassaQueueList').innerHTML=q.length?q.map(it=>`<div class="kq-item"><b>№${esc(it.orderNo||'—')}</b> · ${salesMoney(it.total)} · ${esc(KQ_PAY[it.payment]||it.payment)} · ${new Date(it.createdAt).toLocaleString('ru-RU')}<div class="pp-sub">${esc(it.branchName||'')}${it.employeeName?' · '+esc(it.employeeName):''} · ${esc((it.items||[]).map(x=>x.name+' × '+x.quantity).join(', '))}</div>${it.lastError?`<div class="kq-err">База не принимает: ${esc(it.lastError)}</div><button class="danger small" onclick="kqDrop('${it.uid}')">Удалить эту продажу</button>`:''}</div>`).join(''):'<p>Все продажи отправлены.</p>';
+}
+window.kqOpenList=()=>{kqDrawList();open('kassaQueueModal')};
+window.kqDrop=uid=>{const q=kqRead(),it=q.find(x=>x.uid===uid);if(!it)return;if(!confirm(`Удалить продажу №${it.orderNo||'—'} на ${salesMoney(it.total)}? Она не попадёт в отчёт. Если продажа была, внесите её заново.`))return;kqWrite(q.filter(x=>x.uid!==uid));kqDrawList();kqDrawBar()};
+$('kassaQueueSync').onclick=()=>kqSync();
+$('kassaQueueClose').onclick=()=>close('kassaQueueModal');
+
+// Смену нельзя закрыть, пока её продажи не отправлены: иначе не сойдутся наличные и отчёт.
+const kqBaseCloseShift=closeCurrentSalesShift;
+closeCurrentSalesShift=async function(){
+  const sid=salesSession?.shiftId;
+  if(sid&&kqQueueCount(sid)){
+    await kqSync();
+    const left=kqQueueCount(sid);
+    if(left){alert(`Смену пока нельзя закрыть: ${left} продаж этой смены сохранены без связи и ещё не отправлены в отчёт. Дождитесь связи (или нажмите «Показать» внизу экрана) и попробуйте снова.`);return}
+  }
+  return kqBaseCloseShift.apply(this,arguments);
+};
+$('closeShiftBtn').onclick=closeCurrentSalesShift;
+
+window.addEventListener('online',()=>kqSync());
+window.addEventListener('storage',e=>{if(e.key===KQ_KEY)kqDrawBar()});
+setInterval(()=>{if(kqRead().length)kqSync();else if(kassaOffline)Promise.resolve(db.from('sales_branches').select('id').limit(1)).then(r=>{if(!r.error||!kqIsNetErr(r.error,r.status))kqSetOffline(false)}).catch(()=>{})},30000);
+setTimeout(()=>{kqDrawBar();kqSync()},1500);
+</script>
 </body>
 </html>
