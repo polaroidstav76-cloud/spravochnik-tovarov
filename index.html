@@ -383,6 +383,10 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 .ann-people{display:flex;flex-direction:column;gap:8px}
 .ann-people button{justify-content:center}
 .ann-item{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin-top:10px}
+.ann-draft{border-color:var(--accent,#2563eb)}
+.ann-draft-list{display:flex;flex-direction:column;gap:4px;margin:8px 0;max-height:260px;overflow:auto}
+.ann-draft-list label{display:flex;gap:8px;align-items:flex-start;font-weight:400;cursor:pointer}
+.ann-draft-list input{width:auto;margin-top:3px}
 .ann-item.off{opacity:.6}
 .ann-item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .ann-tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;background:var(--ok-bg);color:var(--ok-ink)}
@@ -1038,6 +1042,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="modal" id="annModal"><div class="dialog" style="max-width:600px"><div id="annContent"></div></div></div>
 <div class="modal" id="pickupRemindModal"><div class="dialog" style="max-width:660px"><h2 style="margin-top:0">⚠ Клиенты не забрали заказы</h2><div id="pickupRemindContent"></div><div class="actions"><button id="pickupRemindOk" class="primary">Понятно</button></div></div></div>
 <div class="modal" id="annAdminModal"><div class="dialog" style="max-width:860px"><h2 style="margin-top:0">Объявления для сотрудников</h2><div class="status">Объявление покажется при открытии смены. Каждый сотрудник увидит его один раз и нажмёт «Прочитал(а)». Те, кто на выходном, увидят его в свою ближайшую смену.</div>
+<div id="annDraft"></div>
 <div class="v5-box"><div class="field"><label for="annTitle">Заголовок *</label><input id="annTitle" placeholder="Например: Новая позиция в прайсе"></div><div class="field"><label for="annBody">Текст</label><textarea id="annBody" rows="4" placeholder="Что изменилось и что нужно знать сотрудникам"></textarea></div><div class="actions" style="justify-content:flex-start"><button id="annPublish" class="primary">Опубликовать</button><span id="annStatus" class="status"></span></div></div>
 <div id="annAdminList"></div><div class="actions"><button id="closeAnnAdmin">Закрыть</button></div></div></div>
 <div class="modal" id="guideTestModal"><div class="dialog" style="max-width:760px"><h2 id="gtTitle" style="margin-top:0">Тест</h2><div id="gtContent"></div><div class="actions"><button id="closeGuideTest">Закрыть</button></div></div></div>
@@ -3774,7 +3779,50 @@ function showOneAnnouncement(x,i,n,sess){
 }
 async function openAnnAdmin(){
   open('annAdminModal');$('annStatus').textContent='';
-  await loadSalesSetup();await renderAnnAdmin();
+  await loadSalesSetup();await Promise.all([renderAnnAdmin(),renderAnnDraft()]);
+}
+// --- Черновик объявления из обновлений (справочник + касса) ---
+let annDraftRows=[],annDraftBodyEdited=false;
+const ANN_GROUPS=[['guide','new','Новое в справочнике'],['guide','edit','Обновлены карточки в справочнике'],['catalog','new','Новые позиции в кассе'],['catalog','price','Изменились цены'],['catalog','off','Больше не продаём'],['catalog','on','Снова в продаже']];
+function annPrice(v){return v==null?'':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v)+' ₽'}
+function annDraftLine(x){
+  if(x.kind==='price')return `${x.item_name}: ${annPrice(x.old_price)} → ${annPrice(x.new_price)}`;
+  if(x.source==='catalog'&&x.kind==='new'&&x.new_price!=null)return `${x.item_name} (${annPrice(x.new_price)})`;
+  return x.item_name;
+}
+function annDraftBuildBody(){
+  const on=new Set([...document.querySelectorAll('#annDraftList input:checked')].map(i=>Number(i.value)));
+  return ANN_GROUPS.map(([src,kind,label])=>{const rows=annDraftRows.filter(x=>x.source===src&&x.kind===kind&&on.has(x.id));return rows.length?label+':\n'+rows.map(x=>'• '+annDraftLine(x)).join('\n'):''}).filter(Boolean).join('\n\n');
+}
+async function renderAnnDraft(){
+  const box=$('annDraft');if(!box)return;
+  const r=await db.from('announcement_changes').select('*').eq('status','pending').order('created_at');
+  if(r.error){box.innerHTML=`<div class="status">Черновик: ошибка ${esc(r.error.message)}</div>`;return}
+  annDraftRows=r.data||[];annDraftBodyEdited=false;
+  if(!annDraftRows.length){box.innerHTML='<div class="v5-box"><b>📝 Черновик из обновлений</b><div class="status">Новых изменений нет. Когда вы добавите или поменяете карточки в справочнике или позиции и цены в кассе, здесь сам появится готовый текст объявления.</div></div>';return}
+  const groups=ANN_GROUPS.map(([src,kind,label])=>{const rows=annDraftRows.filter(x=>x.source===src&&x.kind===kind);return rows.length?`<div class="status" style="margin-top:6px"><b>${label}</b></div>`+rows.map(x=>`<label><input type="checkbox" value="${x.id}" checked><span>${esc(annDraftLine(x))}</span></label>`).join(''):''}).join('');
+  box.innerHTML=`<div class="v5-box ann-draft"><b>📝 Черновик из обновлений</b> <span class="status">(${annDraftRows.length} изм. с ${new Date(annDraftRows[0].created_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})})</span><div class="status">Снимите галочки с того, что сотрудникам знать не нужно, поправьте текст и нажмите «Опубликовать».</div><div id="annDraftList" class="ann-draft-list">${groups}</div><div class="field"><label for="annDraftTitle">Заголовок</label><input id="annDraftTitle" value="Обновления ${new Date().toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})}"></div><div class="field"><label for="annDraftBody">Текст</label><textarea id="annDraftBody" rows="8"></textarea></div><div class="actions" style="justify-content:flex-start"><button id="annDraftPublish" class="primary">Опубликовать</button><button id="annDraftRebuild" class="secondary small">Собрать текст заново</button><button id="annDraftSkip" class="secondary">Пропустить</button><span id="annDraftStatus" class="status"></span></div></div>`;
+  $('annDraftBody').value=annDraftBuildBody();
+  $('annDraftBody').oninput=()=>{annDraftBodyEdited=true};
+  $('annDraftList').onchange=()=>{if(!annDraftBodyEdited)$('annDraftBody').value=annDraftBuildBody();else $('annDraftStatus').textContent='Текст вы правили вручную, поэтому он не пересобран. Нажмите «Собрать текст заново», если нужно.'};
+  $('annDraftRebuild').onclick=()=>{$('annDraftBody').value=annDraftBuildBody();annDraftBodyEdited=false;$('annDraftStatus').textContent=''};
+  $('annDraftPublish').onclick=async()=>{
+    const title=$('annDraftTitle').value.trim(),body=$('annDraftBody').value.trim();
+    if(!title){$('annDraftStatus').textContent='Напишите заголовок.';return}
+    const all=[...document.querySelectorAll('#annDraftList input')],ids=all.filter(i=>i.checked).map(i=>Number(i.value)),skip=all.filter(i=>!i.checked).map(i=>Number(i.value));
+    if(!ids.length&&!confirm('Не выбран ни один пункт. Всё равно опубликовать текст?'))return;
+    $('annDraftPublish').disabled=true;
+    const res=await db.rpc('announcement_publish_draft',{p_title:title,p_body:body,p_ids:ids,p_skip:skip});
+    if(res.error){$('annDraftPublish').disabled=false;$('annDraftStatus').textContent='Ошибка: '+res.error.message;return}
+    $('annStatus').textContent='Черновик опубликован. Сотрудники увидят его при открытии смены.';
+    renderAnnDraft();renderAnnAdmin();
+  };
+  $('annDraftSkip').onclick=async()=>{
+    if(!confirm('Убрать эти изменения из черновика без публикации?'))return;
+    const res=await db.from('announcement_changes').update({status:'skipped',updated_at:new Date().toISOString()}).in('id',annDraftRows.map(x=>x.id)).eq('status','pending');
+    if(res.error){$('annDraftStatus').textContent='Ошибка: '+res.error.message;return}
+    renderAnnDraft();
+  };
 }
 async function renderAnnAdmin(){
   $('annAdminList').innerHTML='<div class="status">Загрузка…</div>';
