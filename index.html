@@ -4365,6 +4365,7 @@ setTimeout(()=>{kqDrawBar();kqSync()},1500);
   <div id="stockWho" class="status"></div>
   <div class="stk-tabs" role="tablist" aria-label="Склад">
     <button type="button" class="calc-tab" data-stk="bal" aria-selected="true">Остатки</button>
+    <button type="button" class="calc-tab" data-stk="buy" aria-selected="false">Закупка</button>
     <button type="button" class="calc-tab" data-stk="op" aria-selected="false">Приход и перемещение</button>
     <button type="button" class="calc-tab" data-stk="orders" aria-selected="false">Кто выполнил заказ</button>
     <button type="button" class="calc-tab" data-stk="log" aria-selected="false">Журнал</button>
@@ -4390,6 +4391,8 @@ setTimeout(()=>{kqDrawBar();kqSync()},1500);
 .stk-norms{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:var(--r-md);margin-top:8px}
 .stk-norm{display:grid;grid-template-columns:28px minmax(0,1fr) 110px;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line)}
 .stk-norm.on{background:var(--ok-bg)}
+.tile-badge.stk-buy{right:auto;left:10px;background:#2F6FED}
+.stk-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}
 @media(min-width:900px){.desk-row:has(#stockBtn){grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:700px){.stk-row,.stk-row.no-price{grid-template-columns:1fr 1fr}.stk-item{grid-template-columns:1fr}.stk-tabs{border-radius:var(--r-md);width:auto}}
 </style>
@@ -4419,12 +4422,17 @@ function stkOpts(list,sel,empty){return (empty?`<option value="">${esc(empty)}</
 async function stkLoad(){
   const r=await db.rpc('stock_state',{p_days:30});
   if(r.error){console.warn('stock_state',r.error);return false}
-  stk.data=r.data||{materials:[],balances:[],usage:[]};stkDrawBadge();return true;
+  stk.data=r.data||{materials:[],balances:[],usage:[]};
+  if(isAdmin){const p=await db.rpc('stock_purchase_get',{p_week:null,p_rebuild:false});if(!p.error)stk.buy=p.data}
+  stkDrawBadge();return true;
 }
 function stkDrawBadge(){
   const btn=$('stockBtn');if(!btn)return;const b=stkMyBranch();
   const n=b&&stk.data?stkMaterials().filter(m=>stkIsLow(m,b)).length:0;
-  let el=btn.querySelector('.tile-badge');
+  let el;
+  let buy=btn.querySelector('.stk-buy');
+  if(stkBuyIsNew()){if(!buy){buy=document.createElement('span');buy.className='tile-badge stk-buy';btn.appendChild(buy)}buy.textContent='Закупка';buy.title='Готова новая таблица закупки на эту неделю'}else buy?.remove();
+  el=btn.querySelector('.tile-badge:not(.stk-buy)');
   if(!n){el?.remove();return}
   if(!el){el=document.createElement('span');el.className='tile-badge';btn.appendChild(el)}
   el.textContent=n;el.title='Материалов заканчивается на вашем филиале: '+n;
@@ -4448,7 +4456,7 @@ function stkWho(){
 function stkTab(t){
   stk.tab=t;
   document.querySelectorAll('#stockModal [data-stk]').forEach(x=>x.setAttribute('aria-selected',x.dataset.stk===t?'true':'false'));
-  ({bal:stkDrawBal,op:stkDrawOp,orders:stkDrawOrders,log:stkDrawLog,mat:stkDrawMat}[t]||stkDrawBal)();
+  ({bal:stkDrawBal,buy:stkDrawBuy,op:stkDrawOp,orders:stkDrawOrders,log:stkDrawLog,mat:stkDrawMat}[t]||stkDrawBal)();
 }
 document.querySelectorAll('#stockModal [data-stk]').forEach(x=>x.onclick=()=>stkTab(x.dataset.stk));
 $('closeStock').onclick=()=>{close('stockModal');stkDrawBadge()};
@@ -4613,6 +4621,39 @@ window.stkCancel=async id=>{
   await stkLoad();stkLoadLog();
 };
 
+// --- Закупка ---
+// Таблица собирается в базе каждый понедельник (stock_purchase.sql): средний расход филиала за 4 недели × 2 недели минус остаток.
+const STK_BUY_SEEN='stockPurchaseSeen_v1';
+function stkBuySeen(){try{return localStorage.getItem(STK_BUY_SEEN)||''}catch(e){return''}}
+function stkBuyIsNew(){return !!(isAdmin&&stk.buy&&(stk.buy.rows||[]).length&&stk.buy.week===(stk.buy.weeks||[])[0]&&stkBuySeen()<stk.buy.week)}
+function stkWeekLabel(w){const d=stkDayStart(w),e=new Date(d);e.setDate(e.getDate()+6);const f=x=>x.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});return `${f(d)} — ${f(e)}`}
+function stkBuyCode(r){const m=stkMaterials(true).find(x=>Number(x.id)===Number(r.material_id));return (m?m.purchase_code:r.code)||''}
+async function stkDrawBuy(week,rebuild){
+  $('stockBody').innerHTML='<div class="status">Загрузка…</div>';
+  const r=await db.rpc('stock_purchase_get',{p_week:week||null,p_rebuild:!!rebuild});
+  if(r.error){$('stockBody').innerHTML=`<div class="v5-box warn">Не удалось загрузить таблицу закупки: ${esc(r.error.message)}</div>`;return}
+  stk.buy=week?stk.buy:r.data;const d=r.data;
+  if(isAdmin&&d.week===(d.weeks||[])[0]){try{localStorage.setItem(STK_BUY_SEEN,d.week)}catch(e){}}
+  stkDrawBadge();
+  const rows=d.rows||[],brIds=[...new Set(rows.flatMap(x=>x.branches.filter(b=>Number(b.need)>0).map(b=>Number(b.b))))],br=stkBranches().filter(b=>brIds.includes(Number(b.id)));
+  brIds.filter(id=>!br.some(b=>Number(b.id)===id)).forEach(id=>br.push({id,name:stkBranchName(id)}));
+  const cell=(x,b)=>{const v=x.branches.find(y=>Number(y.b)===Number(b.id));const need=v?Number(v.need):0;
+    return `<td class="num" title="${v?`Остаток ${stkQty(v.balance)} · расход в неделю ${stkQty(v.week_use)}`:''}">${need>0?`<b>${stkQty(need)}</b>`:'<span class="stk-sub">—</span>'}</td>`};
+  $('stockBody').innerHTML=`<div class="row" style="align-items:end"><div class="field"><label for="stkBuyWeek">Неделя</label><select id="stkBuyWeek">${(d.weeks||[]).map(w=>`<option value="${w}" ${w===d.week?'selected':''}>${esc(stkWeekLabel(w))}</option>`).join('')}</select></div>
+    <div class="actions" style="justify-content:flex-start;margin:0;align-self:end;border:0;padding:0"><button id="stkBuyCopy" class="secondary small" ${rows.length?'':'disabled'}>Копировать</button><button id="stkBuyPrint" class="secondary small" ${rows.length?'':'disabled'}>Печать</button>${isAdmin?'<button id="stkBuyRebuild" class="secondary small">Пересчитать сейчас</button>':''}</div></div>
+    <div class="stk-sub" style="margin:6px 0">Собрано ${d.created_at?new Date(d.created_at).toLocaleString('ru-RU',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'—'}. Новая таблица появляется каждый понедельник утром. Считается так: средний расход филиала в неделю за последние 4 недели, умноженный на 2 (неделя до следующей закупки и неделя запаса), минус остаток. Если остаток не выше минимума, материал попадает в таблицу в любом случае. Филиал без инвентаризации по материалу не учитывается.</div>
+    ${rows.length?`<div style="overflow:auto"><table class="customer-table stk-table"><thead><tr><th>Что купить</th><th>Код для закупки</th>${br.map(b=>`<th class="num">${esc(b.name)}</th>`).join('')}<th class="num">Итого заказать</th></tr></thead><tbody>${
+      rows.map(x=>{const c=stkBuyCode(x);return `<tr><td><b>${esc(x.name)}</b></td><td>${c?`<span class="stk-code">${esc(c)}</span>`:`<span class="stk-sub">${isAdmin?'не указан — добавьте в «Материалах»':'не указан'}</span>`}</td>${br.map(b=>cell(x,b)).join('')}<td class="num"><b>${stkQty(x.total)}</b> ${esc(x.unit)}</td></tr>`}).join('')}</tbody></table></div>`
+    :'<div class="v5-box info">На этой неделе закупать ничего не нужно: на всех филиалах материала хватает больше чем на 2 недели.</div>'}`;
+  $('stkBuyWeek').onchange=e=>stkDrawBuy(e.target.value);
+  if($('stkBuyRebuild'))$('stkBuyRebuild').onclick=async()=>{await stkLoad();stkDrawBuy(null,true)};
+  const lines=()=>rows.map(x=>{const c=stkBuyCode(x);return `${x.name}${c?` (код ${c})`:''} — ${stkQty(x.total)} ${x.unit}: `+br.map(b=>{const v=x.branches.find(y=>Number(y.b)===Number(b.id));return v&&Number(v.need)>0?`${b.name} ${stkQty(v.need)}`:''}).filter(Boolean).join(', ')});
+  if($('stkBuyCopy'))$('stkBuyCopy').onclick=async()=>{const t=`Закупка на неделю ${stkWeekLabel(d.week)}\n`+lines().join('\n');try{await navigator.clipboard.writeText(t);v5Toast('Таблица закупки скопирована.')}catch(e){prompt('Скопируйте текст:',t)}};
+  if($('stkBuyPrint'))$('stkBuyPrint').onclick=()=>{const w=window.open('','_blank','width=900,height=700');if(!w){alert('Разрешите всплывающие окна для печати.');return}
+    w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Закупка ${esc(stkWeekLabel(d.week))}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#111}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:6px 8px;text-align:left}td.n,th.n{text-align:right}</style></head><body><h2>Закупка расходников: ${esc(stkWeekLabel(d.week))}</h2><table><thead><tr><th>Что купить</th><th>Код</th>${br.map(b=>`<th class="n">${esc(b.name)}</th>`).join('')}<th class="n">Итого</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(stkBuyCode(x))}</td>${br.map(b=>{const v=x.branches.find(y=>Number(y.b)===Number(b.id));return `<td class="n">${v&&Number(v.need)>0?stkQty(v.need):''}</td>`}).join('')}<td class="n"><b>${stkQty(x.total)} ${esc(x.unit)}</b></td></tr>`).join('')}</tbody></table></body></html>`);
+    w.document.close();w.focus();w.print()};
+}
+
 // --- Материалы и нормы (администратор) ---
 function stkDrawMat(){
   if(!isAdmin){stkTab('bal');return}
@@ -4620,12 +4661,12 @@ function stkDrawMat(){
   const mats=stkMaterials(true);
   $('stockBody').innerHTML=`<div class="stk-sub">Материал — то, что лежит на полке: бумага, плёнка, рамки, кружки. Норма — сколько материала уходит на 1 шт. позиции прайса (фото 10×15 — 1 лист, календарь 13 листов — 13). Материал без норм по продажам не списывается.</div>
   <div class="actions" style="justify-content:flex-start"><button id="stkNewMat" class="primary">＋ Новый материал</button></div>
-  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}</td><td class="num">${stkQty(m.min_qty)}</td><td class="stk-sub">${m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${stkQty(n.qty)}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
+  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Код для закупки</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}</td><td class="num">${stkQty(m.min_qty)}</td><td>${m.purchase_code?`<span class="stk-code">${esc(m.purchase_code)}</span>`:'<span class="stk-sub">—</span>'}</td><td class="stk-sub">${m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${stkQty(n.qty)}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
   $('stkNewMat').onclick=()=>stkEditMat(null);
 }
 window.stkEditMat=id=>{
   const m=id?stkMaterials(true).find(x=>Number(x.id)===Number(id)):null;
-  stk.matEdit={id:m?.id||null,name:m?.name||'',unit:m?.unit||'шт',min_qty:m?.min_qty??0,comment:m?.comment||'',is_active:m?m.is_active:true,
+  stk.matEdit={id:m?.id||null,name:m?.name||'',unit:m?.unit||'шт',min_qty:m?.min_qty??0,comment:m?.comment||'',code:m?.purchase_code||'',is_active:m?m.is_active:true,
     norms:new Map((m?.norms||[]).map(n=>[Number(n.catalog_id),String(n.qty)]))};
   stk.matSearch='';stkDrawMatEdit();
 };
@@ -4635,7 +4676,8 @@ function stkDrawMatEdit(){
   <div class="row"><div class="field"><label for="stkMName">Название *</label><input id="stkMName" value="${esc(e.name)}" placeholder="Например: Бумага 10×15 глянец"></div>
   <div class="field"><label for="stkMUnit">Единица</label><input id="stkMUnit" value="${esc(e.unit)}" placeholder="лист, шт, м"></div>
   <div class="field"><label for="stkMMin">Минимальный остаток на филиале</label><input id="stkMMin" type="number" min="0" step="any" value="${esc(e.min_qty)}"></div></div>
-  <div class="row"><div class="field"><label for="stkMComment">Комментарий</label><input id="stkMComment" value="${esc(e.comment)}" placeholder="Где закупаем, артикул поставщика…"></div>
+  <div class="row"><div class="field"><label for="stkMCode">Код для закупки</label><input id="stkMCode" value="${esc(e.code)}" placeholder="Код или артикул в магазине, где заказываете"></div>
+  <div class="field"><label for="stkMComment">Комментарий</label><input id="stkMComment" value="${esc(e.comment)}" placeholder="Где закупаем, артикул поставщика…"></div>
   <div class="field"><label><input type="checkbox" id="stkMActive" ${e.is_active?'checked':''} style="width:auto"> Используется</label></div></div>
   <h3>Позиции прайса, на которые уходит материал</h3>
   <div class="stk-sub">Отметьте позиции и укажите, сколько материала уходит на 1 шт. Найдите, например, «10х15» и нажмите «Отметить найденные».</div>
@@ -4645,8 +4687,8 @@ function stkDrawMatEdit(){
   <div id="stkNorms" class="stk-norms"></div>
   <div id="stkMStatus" class="status"></div>
   <div class="actions" style="justify-content:flex-start"><button id="stkMSave" class="primary">Сохранить материал</button><button id="stkMBack" class="secondary">Назад к списку</button></div>`;
-  const keep=()=>{e.name=$('stkMName').value;e.unit=$('stkMUnit').value;e.min_qty=$('stkMMin').value;e.comment=$('stkMComment').value;e.is_active=$('stkMActive').checked};
-  ['stkMName','stkMUnit','stkMMin','stkMComment','stkMActive'].forEach(id=>$(id).onchange=keep);
+  const keep=()=>{e.name=$('stkMName').value;e.unit=$('stkMUnit').value;e.min_qty=$('stkMMin').value;e.comment=$('stkMComment').value;e.code=$('stkMCode').value;e.is_active=$('stkMActive').checked};
+  ['stkMName','stkMUnit','stkMMin','stkMCode','stkMComment','stkMActive'].forEach(id=>$(id).onchange=keep);
   $('stkMSearch').oninput=ev=>{stk.matSearch=ev.target.value;stkDrawNorms()};
   $('stkMAll').onclick=()=>{stkNormMatches().forEach(c=>{if(!e.norms.has(Number(c.id)))e.norms.set(Number(c.id),'1')});stkDrawNorms()};
   $('stkMBack').onclick=()=>{stk.matEdit=null;stkDrawMat()};
@@ -4656,8 +4698,9 @@ function stkDrawMatEdit(){
     const norms=[...e.norms].filter(([,q])=>Number(q)>0).map(([c,q])=>({catalog_id:c,qty:Number(q)}));
     $('stkMSave').disabled=true;st.textContent='Сохраняю…';
     const r=await db.rpc('stock_save_material',{p_id:e.id,p_name:e.name,p_unit:e.unit,p_min_qty:Number(e.min_qty)||0,p_comment:e.comment,p_is_active:e.is_active,p_norms:norms});
+    if(!r.error){const c=await db.rpc('stock_set_purchase_code',{p_id:r.data,p_code:e.code});if(c.error)r.error=c.error}
     $('stkMSave').disabled=false;
-    if(r.error){st.textContent='Ошибка: '+(/stock_materials_name_key/.test(r.error.message)?'материал с таким названием уже есть':r.error.message);return}
+    if(r.error){if(r.data)e.id=r.data;st.textContent='Ошибка: '+(/stock_materials_name_key/.test(r.error.message)?'материал с таким названием уже есть':r.error.message);return}
     stk.matEdit=null;await stkLoad();stkDrawMat();v5Toast('Материал сохранён. Новые продажи будут списывать его по нормам.');
   };
   stkDrawNorms();
