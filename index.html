@@ -4654,6 +4654,22 @@ async function stkFlushPending(){
     });
   };
 })();
+// Напоминание при открытии смены: что на филиале ниже минимума. Один раз за смену.
+document.body.insertAdjacentHTML('beforeend','<div class="modal" id="stockLowModal"><div class="dialog" style="max-width:600px"><h2 style="margin-top:0">Заканчиваются материалы</h2><div id="stockLowContent"></div><div class="actions"><button id="stockLowOpen" class="secondary">Открыть склад</button><button id="stockLowOk" class="primary">Понятно</button></div></div></div>');
+$('stockLowOk').onclick=()=>close('stockLowModal');
+$('stockLowOpen').onclick=()=>{close('stockLowModal');openStock()};
+async function stkShiftReminder(){
+  const b=stkMyBranch(),sid=salesSession?.shiftId;if(!b||!sid)return;
+  const key='stockLowShown_'+sid;try{if(sessionStorage.getItem(key))return}catch(e){}
+  if(!(await stkLoad()))return;
+  const low=stkMaterials().filter(m=>stkIsLow(m,b));if(!low.length)return;
+  const others=m=>stkBranches().filter(x=>Number(x.id)!==b&&stkBal(m.id,x.id)>Math.max(Number(m.min_qty),0)).sort((x,y)=>stkBal(m.id,y.id)-stkBal(m.id,x.id))[0];
+  $('stockLowContent').innerHTML=`<div class="stk-sub">На филиале «${esc(salesSession.branchName||stkBranchName(b))}» остаток не выше минимума. Пора закупить или попросить у соседнего филиала.</div><table class="customer-table stk-table" style="margin-top:10px"><thead><tr><th>Материал</th><th class="num">Осталось</th><th>Где есть</th></tr></thead><tbody>${low.map(m=>{const o=others(m);return `<tr><td><b>${esc(m.name)}</b></td><td class="num stk-low">${stkQty(stkBal(m.id,b))} ${esc(m.unit)}</td><td>${o?`${esc(o.name)} — ${stkQty(stkBal(m.id,o.id))} ${esc(m.unit)}`:'<span class="stk-sub">нигде нет лишнего</span>'}</td></tr>`}).join('')}</tbody></table>`;
+  try{sessionStorage.setItem(key,'1')}catch(e){}
+  open('stockLowModal');
+}
+const stkBaseShiftChecks=runShiftOpenChecks;
+runShiftOpenChecks=async function(){const r=await stkBaseShiftChecks.apply(this,arguments);try{if(!kassaOffline&&!document.querySelector('.modal.show'))await stkShiftReminder()}catch(e){console.warn(e)}return r};
 setTimeout(()=>{stkLoad();stkFlushPending()},2500);
 setInterval(()=>{if(!document.hidden){stkLoad();stkFlushPending()}},10*60000);
 </script>
