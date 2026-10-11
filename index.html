@@ -4902,5 +4902,437 @@ setInterval(()=>{if(!document.hidden){stkLoad();stkFlushPending()}},10*60000);
   if(resume==='workspace')setTimeout(()=>{if(!salesSession?.shiftId)openSalesWorkspace()},1000);
 })();
 </script>
+<div class="modal" id="scheduleModal"><div class="dialog" style="max-width:1320px">
+  <h2 style="margin-top:0">График работы</h2>
+  <div class="stk-tabs sch-tabs" role="tablist" aria-label="График работы">
+    <button type="button" class="calc-tab" data-sch="grid" aria-selected="true">График</button>
+    <button type="button" class="calc-tab sch-admin" data-sch="rules" aria-selected="false">Правила сотрудников</button>
+    <button type="button" class="calc-tab sch-admin" data-sch="req" aria-selected="false">Просьбы о выходных</button>
+    <button type="button" class="calc-tab sch-admin" data-sch="cols" aria-selected="false">Филиалы и столбцы</button>
+  </div>
+  <div id="schBody"></div>
+  <div class="actions"><button id="closeSchedule">Закрыть</button></div>
+</div></div>
+<style>
+.sch-tabs .sch-admin{display:none}body.sch-is-admin .sch-tabs .sch-admin{display:inline-block}
+.sch-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.sch-head h3{margin:0;font-family:var(--f-display);font-size:18px;min-width:190px;text-align:center}
+.sch-head .sch-nav{padding:6px 12px;min-width:0}
+.sch-badge{font-size:12.5px;font-weight:700;border-radius:999px;padding:4px 10px;border:1px solid var(--line)}
+.sch-badge.pub{background:var(--ok-bg);color:var(--ok-ink);border-color:#BFE3CB}
+.sch-badge.draft{background:var(--warn-bg);color:var(--warn-ink);border-color:#F2D29B}
+.sch-badge.dirty{background:var(--bad-bg);color:var(--bad-ink);border-color:#F3C4BD}
+.sch-tools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.sch-tools button{padding:8px 12px}
+.sch-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
+.sch-wrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.sch-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px}
+.sch-table th,.sch-table td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;white-space:nowrap}
+.sch-table thead th{position:sticky;top:0;z-index:3;background:#5B8FD6;color:#fff;font-weight:700;padding:7px 8px;text-align:left}
+.sch-table thead th small{display:block;font-weight:400;opacity:.85;font-size:11px}
+.sch-table .sch-d{position:sticky;left:0;z-index:2;background:#E4ECF7;padding:5px 8px;font-variant-numeric:tabular-nums}
+.sch-table .sch-w{background:#E4ECF7;padding:5px 8px}
+.sch-table thead th.sch-d{z-index:4;background:#5B8FD6}
+.sch-table tr.we .sch-w{color:#D92D20;font-weight:600}
+.sch-table tr.today td.sch-d,.sch-table tr.today td.sch-w{background:#FFE68A}
+.sch-c{min-width:104px}
+.sch-c span,.sch-c select{display:block;width:100%;min-height:30px;padding:5px 8px;border:0;border-radius:0;font:inherit;font-size:13.5px;background:transparent;color:inherit}
+.sch-c select{cursor:pointer;-webkit-appearance:none;appearance:none}
+.sch-c.bad{box-shadow:inset 0 0 0 2px #D92D20}
+.sch-c.hl{box-shadow:inset 0 0 0 3px var(--ink)}
+.sch-c.bad.hl{box-shadow:inset 0 0 0 3px #D92D20}
+.sch-c.dim{opacity:.35}
+.sch-side{display:flex;flex-direction:column;gap:12px}
+.sch-box{border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;background:var(--surface)}
+.sch-box h4{margin:0 0 8px;font-size:14px}
+.sch-cnt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center}
+.sch-cnt button{display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:4px 8px;min-height:0;border-radius:8px;text-align:left;font-weight:600;border:1px solid transparent}
+.sch-cnt button.on{border-color:var(--ink)}
+.sch-cnt b{font-variant-numeric:tabular-nums;text-align:right}
+.sch-cnt .off{color:var(--bad-ink)}
+.sch-dot{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.15);flex:none}
+.sch-hints{margin:0;padding:0;list-style:none;max-height:340px;overflow:auto;font-size:13px}
+.sch-hints li{padding:5px 0;border-bottom:1px dashed var(--line)}
+.sch-hints li b{white-space:nowrap}
+.sch-cards{display:grid;gap:10px}
+.sch-card{border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;background:var(--surface)}
+.sch-card.off{background:var(--sunk);opacity:.8}
+.sch-card-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.sch-card-head input[type=color]{width:42px;height:32px;padding:2px}
+.sch-card-head strong{font-size:15px}
+.sch-line{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:13.5px}
+.sch-line>span:first-child{color:var(--muted);min-width:150px}
+.sch-line label{display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+.sch-line input[type=checkbox]{width:auto}
+.sch-line input[type=number]{width:90px;padding:6px 8px;min-height:0;height:auto}
+.sch-line input[type=text]{flex:1;min-width:180px;padding:6px 10px;min-height:0;height:auto}
+.sch-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end}
+@media(min-width:900px){.desk-row:has(#scheduleBtn){grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.sch-layout{grid-template-columns:1fr}.sch-side{order:-1}.sch-wrap{max-height:none}.sch-grid4{grid-template-columns:1fr 1fr}}
+</style>
+<script>
+// ===== График работы =====
+// Таблица месяца: строки — дни, столбцы — места работы (schedule_columns: филиалы и «Вне офиса»), в клетке сотрудник.
+// Смотрят все (сотрудники — только опубликованные месяцы), меняет админ. Правила сотрудников и просьбы о выходных
+// дают подсказки и используются в «Составить черновик» (по прошлому месяцу). Таблицы — в schedule.sql.
+const SCH_MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const SCH_WD=['','пн','вт','ср','чт','пт','сб','вс'];
+const SCH_WD_FULL=['','понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'];
+let sch={y:0,m:0,tab:'grid',cols:[],rules:new Map(),people:[],months:new Map(),requests:[],cells:new Map(),dirty:false,hl:null,msg:'',editCols:null,editRules:null};
+
+function schISO(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function schDays(y,m){return new Date(y,m+1,0).getDate()}
+function schWd(y,m,d){const w=new Date(y,m,d).getDay();return w===0?7:w}
+function schShift(y,m,k){const x=new Date(y,m+k,1);return [x.getFullYear(),x.getMonth()]}
+function schMonthKey(y,m){return schISO(y,m,1)}
+function schKey(date,col,slot){return `${date}|${col}|${slot}`}
+function schCols(){return sch.cols.filter(c=>c.is_active)}
+function schPerson(id){return sch.people.find(p=>Number(p.id)===Number(id))}
+function schName(id){return schPerson(id)?.name||'—'}
+function schRule(id){return sch.rules.get(Number(id))||{person_id:Number(id),in_schedule:false,color:'#E2E8F0',days:[],column_ids:[],helper_column_ids:[],target_shifts:null,max_in_row:6,note:''}}
+function schInk(hex){const h=String(hex||'#fff').replace('#','');if(h.length<6)return '#17191E';const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return (0.299*r+0.587*g+0.114*b)/255>0.6?'#17191E':'#FFFFFF'}
+function schColTitle(c,slot){return slot>1?(slot===2?'Доп. ':'Доп. 2 ')+c.title.toLowerCase():c.title}
+function schIsWeekend(y,m,d){return schWd(y,m,d)>=6}
+function schNeed(c,y,m,d){return Number(schIsWeekend(y,m,d)?c.need_weekend:c.need_weekday)||0}
+function schOff(pid,date){return sch.requests.find(r=>r.is_active&&Number(r.person_id)===Number(pid)&&r.date_from<=date&&r.date_to>=date)}
+function schPublished(){return !!sch.months.get(schMonthKey(sch.y,sch.m))?.published}
+function schCan(){return !!isAdmin}
+function schPeopleForPick(){return sch.people.filter(p=>p.is_active&&schRule(p.id).in_schedule).sort((a,b)=>a.name.localeCompare(b.name,'ru'))}
+
+// Почему человек не подходит на это место в этот день (по правилам), без учёта занятости.
+function schRuleProblem(pid,y,m,d,colId){
+  const r=schRule(pid),wd=schWd(y,m,d),date=schISO(y,m,d);
+  if(r.days?.length&&!r.days.map(Number).includes(wd))return 'по правилам не работает в '+SCH_WD_FULL[wd];
+  if(r.column_ids?.length&&!r.column_ids.map(Number).includes(Number(colId))){const c=sch.cols.find(x=>Number(x.id)===Number(colId));return 'по правилам не работает на «'+(c?.title||'')+'»'}
+  const off=schOff(pid,date);if(off)return 'просил(а) выходной'+(off.note?' ('+off.note+')':'');
+  const p=schPerson(pid);if(p&&!p.is_active)return 'сотрудник отключён';
+  return '';
+}
+function schDayPeople(date,exceptKey){const out=[];schCols().forEach(c=>{for(let s=1;s<=c.slots;s++){const k=schKey(date,c.id,s);if(k===exceptKey)continue;const p=sch.cells.get(k);if(p)out.push(Number(p))}});return out}
+function schWorks(pid,date){return schDayPeople(date).includes(Number(pid))}
+
+async function schLoad(){
+  if(!salesBranches.length){try{await loadSalesSetup()}catch(e){}}
+  const [c,r,p,mo,rq]=await Promise.all([
+    db.from('schedule_columns').select('*').order('sort_order').order('id'),
+    db.from('schedule_rules').select('*'),
+    db.from('sales_people').select('id,name,is_active').order('name'),
+    db.from('schedule_months').select('*'),
+    db.from('schedule_requests').select('*').eq('is_active',true).order('date_from')
+  ]);
+  const err=c.error||r.error||p.error||mo.error||rq.error;if(err){sch.msg='Не удалось загрузить график: '+err.message;return false}
+  sch.cols=c.data||[];sch.people=p.data||[];sch.requests=rq.data||[];
+  sch.rules=new Map((r.data||[]).map(x=>[Number(x.person_id),x]));
+  sch.months=new Map((mo.data||[]).map(x=>[x.month,x]));
+  return schLoadCells();
+}
+async function schLoadCells(){
+  const [py,pm]=schShift(sch.y,sch.m,-1);
+  const from=schISO(py,pm,1),to=schISO(sch.y,sch.m,schDays(sch.y,sch.m));
+  const r=await db.from('schedule_cells').select('work_date,column_id,slot,person_id').gte('work_date',from).lte('work_date',to);
+  if(r.error){sch.msg='Не удалось загрузить график: '+r.error.message;return false}
+  sch.cells=new Map();(r.data||[]).forEach(x=>{if(x.person_id)sch.cells.set(schKey(x.work_date,x.column_id,x.slot),Number(x.person_id))});
+  sch.dirty=false;return true;
+}
+async function openSchedule(){
+  document.body.classList.toggle('sch-is-admin',schCan());
+  const t=new Date();if(!sch.y){sch.y=t.getFullYear();sch.m=t.getMonth()}
+  if(!schCan()&&sch.tab!=='grid')sch.tab='grid';
+  if(sch.hl==null&&salesSession?.personId)sch.hl=Number(salesSession.personId);
+  $('schBody').innerHTML='<div class="status">Загрузка…</div>';
+  open('scheduleModal');
+  sch.msg='';await schLoad();schTab(sch.tab);
+}
+function schTab(t){
+  if(t!=='grid'&&!schCan())t='grid';
+  sch.tab=t;
+  document.querySelectorAll('#scheduleModal [data-sch]').forEach(x=>x.setAttribute('aria-selected',x.dataset.sch===t?'true':'false'));
+  ({grid:schDrawGrid,rules:schDrawRules,req:schDrawReq,cols:schDrawCols}[t]||schDrawGrid)();
+}
+document.querySelectorAll('#scheduleModal [data-sch]').forEach(x=>x.onclick=()=>{if(sch.tab==='grid'&&sch.dirty&&x.dataset.sch!=='grid'&&!confirm('В графике есть несохранённые изменения. Перейти без сохранения?'))return;if(sch.dirty&&x.dataset.sch!=='grid'){schLoadCells().then(()=>schTab(x.dataset.sch));return}schTab(x.dataset.sch)});
+$('closeSchedule').onclick=()=>{if(sch.dirty&&!confirm('В графике есть несохранённые изменения. Закрыть без сохранения?'))return;sch.dirty=false;close('scheduleModal')};
+
+// --- Проверка графика: подсказки по клеткам и общий список ---
+function schCheck(){
+  const y=sch.y,m=sch.m,n=schDays(y,m),cell=new Map(),list=[],counts=new Map();
+  const add=(k,t)=>{if(!cell.has(k))cell.set(k,[]);cell.get(k).push(t)};
+  const cols=schCols();
+  // Сколько дней подряд человек уже отработал на конец прошлого месяца.
+  const run=new Map();const [py,pm]=schShift(y,m,-1),pn=schDays(py,pm);
+  sch.people.forEach(p=>{let k=0;for(let d=pn;d>=1;d--){if(schWorks(p.id,schISO(py,pm,d)))k++;else break}if(k)run.set(Number(p.id),k)});
+  const runFlag=new Set();
+  for(let d=1;d<=n;d++){
+    const date=schISO(y,m,d),seen=new Map(),dl=`${String(d).padStart(2,'0')}.${String(m+1).padStart(2,'0')}`;
+    cols.forEach(c=>{
+      let filled=0,helperFor=null;
+      for(let s=1;s<=c.slots;s++){
+        const k=schKey(date,c.id,s),pid=sch.cells.get(k);if(!pid)continue;filled++;
+        if(!seen.has(pid))seen.set(pid,[]);seen.get(pid).push(k);
+        const pr=schRuleProblem(pid,y,m,d,c.id);if(pr){add(k,schName(pid)+' '+pr);list.push({d,t:`<b>${dl}</b> ${esc(schName(pid))} ${esc(pr)}.`})}
+        if(schRule(pid).helper_column_ids?.map(Number).includes(Number(c.id)))helperFor=pid;
+      }
+      const need=Math.max(schNeed(c,y,m,d),helperFor?2:0);
+      if(filled<need){
+        if(helperFor&&filled<2&&schNeed(c,y,m,d)<2)list.push({d,t:`<b>${dl}</b> «${esc(c.title)}»: ${esc(schName(helperFor))} нужен помощник.`});
+        else list.push({d,t:`<b>${dl}</b> «${esc(c.title)}»: ${filled?'не хватает '+(need-filled)+' чел.':'никого нет'}.`});
+      }
+    });
+    seen.forEach((keys,pid)=>{
+      counts.set(pid,(counts.get(pid)||0)+keys.length);
+      if(keys.length>1){keys.forEach(k=>add(k,schName(pid)+' стоит в двух местах в этот день'));list.push({d,t:`<b>${dl}</b> ${esc(schName(pid))} стоит в двух местах сразу.`})}
+    });
+    sch.people.forEach(p=>{
+      const pid=Number(p.id);
+      if(!seen.has(pid)){run.delete(pid);return}
+      const k=(run.get(pid)||0)+1;run.set(pid,k);
+      const max=Number(schRule(pid).max_in_row)||0;
+      if(max&&k>max){seen.get(pid).forEach(x=>add(x,schName(pid)+': '+k+'-й день подряд (правило — не больше '+max+')'));if(!runFlag.has(pid+'|'+(d-k))){runFlag.add(pid+'|'+(d-k));list.push({d,t:`<b>${dl}</b> ${esc(p.name)} работает больше ${max} дней подряд.`})}}
+    });
+  }
+  const tot=[];
+  counts.forEach((c,pid)=>{const t=schRule(pid).target_shifts;if(t>0&&Math.abs(c-t)>=2)tot.push(`${esc(schName(pid))}: ${c} смен, по правилам ${t}.`)});
+  return {cell,list,counts,tot};
+}
+
+// --- Вкладка «График» ---
+function schDrawGrid(){
+  const y=sch.y,m=sch.m,n=schDays(y,m),cols=schCols(),admin=schCan(),pub=schPublished();
+  const today=salesTodayISO(),chk=schCheck();
+  const has=[...sch.cells.keys()].some(k=>k.startsWith(schISO(y,m,1).slice(0,8)));
+  let badge='';
+  if(admin)badge=sch.dirty?'<span class="sch-badge dirty">Есть несохранённые изменения</span>':pub?'<span class="sch-badge pub">Опубликован: видят все</span>':has?'<span class="sch-badge draft">Черновик: сотрудники не видят</span>':'<span class="sch-badge draft">Месяц ещё не составлен</span>';
+  let h=`<div class="sch-head"><button class="sch-nav secondary" id="schPrev" aria-label="Предыдущий месяц">‹</button><h3>${SCH_MONTHS[m]} ${y}</h3><button class="sch-nav secondary" id="schNext" aria-label="Следующий месяц">›</button>${badge}</div>`;
+  if(admin)h+=`<div class="sch-tools"><button id="schDraft" class="secondary">Составить черновик по прошлому месяцу</button><button id="schSave" class="secondary">Сохранить черновик</button>${pub?'<button id="schSavePub" class="primary">Сохранить</button><button id="schHide" class="secondary">Скрыть от сотрудников</button>':'<button id="schSavePub" class="primary">Сохранить и показать всем</button>'}${has||sch.dirty?'<button id="schClear" class="secondary">Очистить месяц</button>':''}</div>`;
+  if(sch.msg)h+=`<div class="status sales-warning" style="padding:8px 12px;border-radius:10px;border:1px solid;margin-bottom:10px">${esc(sch.msg)}</div>`;
+  if(!admin&&!pub){$('schBody').innerHTML=h+'<div class="status" style="padding:20px 0">График на этот месяц ещё не готов.</div>';schBindNav();return}
+  if(!cols.length){$('schBody').innerHTML=h+'<div class="status">Столбцы графика не настроены.</div>';schBindNav();return}
+  const pick=schPeopleForPick();
+  let t='<table class="sch-table"><thead><tr><th class="sch-d">Дата</th><th>День</th>';
+  cols.forEach(c=>{const b=salesBranches.find(x=>Number(x.id)===Number(c.branch_id));for(let s=1;s<=c.slots;s++)t+=`<th>${esc(schColTitle(c,s))}${s===1&&b?`<small>${esc(b.name)}</small>`:'<small>&nbsp;</small>'}</th>`});
+  t+='</tr></thead><tbody>';
+  for(let d=1;d<=n;d++){
+    const date=schISO(y,m,d),wd=schWd(y,m,d);
+    t+=`<tr class="${wd>=6?'we':''} ${date===today?'today':''}"><td class="sch-d">${String(d).padStart(2,'0')}.${String(m+1).padStart(2,'0')}</td><td class="sch-w">${SCH_WD_FULL[wd]}</td>`;
+    cols.forEach(c=>{for(let s=1;s<=c.slots;s++){
+      const k=schKey(date,c.id,s),pid=sch.cells.get(k),r=pid?schRule(pid):null;
+      const bg=r?r.color:'transparent',ink=r?schInk(r.color):'inherit';
+      const iss=chk.cell.get(k),cls=['sch-c'];if(iss)cls.push('bad');if(sch.hl&&pid===sch.hl)cls.push('hl');else if(sch.hl&&!admin&&pid)cls.push('dim');
+      const tip=iss?iss.join('; '):'';
+      if(admin){
+        const busy=new Set(schDayPeople(date,k));
+        const opts=['<option value="">—</option>'].concat(pick.concat(pid&&!pick.some(p=>Number(p.id)===pid)?[schPerson(pid)||{id:pid,name:'—'}]:[]).map(p=>{
+          const pr=schRuleProblem(p.id,y,m,d,c.id)||(busy.has(Number(p.id))?'уже стоит в этот день':'');
+          return `<option value="${p.id}" ${Number(p.id)===pid?'selected':''}>${esc(p.name)}${pr?' ⚠ '+esc(pr):''}</option>`}));
+        t+=`<td class="${cls.join(' ')}" style="background:${bg};color:${ink}" title="${esc(tip)}"><select data-k="${k}" aria-label="${esc(schColTitle(c,s))}, ${d} число" style="color:${ink}">${opts.join('')}</select></td>`;
+      }else t+=`<td class="${cls.join(' ')}" style="background:${bg};color:${ink}" title="${esc(tip)}"><span>${pid?esc(schName(pid)):''}</span></td>`;
+    }});
+    t+='</tr>';
+  }
+  t+='</tbody></table>';
+  // Счётчик смен
+  const ids=new Set([...chk.counts.keys()]);if(admin)pick.forEach(p=>ids.add(Number(p.id)));
+  const rows=[...ids].map(id=>({id,name:schName(id),c:chk.counts.get(id)||0,r:schRule(id)})).sort((a,b)=>b.c-a.c||a.name.localeCompare(b.name,'ru'));
+  let side=`<div class="sch-box"><h4>Смен за месяц</h4><div class="sch-cnt">${rows.map(x=>{const t=Number(x.r.target_shifts);const off=admin&&t>0&&Math.abs(x.c-t)>=2;return `<button type="button" data-hl="${x.id}" class="${sch.hl===x.id?'on':''}" title="Подсветить смены"><span class="sch-dot" style="background:${esc(x.r.color)}"></span>${esc(x.name)}</button><b class="${off?'off':''}">${x.c}${admin&&t>0?' / '+t:''}</b>`}).join('')||'<span class="status">Пока пусто.</span>'}</div><div class="status" style="font-size:12px;margin-top:6px">Нажмите на имя, чтобы подсветить смены.${admin?' Через «/» — сколько смен по правилам.':''}</div></div>`;
+  if(admin){
+    const items=chk.tot.map(x=>`<li>${x}</li>`).concat(chk.list.sort((a,b)=>a.d-b.d).map(x=>`<li>${x.t}</li>`));
+    side+=`<div class="sch-box"><h4>Подсказки${items.length?' ('+items.length+')':''}</h4>${items.length?`<ul class="sch-hints">${items.join('')}</ul>`:'<div class="status">Всё по правилам.</div>'}<div class="status" style="font-size:12px;margin-top:6px">Клетки с проблемой обведены красным, наведите или нажмите, чтобы увидеть причину. В списке выбора ⚠ — кого лучше не ставить.</div></div>`;
+  }
+  $('schBody').innerHTML=h+`<div class="sch-layout"><div class="sch-wrap">${t}</div><div class="sch-side">${side}</div></div>`;
+  schBindNav();
+  $('schBody').querySelectorAll('[data-hl]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.hl);sch.hl=sch.hl===id?null:id;schDrawGrid()});
+  $('schBody').querySelectorAll('select[data-k]').forEach(s=>s.onchange=()=>{if(s.value)sch.cells.set(s.dataset.k,Number(s.value));else sch.cells.delete(s.dataset.k);sch.dirty=true;sch.msg='';const sc=$('schBody').querySelector('.sch-wrap'),top=sc.scrollTop,left=sc.scrollLeft;schDrawGrid();const nw=$('schBody').querySelector('.sch-wrap');nw.scrollTop=top;nw.scrollLeft=left});
+  if(admin){
+    $('schDraft').onclick=schMakeDraft;
+    $('schSave').onclick=()=>schSave(pub);
+    $('schSavePub').onclick=()=>schSave(true);
+    if($('schHide'))$('schHide').onclick=()=>schSave(false);
+    if($('schClear'))$('schClear').onclick=()=>{if(!confirm('Очистить все клетки этого месяца? Изменение сохранится, только когда вы нажмёте «Сохранить».'))return;const pre=schISO(y,m,1).slice(0,8);[...sch.cells.keys()].forEach(k=>{if(k.startsWith(pre))sch.cells.delete(k)});sch.dirty=true;schDrawGrid()};
+  }
+}
+function schBindNav(){
+  const go=async k=>{if(sch.dirty&&!confirm('В графике есть несохранённые изменения. Перейти без сохранения?'))return;[sch.y,sch.m]=schShift(sch.y,sch.m,k);sch.msg='';$('schBody').querySelector('.sch-layout')?.style.setProperty('opacity','.5');await schLoadCells();schDrawGrid()};
+  $('schPrev').onclick=()=>go(-1);$('schNext').onclick=()=>go(1);
+}
+async function schSave(publish){
+  const y=sch.y,m=sch.m,n=schDays(y,m),rows=[];
+  schCols().forEach(c=>{for(let d=1;d<=n;d++){const date=schISO(y,m,d);for(let s=1;s<=c.slots;s++)rows.push({work_date:date,column_id:c.id,slot:s,person_id:sch.cells.get(schKey(date,c.id,s))||null,updated_at:new Date().toISOString()})}});
+  sch.msg='Сохраняю…';schDrawGrid();
+  const r=await db.from('schedule_cells').upsert(rows,{onConflict:'work_date,column_id,slot'});
+  if(r.error){sch.msg='Ошибка сохранения: '+r.error.message;schDrawGrid();return}
+  const mo=await db.from('schedule_months').upsert({month:schMonthKey(y,m),published:!!publish,updated_at:new Date().toISOString()},{onConflict:'month'}).select().single();
+  if(mo.error){sch.msg='График сохранён, но статус месяца не обновился: '+mo.error.message;schDrawGrid();return}
+  sch.months.set(mo.data.month,mo.data);sch.dirty=false;
+  sch.msg=publish?'Сохранено. График видят все сотрудники.':'Сохранено как черновик. Сотрудники его пока не видят.';
+  schDrawGrid();
+}
+
+// --- Черновик на месяц по прошлому месяцу и правилам ---
+function schMakeDraft(){
+  const y=sch.y,m=sch.m,n=schDays(y,m),[py,pm]=schShift(y,m,-1),pn=schDays(py,pm),cols=schCols();
+  const pre=schISO(y,m,1).slice(0,8);
+  if([...sch.cells.keys()].some(k=>k.startsWith(pre))&&!confirm('В этом месяце уже есть смены. Заменить их черновиком? Изменение сохранится, только когда вы нажмёте «Сохранить».'))return;
+  [...sch.cells.keys()].forEach(k=>{if(k.startsWith(pre))sch.cells.delete(k)});
+  const pool=schPeopleForPick().filter(p=>schRule(p.id).target_shifts!==0).map(p=>Number(p.id));
+  const usable=pid=>pool.includes(Number(pid));
+  // n-й такой же день недели прошлого месяца
+  const tmpl=d=>{const wd=schWd(y,m,d),nth=Math.ceil(d/7),list=[];for(let x=1;x<=pn;x++)if(schWd(py,pm,x)===wd)list.push(x);return list[Math.min(nth,list.length)-1]};
+  const prevHas=[...sch.cells.keys()].some(k=>k.startsWith(schISO(py,pm,1).slice(0,8)));
+  // где кто чаще работал в прошлом месяце
+  const fam=new Map();sch.cells.forEach((pid,k)=>{if(!k.startsWith(schISO(py,pm,1).slice(0,8)))return;const col=k.split('|')[1];fam.set(pid+'|'+col,(fam.get(pid+'|'+col)||0)+1)});
+  const run=new Map();pool.forEach(pid=>{let k=0;for(let d=pn;d>=1;d--){if(schWorks(pid,schISO(py,pm,d)))k++;else break}run.set(pid,k)});
+  const cnt=new Map(pool.map(p=>[p,0]));
+  const totalNeed=(()=>{let s=0;for(let d=1;d<=n;d++)cols.forEach(c=>s+=schNeed(c,y,m,d));return s})();
+  const noTarget=pool.filter(p=>!(schRule(p).target_shifts>0));
+  const fixed=pool.reduce((a,p)=>a+(schRule(p).target_shifts>0?Number(schRule(p).target_shifts):0),0);
+  const dflt=noTarget.length?Math.max(1,Math.round((totalNeed-fixed)/noTarget.length)):0;
+  const target=pid=>schRule(pid).target_shifts>0?Number(schRule(pid).target_shifts):dflt;
+  const ok=(pid,d,colId,busy)=>usable(pid)&&!busy.has(pid)&&!schRuleProblem(pid,y,m,d,colId)&&(run.get(pid)||0)<(Number(schRule(pid).max_in_row)||99);
+  for(let d=1;d<=n;d++){
+    const date=schISO(y,m,d),busy=new Set(),td=prevHas?tmpl(d):null;
+    // 1) повторяем тот же день прошлого месяца, если не нарушает правила
+    cols.forEach(c=>{for(let s=1;s<=c.slots;s++){if(!td)continue;const pid=sch.cells.get(schKey(schISO(py,pm,td),c.id,s));if(pid&&ok(pid,d,c.id,busy)){sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid)}}});
+    // 2) дозаполняем обязательные места
+    cols.forEach(c=>{
+      const filled=()=>{const a=[];for(let s=1;s<=c.slots;s++){const p=sch.cells.get(schKey(date,c.id,s));if(p)a.push(p)}return a};
+      const need=()=>Math.min(c.slots,Math.max(schNeed(c,y,m,d),filled().some(p=>schRule(p).helper_column_ids?.map(Number).includes(Number(c.id)))?2:0));
+      let guard=0;
+      while(filled().length<need()&&guard++<3){
+        const cand=pool.filter(pid=>ok(pid,d,c.id,busy)).map(pid=>{const t=target(pid)||1,r=schRule(pid);return {pid,score:(cnt.get(pid)+1)/(t*d/n)-((fam.get(pid+'|'+c.id)||0)>0?0.15:0)-(r.column_ids?.length===1?0.2:0)}}).sort((a,b)=>a.score-b.score);
+        let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;
+        if(!cand.length){
+          // Никого свободного: переводим человека с необязательного места (например «Вне офиса» или помощника).
+          let mv=null;
+          cols.forEach(o=>{if(mv||o===c)return;for(let os=o.slots;os>schNeed(o,y,m,d);os--){const k=schKey(date,o.id,os),pid=sch.cells.get(k);if(pid&&!schRuleProblem(pid,y,m,d,c.id)&&!schRule(pid).helper_column_ids?.map(Number).includes(Number(o.id))){mv={k,pid};break}}});
+          if(!mv)break;
+          sch.cells.delete(mv.k);sch.cells.set(schKey(date,c.id,s),mv.pid);continue;
+        }
+        sch.cells.set(schKey(date,c.id,s),cand[0].pid);busy.add(cand[0].pid);
+      }
+    });
+    pool.forEach(pid=>{if(busy.has(pid)){run.set(pid,(run.get(pid)||0)+1);cnt.set(pid,cnt.get(pid)+1)}else run.set(pid,0)});
+  }
+  // 3) выравниваем число смен: передаём смены от тех, у кого перебор, тем, у кого недобор
+  const inRow=(pid,d)=>{let k=1;for(let x=d-1;x>=1&&schWorks(pid,schISO(y,m,x));x--)k++;for(let x=d+1;x<=n&&schWorks(pid,schISO(y,m,x));x++)k++;return k};
+  for(let it=0;it<300;it++){
+    const over=pool.filter(p=>target(p)&&cnt.get(p)-target(p)>=2).sort((a,b)=>(cnt.get(b)-target(b))-(cnt.get(a)-target(a)));
+    const under=pool.filter(p=>target(p)&&target(p)-cnt.get(p)>=1).sort((a,b)=>(target(b)-cnt.get(b))-(target(a)-cnt.get(a)));
+    let moved=false;
+    outer:for(const o of over)for(const u of under){
+      for(let d=n;d>=1;d--){const date=schISO(y,m,d);if(schWorks(u,date))continue;
+        for(const c of cols)for(let s=1;s<=c.slots;s++){const k=schKey(date,c.id,s);if(sch.cells.get(k)!==o||schRuleProblem(u,y,m,d,c.id))continue;
+          sch.cells.set(k,u);
+          if(inRow(u,d)>(Number(schRule(u).max_in_row)||99)){sch.cells.set(k,o);continue}
+          cnt.set(o,cnt.get(o)-1);cnt.set(u,cnt.get(u)+1);moved=true;break outer}}
+    }
+    if(!moved)break;
+  }
+  sch.dirty=true;
+  const chk=schCheck();
+  sch.msg=(prevHas?'Черновик составлен по прошлому месяцу и правилам.':'В прошлом месяце нет графика, черновик составлен только по правилам.')+(chk.list.length+chk.tot.length?` Подсказок: ${chk.list.length+chk.tot.length}, посмотрите справа.`:'')+' Проверьте и нажмите «Сохранить».';
+  schDrawGrid();
+}
+
+// --- Вкладка «Правила сотрудников» ---
+function schDrawRules(){
+  const cols=schCols(),people=sch.people.filter(p=>p.is_active).sort((a,b)=>(schRule(b.id).in_schedule-schRule(a.id).in_schedule)||a.name.localeCompare(b.name,'ru'));
+  if(!sch.editRules)sch.editRules=new Map(people.map(p=>{const r=schRule(p.id);return [Number(p.id),{...r,days:(r.days||[]).map(Number),column_ids:(r.column_ids||[]).map(Number),helper_column_ids:(r.helper_column_ids||[]).map(Number)}]}));
+  const E=sch.editRules;
+  const box=(pid,field,val,label)=>`<label><input type="checkbox" data-p="${pid}" data-f="${field}" data-v="${val}" ${E.get(pid)[field].includes(val)?'checked':''}>${esc(label)}</label>`;
+  let h=`<div class="status" style="margin-bottom:10px">Ничего не отмечено в «дни» или «где работает» — значит можно в любые дни и на любом месте. Эти правила используются в подсказках и при составлении черновика.</div><div class="sch-cards">`;
+  people.forEach(p=>{const pid=Number(p.id),r=E.get(pid);
+    h+=`<div class="sch-card ${r.in_schedule?'':'off'}"><div class="sch-card-head"><input type="color" data-p="${pid}" data-f="color" value="${esc(/^#[0-9a-f]{6}$/i.test(r.color)?r.color:'#e2e8f0')}" aria-label="Цвет ${esc(p.name)}"><strong>${esc(p.name)}</strong><label class="sch-line" style="margin:0"><input type="checkbox" data-p="${pid}" data-f="in_schedule" ${r.in_schedule?'checked':''}> работает по графику</label></div>`;
+    if(r.in_schedule){
+      h+=`<div class="sch-line"><span>Дни недели</span>${[1,2,3,4,5,6,7].map(w=>box(pid,'days',w,SCH_WD[w])).join('')}</div>`;
+      h+=`<div class="sch-line"><span>Где может работать</span>${cols.map(c=>box(pid,'column_ids',Number(c.id),c.title)).join('')}</div>`;
+      h+=`<div class="sch-line"><span>Нужен помощник на</span>${cols.filter(c=>c.slots>1).map(c=>box(pid,'helper_column_ids',Number(c.id),c.title)).join('')||'<span class="status">нет столбцов, где можно двоих</span>'}</div>`;
+      h+=`<div class="sch-line"><span>Смен в месяц</span><input type="number" min="0" max="31" data-p="${pid}" data-f="target_shifts" value="${r.target_shifts??''}" placeholder="любое"><span class="status" style="min-width:0">0 — ставить только вручную</span></div>`;
+      h+=`<div class="sch-line"><span>Подряд не больше</span><input type="number" min="1" max="31" data-p="${pid}" data-f="max_in_row" value="${r.max_in_row??6}"> дней</div>`;
+      h+=`<div class="sch-line"><span>Заметка</span><input type="text" data-p="${pid}" data-f="note" value="${esc(r.note||'')}" placeholder="например: учится по понедельникам"></div>`;
+    }
+    h+='</div>';
+  });
+  h+=`</div><div class="sch-tools" style="margin-top:12px"><button id="schRulesSave" class="primary">Сохранить правила</button><span id="schRulesMsg" class="status"></span></div>`;
+  $('schBody').innerHTML=h;
+  $('schBody').querySelectorAll('[data-f]').forEach(x=>x.onchange=()=>{
+    const r=E.get(Number(x.dataset.p)),f=x.dataset.f;
+    if(x.dataset.v!=null){const v=Number(x.dataset.v);r[f]=x.checked?[...new Set([...r[f],v])].sort((a,b)=>a-b):r[f].filter(z=>z!==v)}
+    else if(f==='in_schedule'){r.in_schedule=x.checked;schDrawRules();return}
+    else if(f==='target_shifts')r[f]=x.value===''?null:Math.max(0,Number(x.value));
+    else if(f==='max_in_row')r[f]=Math.max(1,Number(x.value)||6);
+    else r[f]=x.value;
+  });
+  $('schRulesSave').onclick=async()=>{
+    const rows=[...E.values()].map(r=>({person_id:r.person_id,in_schedule:!!r.in_schedule,color:r.color||'#E2E8F0',days:r.days,column_ids:r.column_ids,helper_column_ids:r.helper_column_ids,target_shifts:r.target_shifts,max_in_row:r.max_in_row||6,note:r.note||null,updated_at:new Date().toISOString()}));
+    $('schRulesMsg').textContent='Сохраняю…';
+    const res=await db.from('schedule_rules').upsert(rows,{onConflict:'person_id'});
+    if(res.error){$('schRulesMsg').textContent='Ошибка: '+res.error.message;return}
+    rows.forEach(r=>sch.rules.set(Number(r.person_id),r));
+    $('schRulesMsg').textContent='Правила сохранены.';
+  };
+}
+
+// --- Вкладка «Просьбы о выходных» ---
+function schDrawReq(){
+  const people=schPeopleForPick(),fmt=s=>s.split('-').reverse().slice(0,2).join('.');
+  const [ny,nm]=schShift(sch.y,sch.m,0);
+  let h=`<div class="status" style="margin-bottom:10px">Например: «Вика не может 1–2 и 10–11 числа». В эти дни её не поставит черновик, а в графике появится подсказка.</div>
+  <div class="sch-grid4"><div class="field"><label for="schReqP">Сотрудник</label><select id="schReqP">${people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+  <div class="field"><label for="schReqFrom">С</label><input type="date" id="schReqFrom" value="${schISO(ny,nm,1)}"></div>
+  <div class="field"><label for="schReqTo">По</label><input type="date" id="schReqTo" value="${schISO(ny,nm,1)}"></div>
+  <div class="field"><label for="schReqNote">Причина (необязательно)</label><input id="schReqNote" placeholder="например: экзамен"></div></div>
+  <div class="sch-tools"><button id="schReqAdd" class="primary">Добавить</button><span id="schReqMsg" class="status"></span></div>`;
+  const list=sch.requests.filter(r=>r.is_active&&r.date_to>=schISO(...schShift(sch.y,sch.m,-1),1)).sort((a,b)=>a.date_from.localeCompare(b.date_from));
+  h+=`<div class="sch-cards">${list.map(r=>`<div class="sch-card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><span class="sch-dot" style="background:${esc(schRule(r.person_id).color)};vertical-align:-2px"></span> <b>${esc(schName(r.person_id))}</b> — ${r.date_from===r.date_to?fmt(r.date_from):fmt(r.date_from)+'–'+fmt(r.date_to)}${r.note?' · '+esc(r.note):''}</div><button class="secondary" data-rq="${r.id}">Убрать</button></div>`).join('')||'<div class="status">Просьб пока нет.</div>'}</div>`;
+  $('schBody').innerHTML=h;
+  $('schReqFrom').onchange=()=>{if($('schReqTo').value<$('schReqFrom').value)$('schReqTo').value=$('schReqFrom').value};
+  $('schReqAdd').onclick=async()=>{
+    const row={person_id:Number($('schReqP').value),date_from:$('schReqFrom').value,date_to:$('schReqTo').value||$('schReqFrom').value,note:$('schReqNote').value.trim()||null};
+    if(!row.person_id||!row.date_from){$('schReqMsg').textContent='Выберите сотрудника и дату.';return}
+    if(row.date_to<row.date_from)[row.date_from,row.date_to]=[row.date_to,row.date_from];
+    const r=await db.from('schedule_requests').insert(row).select().single();
+    if(r.error){$('schReqMsg').textContent='Ошибка: '+r.error.message;return}
+    sch.requests.push(r.data);schDrawReq();
+  };
+  $('schBody').querySelectorAll('[data-rq]').forEach(b=>b.onclick=async()=>{
+    const r=await db.from('schedule_requests').update({is_active:false}).eq('id',Number(b.dataset.rq));
+    if(r.error){alert('Ошибка: '+r.error.message);return}
+    sch.requests=sch.requests.filter(x=>Number(x.id)!==Number(b.dataset.rq));schDrawReq();
+  });
+}
+
+// --- Вкладка «Филиалы и столбцы» ---
+function schDrawCols(){
+  if(!sch.editCols)sch.editCols=sch.cols.map(c=>({...c}));
+  const E=sch.editCols,branches=salesBranches.filter(b=>!b.is_test);
+  const num=(i,f,min,max,label)=>`<div class="field"><label>${label}</label><input type="number" min="${min}" max="${max}" data-i="${i}" data-f="${f}" value="${E[i][f]}"></div>`;
+  let h=`<div class="status" style="margin-bottom:10px">Столбцы таблицы графика. «Можно поставить человек» — сколько клеток в этот день (второй — помощник, необязательный). «Нужно в будни/выходные» — сколько людей обязательно, иначе будет подсказка.</div><div class="sch-cards">`;
+  E.forEach((c,i)=>{h+=`<div class="sch-card ${c.is_active?'':'off'}"><div class="sch-grid4">
+    <div class="field"><label>Название в таблице</label><input data-i="${i}" data-f="title" value="${esc(c.title)}"></div>
+    <div class="field"><label>Филиал</label><select data-i="${i}" data-f="branch_id"><option value="">— не филиал (вне офиса)</option>${branches.map(b=>`<option value="${b.id}" ${Number(b.id)===Number(c.branch_id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+    ${num(i,'sort_order',0,99,'Порядок')}${num(i,'slots',1,3,'Можно поставить человек')}${num(i,'need_weekday',0,3,'Нужно в будни')}${num(i,'need_weekend',0,3,'Нужно в выходные')}
+    <div class="field"><label><input type="checkbox" data-i="${i}" data-f="is_active" ${c.is_active?'checked':''} style="width:auto"> Показывать в графике</label></div></div></div>`});
+  h+=`</div><div class="sch-tools" style="margin-top:12px"><button id="schColAdd" class="secondary">＋ Добавить столбец</button><button id="schColSave" class="primary">Сохранить</button><span id="schColMsg" class="status"></span></div>`;
+  $('schBody').innerHTML=h;
+  $('schBody').querySelectorAll('[data-f]').forEach(x=>x.onchange=()=>{const c=E[Number(x.dataset.i)],f=x.dataset.f;
+    if(f==='is_active')c[f]=x.checked;else if(f==='branch_id')c[f]=x.value?Number(x.value):null;else if(f==='title')c[f]=x.value;else c[f]=Number(x.value)||0;
+    if(f==='slots')c.slots=Math.min(3,Math.max(1,c.slots));if(f==='is_active')schDrawCols()});
+  $('schColAdd').onclick=()=>{E.push({title:'Новый столбец',branch_id:null,sort_order:E.length+1,slots:1,need_weekday:1,need_weekend:1,is_active:true});schDrawCols()};
+  $('schColSave').onclick=async()=>{
+    if(E.some(c=>!String(c.title||'').trim())){$('schColMsg').textContent='У каждого столбца должно быть название.';return}
+    $('schColMsg').textContent='Сохраняю…';
+    const clean=c=>({title:String(c.title).trim(),branch_id:c.branch_id||null,sort_order:c.sort_order||0,slots:Math.min(3,Math.max(1,c.slots||1)),need_weekday:Math.min(3,Math.max(0,c.need_weekday||0)),need_weekend:Math.min(3,Math.max(0,c.need_weekend||0)),is_active:!!c.is_active});
+    for(const c of E){const r=c.id?await db.from('schedule_columns').update(clean(c)).eq('id',c.id):await db.from('schedule_columns').insert(clean(c));if(r.error){$('schColMsg').textContent='Ошибка: '+r.error.message;return}}
+    const r=await db.from('schedule_columns').select('*').order('sort_order').order('id');if(!r.error)sch.cols=r.data||[];
+    sch.editCols=null;schDrawCols();$('schColMsg').textContent='Сохранено.';
+  };
+}
+
+// --- Плитка на главной ---
+(()=>{
+  const ref=$('reportsHomeBtn');
+  ref.insertAdjacentHTML('beforebegin','<button id="scheduleBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3"/></svg><span class="tile-name">График работы</span></button>');
+  $('scheduleBtn').onclick=()=>{sch.editRules=null;sch.editCols=null;openSchedule()};
+})();
+</script>
 </body>
 </html>
