@@ -197,3 +197,6 @@ revoke execute on function public.daily_report_send(date) from public, anon, aut
 revoke execute on function public.rep_person(bigint) from public, anon, authenticated;
 
 select cron.schedule('daily-report','0 18 * * *','select public.daily_report_send()');
+
+-- Получатель: чат Рустама (взят из getUpdates после его сообщения боту). Ключ бота в репозиторий не кладём.
+-- insert into public.report_recipients(chat_id,name) values (<chat_id>,'Рустам');
