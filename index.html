@@ -237,6 +237,9 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
 .dialog .sticky-dialog-close{float:right;margin:0 0 8px 12px!important}
 .dialog .sticky-dialog-close,.dialog button[id^="close"]{background:var(--surface);color:var(--ink);border:1px solid var(--line-2);box-shadow:0 4px 14px -6px rgba(23,25,30,.25)}
 .dialog .sticky-dialog-close:hover{border-color:var(--ink)}
+.dialog .sticky-dialog-close{width:40px;height:40px;padding:0!important;border-radius:50%;font-size:17px;line-height:1;display:flex;align-items:center;justify-content:center;color:var(--ink-2,#3b3f48)}
+.dialog.has-x .actions:has(> button[id^="close"]:only-child){display:none}
+.dialog.has-x button.dup-close{display:none}
 .dialog .actions button[id^="close"]{box-shadow:none}
 .sales-home-head{background:var(--ink);color:#fff;border-radius:var(--r-md);padding:14px 18px;position:relative;overflow:hidden}
 .sales-home-head::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,var(--s-red) 0 20%,var(--s-orange) 20% 40%,var(--s-yellow) 40% 60%,var(--s-green) 60% 80%,var(--s-blue) 80%)}
@@ -369,8 +372,8 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 .pickup-debt-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #F2D29B;background:var(--warn-bg);border-radius:var(--r-sm);padding:10px 12px;margin-top:8px;color:var(--ink)}
 .pickup-debt-row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pickup-debt-row .acts button{min-height:0}
-.v5-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120%);z-index:70;background:var(--ink);color:#fff;padding:12px 18px;border-radius:var(--r-md);box-shadow:var(--shadow);font-weight:600;transition:transform .25s;max-width:calc(100vw - 32px)}
-.v5-toast.show{transform:translateX(-50%) translateY(0)}
+.v5-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(calc(-100% - 30px));visibility:hidden;z-index:70;background:var(--ink);color:#fff;padding:12px 18px;border-radius:var(--r-md);box-shadow:var(--shadow);font-weight:600;transition:transform .25s,visibility .25s;max-width:calc(100vw - 32px)}
+.v5-toast.show{transform:translateX(-50%) translateY(0);visibility:visible}
 #cashOpenModal,#cashCloseModal,#annModal,#pickupRemindModal{z-index:12}
 #guideTestModal,#guideQModal{z-index:11}
 .cash-expected{font-size:15px;line-height:1.45}
@@ -867,15 +870,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   <label id="salesAddEmployeeWrap" class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="salesAddEmployee" type="checkbox" style="width:auto"> <span>Добавить сотрудника в смену</span></label>
   <div id="salesAdditionalWrap" class="field" style="display:none"><label>Дополнительный сотрудник</label><select id="salesAdditionalEmployee"></select></div>
   <div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select><div class="status">Именно этот сотрудник получает 100 ₽ за каждую оформленную ретушь за смену.</div></div>
-  <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
-<button
-  id="adminBranchViewBtn"
-  class="secondary"
-  style="display:none"
-  type="button"
->
-  👁 Просмотр филиала без смены
-</button>
+  <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="adminBranchViewBtn" class="secondary" style="display:none;margin-right:auto" type="button" title="Посмотреть филиал, не открывая смену">👁 Просмотр без смены</button><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
 </div></div>
 
 <div class="modal" id="saleModal"><div class="dialog sales-sale-dialog" style="max-width:1350px;padding:22px;overflow:hidden">
@@ -947,31 +942,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   </div>
 </div>
 
-<div id="cashChangeBox" class="sale-loyalty-box" style="display:none;margin-top:10px">
-  <div class="sale-loyalty-head">
-    <b>💵 Наличные</b>
-  </div>
-
-  <div class="row">
-    <div class="field">
-      <label>Получено от клиента</label>
-      <input
-        id="cashReceived"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="Например, 2000"
-      >
-    </div>
-
-    <div class="field">
-      <label>Сдача</label>
-      <input id="cashChange" readonly placeholder="—">
-    </div>
-  </div>
-
-  <div id="cashChangeStatus" class="status"></div>
-</div>      <div class="sale-payment-extra"><div class="field"><label>Скидка, %</label><input id="saleDiscountPercent" type="number" min="0" max="100" step="0.01" value="0"></div><div class="field"><label>Раздельная оплата</label><button type="button" id="openSplitPaymentBtn" class="secondary">Настроить части оплаты</button></div></div><div id="splitPaymentBox" class="sale-loyalty-box" style="display:none"><div class="sale-loyalty-head"><b>Раздельная оплата</b><button type="button" id="addSplitPayment" class="secondary small">＋ Добавить часть</button></div><div id="splitPaymentRows"></div><div id="splitPaymentStatus" class="status"></div></div><div class="sales-total-box"><div id="saleGrossTotal" class="sales-gross">Сумма заказа: 0,00 ₽</div><div id="saleLoyaltyDiscount" class="sales-gross"></div><div id="saleTotal" class="sales-total">0,00 ₽</div></div><div id="saleStatus" class="status"></div><div class="sale-save-bar"><div class="actions" style="margin-top:0"><button id="saveSale" class="primary">💾 Оформить продажу</button></div></div>
+      <div class="sale-payment-extra"><div class="field"><label>Скидка, %</label><input id="saleDiscountPercent" type="number" min="0" max="100" step="0.01" value="0"></div><div class="field"><label>Раздельная оплата</label><button type="button" id="openSplitPaymentBtn" class="secondary">Настроить части оплаты</button></div></div><div id="splitPaymentBox" class="sale-loyalty-box" style="display:none"><div class="sale-loyalty-head"><b>Раздельная оплата</b><button type="button" id="addSplitPayment" class="secondary small">＋ Добавить часть</button></div><div id="splitPaymentRows"></div><div id="splitPaymentStatus" class="status"></div></div><div class="sales-total-box"><div id="saleGrossTotal" class="sales-gross">Сумма заказа: 0,00 ₽</div><div id="saleLoyaltyDiscount" class="sales-gross"></div><div id="saleTotal" class="sales-total">0,00 ₽</div></div><div id="saleStatus" class="status"></div><div class="sale-save-bar"><div class="actions" style="margin-top:0"><button id="saveSale" class="primary">💾 Оформить продажу</button></div></div>
     </section>
   </div>
 </div></div>
@@ -1130,10 +1101,13 @@ function renderCategories(){
   $('category').innerHTML='<option value="">Все категории</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');
   $('category').value=cur;
 }
+// Текст инструкции без HTML-разметки и служебного JSON: поиск по «text», «span», «https» больше не находит всё подряд.
+const productTextCache=new Map();
+function productPlainText(p){const raw=p.description||'';const hit=productTextCache.get(p.id);if(hit&&hit.raw===raw)return hit.text;let text;try{const dp=new DOMParser();text=parseBlocks(raw).filter(b=>b.type==='text').map(b=>{if(b.html)return dp.parseFromString(String(b.html).replace(/<(br|\/div|\/p|\/li)[^>]*>/gi,' $&'),'text/html').body.textContent;return b.text||''}).join(' ').replace(/\s+/g,' ')}catch(e){text=String(raw)}productTextCache.set(p.id,{raw,text});return text}
 function render(){
   const q=$('search').value.trim().toLowerCase(), cat=$('category').value;
   const list=products.filter(p=>{
-    const text=[p.name,p.sku,p.description,p.category,(p.tags||[]).join(' ')].join(' ').toLowerCase();
+    const text=[p.name,p.sku,productPlainText(p),p.category,(p.tags||[]).join(' ')].join(' ').toLowerCase();
     return (!q||text.includes(q))&&(!cat||p.category===cat);
   });
   $('count').textContent=`Найдено: ${list.length} из ${products.length}`;
@@ -1149,7 +1123,14 @@ function render(){
   $('orderHint').style.display=isAdmin?'block':'none';
   if(isAdmin) bindProductDrag();
 }
-function open(id){const m=$(id);if(!m)return;m.classList.add('show');const d=m.querySelector('.dialog');if(d&&!d.querySelector('.sticky-dialog-close')){const original=d.querySelector('button[id^="close"]');if(original&&original.id!=='closeSale'){const sticky=original.cloneNode(true);sticky.id=original.id+'_sticky';sticky.classList.add('sticky-dialog-close');sticky.setAttribute('aria-label',original.textContent.trim()||'Закрыть');sticky.onclick=()=>original.click();d.insertBefore(sticky,d.firstChild)}}} function close(id){$(id).classList.remove('show')}
+function open(id){const m=$(id);if(!m)return;m.classList.add('show');const d=m.querySelector('.dialog');if(d&&!d.querySelector('.sticky-dialog-close')){const original=d.querySelector('button[id^="close"]');if(original&&original.id!=='closeSale'){
+  // Одна кнопка закрытия: крестик сверху всегда виден при прокрутке. Нижняя «Закрыть» прячется, если она одна в строке.
+  const x=document.createElement('button');x.type='button';x.id=original.id+'_sticky';x.className='sticky-dialog-close';x.textContent='✕';x.title='Закрыть';x.setAttribute('aria-label','Закрыть');x.onclick=()=>original.click();d.insertBefore(x,d.firstChild);
+  d.classList.add('has-x');if(/^закрыть$/i.test(original.textContent.trim()))original.classList.add('dup-close');
+}}} function close(id){$(id).classList.remove('show')}
+// База отдаёт максимум 1000 строк за запрос. За неделю продаж больше, поэтому отчёты и зарплату читаем страницами.
+async function dbAllRows(make){const out=[];for(let off=0;;off+=1000){const r=await make().range(off,off+999);if(r.error)return {data:null,error:r.error};const d=r.data||[];out.push(...d);if(d.length<1000)break}return {data:out,error:null}}
+async function dbInRows(make,col,ids){const out=[];for(let i=0;i<ids.length;i+=150){const r=await dbAllRows(()=>make().in(col,ids.slice(i,i+150)).order('id'));if(r.error)return r;out.push(...r.data)}return {data:out,error:null}}
 window.viewProduct=id=>{
   const p=products.find(x=>x.id===id); if(!p)return;
   $('viewTitle').textContent=p.name||'Товар';
@@ -1357,7 +1338,7 @@ laminationMaterial=$('laminationMaterial').value;
   if(lamination && !laminationMaterial){out.innerHTML='<b>Выберите материал ламинации.</b>';return}
 
   const fit=fitCount(card.w,card.h,sheet.w,sheet.h);
-  if(!fit){out.innerHTML='<b>Карточка не помещается на лист с учётом поля 1 см с каждой стороны.</b>';return}
+  if(!fit){out.innerHTML='<b>Карточка не помещается на лист с учётом поля 0,5 см с каждой стороны.</b>';return}
 
   const sheets=Math.ceil(qty/fit.count);
   const pr=priceRuleFor(
@@ -1408,7 +1389,7 @@ const lamRule=lamination
   <div>Печать + материал «${esc(material)}»: <b>${money(printPrice)} / лист</b> (${wholesaleUsed?'опт':'розница'}, ${tierText}) → ${money(printTotal)}</div>
   ${diff?`<div>Разные картинки: <b>${money(diffPrice)} / лист</b> (${diffRule&&Number(diffRule.wholesale_price)>0?'опт':'розница'}) → ${money(diffTotal)}</div>`:''}
   ${cutting?`<div>Резка листов: <b>${money(cutPrice)} / лист</b> (${cutRule&&Number(cutRule.wholesale_price)>0?'опт':'розница'}) → ${money(cutTotal)}</div>`:''}
-  ${lamination?`<div>Ламинация «${esc(laminationMaterial)}» (${sides==='double'?'двусторонняя':'односторонняя'}): <b>${money(lamPrice)} / лист</b> (${lamRule&&Number(lamRule.wholesale_price)>0?'опт':'розница'}, от ${lamRule.min_sheets} листов) → ${money(lamTotal)}</div>`:''}
+  ${lamination?`<div>Ламинация «${esc(laminationMaterial)}» (${laminationSides==='double'?'двусторонняя':'односторонняя'}): <b>${money(lamPrice)} / лист</b> (${lamRule&&Number(lamRule.wholesale_price)>0?'опт':'розница'}, от ${lamRule.min_sheets} листов) → ${money(lamTotal)}</div>`:''}
   <div>Количество карточек: <b>${qty}</b></div>
   <div>Стоимость 1 карточки: <b>${money(perCard)}</b></div>
   <div class="calc-total">Итого: ${money(total)}</div>`;
@@ -1617,7 +1598,7 @@ $('addPrintRule').onclick=async()=>{
   const retail=Number($('prRetail').value);
   const wholesale=Number($('prWholesale').value);
 
-  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){
+  if(!name||!sh||!(min>=1)||$('prRetail').value.trim()===''||retail<0||wholesale<0){
     $('priceStatus').textContent='Проверьте материал, размер, порог и цены.';
     return;
   }
@@ -1643,7 +1624,7 @@ $('addLamRule').onclick=async()=>{
   const retail=Number($('lrRetail').value);
   const wholesale=Number($('lrWholesale').value);
   const sides=$('lrSides').value;
-  if(!name||!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
+  if(!name||!sh||!(min>=1)||$('lrRetail').value.trim()===''||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте материал ламинации, размер, порог и цены.';return}
   const payload={material_name:name,sheet_width_cm:sh.w,sheet_height_cm:sh.h,sides,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
   const r=priceEdit.type==='lamination' ? await db.from('sheet_lamination_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_lamination_price_rules').insert(payload);
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
@@ -1652,7 +1633,7 @@ $('addLamRule').onclick=async()=>{
 };
 $('addServiceRule').onclick=async()=>{
   const sh=parsePair($('srSheetSize').value), min=Number($('srMinSheets').value), retail=Number($('srRetail').value), wholesale=Number($('srWholesale').value);
-  if(!sh||!(min>=1)||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
+  if(!sh||!(min>=1)||$('srRetail').value.trim()===''||retail<0||wholesale<0){$('priceStatus').textContent='Проверьте размер, порог и цены.';return}
   const payload={sheet_width_cm:sh.w,sheet_height_cm:sh.h,service_type:$('srService').value,min_sheets:min,retail_price:retail,wholesale_price:wholesale};
   const r=priceEdit.type==='service' ? await db.from('sheet_service_price_rules').update(payload).eq('id',priceEdit.id) : await db.from('sheet_service_price_rules').insert(payload);
   if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}
@@ -1669,7 +1650,7 @@ let shirtPriceEditId=null;
 function readShirtRuleForm(){const type=$('shirtRuleType').value,prints=[];for(let i=1;i<=3;i++){const print=$('shirtRulePrint'+i).value;if(print)prints.push({print,size:$('shirtRuleSize'+i).value})}return {type,prints:normalizedShirtPrints(prints),wholesaleFrom:Number($('shirtRuleWholesaleFrom').value),retail:Number($('shirtRuleRetail').value),wholesale:Number($('shirtRuleWholesale').value)}}
 window.editShirtPriceRule=async id=>{const r=shirtPriceRules.find(x=>Number(x.id)===Number(id));if(!r)return;shirtPriceEditId=id;$('shirtRuleType').value=r.shirt_type;$('shirtRuleWholesaleFrom').value=r.wholesale_from;r.prints.forEach((p,i)=>{if(i<3){$('shirtRulePrint'+(i+1)).value=p.print;$('shirtRuleSize'+(i+1)).value=p.size}});for(let i=r.prints.length+1;i<=3;i++)$('shirtRulePrint'+i).value='';$('shirtRuleRetail').value=r.retail_price;$('shirtRuleWholesale').value=r.wholesale_price||'';$('addShirtPriceRule').textContent='Сохранить изменения';$('cancelShirtPriceEdit').style.display='inline-block'};
 window.deleteShirtPriceRule=async id=>{if(!confirm('Удалить правило комбинации футболок?'))return;const r=await db.from('sheet_service_price_rules').delete().eq('id',id);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Правило комбинации удалено.'};
-$('addShirtPriceRule').onclick=async()=>{const f=readShirtRuleForm();if(!f.prints.length||f.prints.length>3||!(f.wholesaleFrom>=1)||!(f.retail>=0)||!(f.wholesale>=0)){$('priceStatus').textContent='Укажите 1–3 нанесения, порог опта и обе цены.';return}const service=encodeShirtCombo(f.type,f.prints),payload={service_type:service,sheet_width_cm:1,sheet_height_cm:1,min_sheets:f.wholesaleFrom,retail_price:f.retail,wholesale_price:f.wholesale};const r=shirtPriceEditId?await db.from('sheet_service_price_rules').update(payload).eq('id',shirtPriceEditId):await db.from('sheet_service_price_rules').insert(payload);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}resetShirtPriceForm();await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Комбинация сохранена.'};
+$('addShirtPriceRule').onclick=async()=>{const f=readShirtRuleForm();if(!f.prints.length||f.prints.length>3||!(f.wholesaleFrom>=1)||$('shirtRuleRetail').value.trim()===''||!(f.retail>=0)||!(f.wholesale>=0)){$('priceStatus').textContent='Укажите 1–3 нанесения, порог опта и обе цены.';return}const service=encodeShirtCombo(f.type,f.prints),payload={service_type:service,sheet_width_cm:1,sheet_height_cm:1,min_sheets:f.wholesaleFrom,retail_price:f.retail,wholesale_price:f.wholesale};const r=shirtPriceEditId?await db.from('sheet_service_price_rules').update(payload).eq('id',shirtPriceEditId):await db.from('sheet_service_price_rules').insert(payload);if(r.error){$('priceStatus').textContent='Ошибка: '+r.error.message;return}resetShirtPriceForm();await loadPriceRules();renderPriceRules();$('priceStatus').textContent='Комбинация сохранена.'};
 $('cancelShirtPriceEdit').onclick=resetShirtPriceForm;
 $('closePriceAdmin').onclick=()=>close('priceModal');
 
@@ -1679,9 +1660,11 @@ $('closeProduct').onclick=()=>close('productModal');
 
 let activeTest=null;
 const norm=s=>String(s||'').toLowerCase().trim().replace(/ё/g,'е').replace(/\s+/g,' ').replace(/[.,!?;:()[\]{}"«»]/g,'');
-const match=(a,k)=>String(k||'').split(';').map(norm).filter(Boolean).some(x=>norm(a)===x||norm(a).includes(x));
+// Ответ засчитывается, если правильный вариант стоит в ответе отдельным словом (для слов — и с другим окончанием: «мат» → «матовая»). Числа сравниваются целиком: «2» не засчитывает «12», «1,5» не равно «15».
+const matchNorm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/(\d)[.,](\d)/g,'$1.$2').replace(/[,!?;:()[\]{}"«»]/g,' ').replace(/\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
+const match=(a,k)=>{const ans=' '+matchNorm(a)+' ';return String(k||'').split(';').map(matchNorm).filter(Boolean).some(x=>ans.includes(' '+x+' ')||(!/\d/.test(x)&&x.length>=3&&ans.includes(' '+x)))};
 async function getTests(){const r=await db.from('tests').select('*').order('created_at',{ascending:false});return r.data||[]}
-async function openTraineeTests(){const ts=await getTests();$('testIntro').innerHTML=ts.length?ts.map(t=>`<div class="block"><b>${esc(t.title)}</b><br><button class="primary small" onclick="startTest('${t.id}')">Начать</button></div>`).join(''):'Тестов пока нет';$('testQuestions').innerHTML='';$('traineeName').value='';$('submitTest').style.display='none';open('testModal')}
+async function openTraineeTests(){const ts=await getTests();$('testIntro').innerHTML=ts.length?ts.map(t=>`<div class="block"><b>${esc(t.title)}</b><br><button class="primary small" onclick="startTest('${t.id}')">Начать</button></div>`).join(''):'Тестов пока нет';$('testQuestions').innerHTML='';$('traineeName').value='';$('submitTest').style.display='none';activeTest=null;$('saveTestProgress').style.display='none';$('testTitle').textContent='Тест';$('testStatus').textContent='';open('testModal')}
 window.startTest=async id=>{
   const t=(await db.from('tests').select('*').eq('id',id).single()).data;
 
@@ -1803,7 +1786,7 @@ async function openTestAdmin(){
     '<h3>Результаты</h3>'+
     resultsHtml;
 
-  $('testAdminModal').querySelector('h3').textContent='Создать тест';
+  $('testAdminModal').querySelector('.dialog > h3').textContent='Создать тест';
   $('saveTest').textContent='Сохранить тест';
 
   open('testAdminModal');
@@ -1841,6 +1824,7 @@ async function openTestAdmin(){
   (qs||[]).forEach(q=>{
     const d=document.createElement('div');
     d.className='block';
+    d.dataset.id=q.id;
 
     d.innerHTML=`
       <textarea class="qq" placeholder="Вопрос">${esc(q.question_text||'')}</textarea>
@@ -1859,7 +1843,7 @@ async function openTestAdmin(){
     addQ();
   }
 
-  $('testAdminModal').querySelector('h3').textContent='Редактировать тест';
+  $('testAdminModal').querySelector('.dialog > h3').textContent='Редактировать тест';
   $('saveTest').textContent='Сохранить изменения';
 
   open('testAdminModal');
@@ -1872,6 +1856,7 @@ $('saveTest').onclick=async()=>{
 
   const qs=[...$('adminQuestionEditor').children]
     .map((d,i)=>({
+      id:d.dataset.id?Number(d.dataset.id):null,
       question_text:d.querySelector('.qq').value.trim(),
       correct_answer:d.querySelector('.qa').value.trim(),
       category:d.querySelector('.qc').value.trim(),
@@ -1924,10 +1909,18 @@ $('saveTest').onclick=async()=>{
     }
 
     const existing=oldQs||[];
+    // Обновляем вопросы по их id, а не по порядку: удалённый в середине вопрос больше не сдвигает остальные.
+    const keepIds=new Set(qs.map(q=>q.id).filter(Boolean));
+    const removed=existing.filter(q=>!keepIds.has(Number(q.id))).map(q=>q.id);
+    if(removed.length){
+      const {error:de}=await db.from('test_questions').delete().in('id',removed);
+      if(de){alert('Ошибка удаления вопроса: '+de.message);return}
+    }
 
     for(let i=0;i<qs.length;i++){
+      const {id:qid,...qrow}=qs[i];
 
-      if(existing[i]){
+      if(qid&&existing.some(q=>Number(q.id)===qid)){
 
         const {error:e}=await db
           .from('test_questions')
@@ -1938,7 +1931,7 @@ $('saveTest').onclick=async()=>{
             product_articul:qs[i].product_articul,
             sort_order:i
           })
-          .eq('id',existing[i].id);
+          .eq('id',qid);
 
         if(e){
           alert('Ошибка изменения вопроса: '+e.message);
@@ -1950,7 +1943,7 @@ $('saveTest').onclick=async()=>{
         const {error:e}=await db
           .from('test_questions')
           .insert({
-            ...qs[i],
+            ...qrow,
             test_id:editingTestId
           });
 
@@ -1992,7 +1985,7 @@ $('saveTest').onclick=async()=>{
   const {error:qe}=await db
     .from('test_questions')
     .insert(
-      qs.map(q=>({
+      qs.map(({id,...q})=>({
         ...q,
         test_id:t.id
       }))
@@ -2058,7 +2051,7 @@ async function lookupLoyalty(){
   const r=await db.rpc('loyalty_find_customers',{p_query:q});
   if(r.error){box.innerHTML='<div class="status">Ошибка: '+esc(r.error.message)+'</div>';return}
   let rows=r.data||[];
-  if(q.length>4) rows=rows.filter(x=>normalizePhone(x.customer_phone)===q);
+  if(q.length>4){const tail=q.slice(-10);rows=rows.filter(x=>normalizePhone(x.customer_phone).endsWith(tail));}
   if(!rows.length){box.innerHTML='<div class="status">Клиент не найден.</div>';return}
   if(q.length===4 && rows.length>1){box.innerHTML='<div class="loyalty-card"><b>Найдено несколько клиентов.</b><div class="status" style="margin-top:6px">Введите полный номер клиента.</div></div>';return}
   box.innerHTML=rows.map(renderLoyaltyCustomer).join('');
@@ -2137,17 +2130,20 @@ async function loadCustomerAdminRows(){
 
   const q=$('customerAdminSearch').value.trim();
 
-  let query=db
+  const makeQuery=()=>{let query=db
     .from('loyalty_customers')
     .select('*')
-    .order('created_at',{ascending:false});
+    .order('created_at',{ascending:false})
+    .order('id');
 
   if(q){
-    query=query.or(`name.ilike.%${q}%,phone.ilike.%${normalizePhone(q)}%`);
+    {const qd=normalizePhone(q),qn=q.replace(/[,()*%]/g,' ').trim();query=query.or(qd?`name.ilike.%${qn}%,phone.ilike.%${qd}%`:`name.ilike.%${qn}%`);}
   }
+  return query;};
+  const seq=window.__custSeq=(window.__custSeq||0)+1;
 
   const [r,peopleResult]=await Promise.all([
-    query,
+    dbAllRows(makeQuery),
     db.from('sales_people').select('id,name')
   ]);
 
@@ -2169,10 +2165,9 @@ async function loadCustomerAdminRows(){
   let tx=[];
 
   if(ids.length){
-    const tr=await db
+    const tr=await dbInRows(()=>db
       .from('loyalty_transactions')
-      .select('customer_id,transaction_type,points,available_at')
-      .in('customer_id',ids);
+      .select('id,customer_id,transaction_type,points,available_at'),'customer_id',ids);
 
     if(tr.error){
       $('customerAdminStatus').textContent='Ошибка загрузки операций: '+tr.error.message;
@@ -2181,6 +2176,7 @@ async function loadCustomerAdminRows(){
 
     tx=tr.data||[];
   }
+  if(seq!==window.__custSeq)return; // пришёл ответ на старый поиск — показываем только последний
 
   const rows=cs.map(c=>{
     const mine=tx.filter(t=>t.customer_id===c.id);
@@ -2426,7 +2422,7 @@ async function checkLinkReceiptsBeforeClose(shiftId){
   // Для раздельной оплаты дополнительно смотрим sale_payments, где ссылка может быть одной из частей.
   const r=await db.from('sales').select('id,order_number,total,created_at,receipt_issued,comment,payment_method,status,payment_status').eq('shift_id',shiftId).order('created_at');
   if(r.error){alert('Не удалось проверить оплаты по ссылке: '+r.error.message);return false}
-  const sales=r.data||[];
+  const sales=(r.data||[]).filter(x=>x.status!=='deleted'&&x.status!=='returned'&&x.status!=='cancelled');
   const ids=sales.map(x=>x.id);
   let payments=[];
   if(ids.length){
@@ -2519,11 +2515,11 @@ function dateRangeUTC(dateStr){const start=new Date(dateStr+'T00:00:00');const e
 // Тестовый филиал (sales_branches.is_test) нужен для проверки товаров и продаж и не попадает в отчёты, сводку, зарплату и склад.
 function isTestBranch(id){return !!salesBranches.find(b=>Number(b.id)===Number(id)&&b.is_test)}
 function reportBranchList(){return salesBranches.filter(b=>!b.is_test)}
-async function loadSalesForRange(from,to,branchId=null){let q=db.from('sales').select('*,sales_branches(name),sales_employees(name)').gte('created_at',from.toISOString()).lt('created_at',to.toISOString()).order('created_at',{ascending:false});if(branchId)q=q.eq('branch_id',branchId);const r=await q;if(r.error)throw r.error;const sales=(r.data||[]).filter(x=>branchId||!isTestBranch(x.branch_id)),ids=sales.map(x=>x.id);let items=[];if(ids.length){const ir=await db.from('sale_items').select('*').in('sale_id',ids);if(ir.error)throw ir.error;items=ir.data||[]}return{sales,items}}
-async function openMovement(){const d=salesTodayISO();$('movementDate').value=$('movementDate').value||d;await renderMovement();open('salesMovementModal')}
+async function loadSalesForRange(from,to,branchId=null){const r=await dbAllRows(()=>{let q=db.from('sales').select('*,sales_branches(name),sales_employees(name)').gte('created_at',from.toISOString()).lt('created_at',to.toISOString()).order('created_at',{ascending:false}).order('id',{ascending:false});if(branchId)q=q.eq('branch_id',branchId);return q});if(r.error)throw r.error;const sales=(r.data||[]).filter(x=>branchId||!isTestBranch(x.branch_id)),ids=sales.map(x=>x.id);let items=[];if(ids.length){const ir=await dbInRows(()=>db.from('sale_items').select('*'),'sale_id',ids);if(ir.error)throw ir.error;items=ir.data||[]}return{sales,items}}
+async function openMovement(){const d=salesTodayISO();$('movementDate').value=d;await renderMovement();open('salesMovementModal')}
 async function printSaleReceipt(id){const r=await db.from('sales').select('*,sales_branches(name),sales_employees(name)').eq('id',id).single();if(r.error){alert(r.error.message);return}const s=r.data,ir=await db.from('sale_items').select('*').eq('sale_id',id),pr=await db.from('sale_payments').select('*').eq('sale_id',id);const rows=ir.data||[],pays=pr.data||[];const w=window.open('','_blank','width=420,height=700');if(!w){alert('Разрешите всплывающие окна для печати чека.');return}w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Чек №${s.order_number}</title><style>body{font-family:Arial,sans-serif;width:360px;margin:20px auto;color:#111}h2{text-align:center;margin:0 0 12px}.line{display:flex;justify-content:space-between;gap:10px;margin:7px 0}.total{font-size:20px;font-weight:800;border-top:2px solid #111;padding-top:10px;margin-top:10px}.muted{color:#666;font-size:12px}hr{border:0;border-top:1px dashed #aaa;margin:12px 0}@media print{button{display:none}}</style></head><body><h2>ПОЛАРОИД</h2><div class="muted">Товарный чек №${s.order_number||s.id}<br>${new Date(s.created_at).toLocaleString('ru-RU')}<br>${esc(s.sales_branches?.name||'')}</div><hr>${rows.map(x=>`<div class="line"><span>${esc(x.item_name)} × ${x.quantity}</span><b>${salesMoney(x.line_total)}</b></div>`).join('')}${Number(s.discount_amount||0)>0?`<div class="line"><span>Скидка</span><span>−${salesMoney(s.discount_amount)}</span></div>`:''}<div class="total"><div class="line"><span>ИТОГО</span><span>${salesMoney(s.total)}</span></div></div><hr><b>Оплата</b>${pays.map(x=>`<div class="line"><span>${esc(V4_PAY_LABELS[x.payment_method]||x.payment_method)}</span><span>${salesMoney(x.amount)}</span></div>`).join('')}<p class="muted">Кассир: ${esc(s.sales_employees?.name||'')}</p></body></html>`);w.document.close();w.focus();w.print()}
 async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);if(!salesSession?.branchId){$('movementSummary').textContent='Нет открытой смены. Сначала выберите филиал и откройте смену.';$('movementRows').innerHTML='<div class="status">Продажи доступны только для текущего филиала открытой смены.</div>';return}try{const{sales,items}=await loadSalesForRange(start,end,Number(salesSession.branchId)),valid=sales.filter(x=>x.status==='completed'),total=valid.reduce((a,x)=>a+Number(x.total),0);$('movementSummary').textContent=`Продаж: ${valid.length} · Выручка: ${salesMoney(total)}${salesSession?.branchName?' · '+salesSession.branchName:''}`;$('movementRows').innerHTML=sales.length?`<table class="customer-table"><thead><tr><th>№ заказа</th><th>Время</th><th>Кассир</th><th>Позиции</th><th>Оплата</th><th>Сумма</th><th>Комментарий</th><th>Чек</th><th>Статус</th><th></th></tr></thead><tbody>${sales.map(x=>{const its=items.filter(i=>i.sale_id===x.id);return `<tr><td><b>№${x.order_number||x.id}</b></td><td>${new Date(x.created_at).toLocaleString('ru-RU')}</td><td>${esc(x.sales_employees?.name||'')}</td><td>${its.map(i=>`${esc(i.item_name)} × ${i.quantity}`).join('<br>')}</td><td>${SALES_PAYMENT_LABELS[x.payment_method]||x.payment_method}</td><td>${salesMoney(x.total)}${Number(x.loyalty_points_used)>0?`<div class="status">−${salesMoney(x.loyalty_points_used)} баллами</div>`:''}</td><td>${esc(x.comment||'—')}</td><td>${x.payment_method==='link'?(x.receipt_issued===true?'✓ пробит':'⚠ не отмечен'):'—'}</td><td>${x.status==='returned'?'↩ Возврат':'Продажа'}</td><td>${x.status==='completed'&&salesSession?.shiftId?`<button class="danger small" onclick="returnSale(${x.id})">Возврат</button> <button class="secondary small" onclick="deleteSale(${x.id})">Удалить продажу</button>`:''}</td></tr>`}).join('')}</tbody></table>`:'<div class="status">Продаж нет.</div>'}catch(e){$('movementSummary').textContent='Ошибка: '+e.message}}
-window.returnSale=async id=>{if(!salesSession?.shiftId)return;if(!confirm('Оформить полный возврат этой продажи?'))return;const comment=prompt('Комментарий к возврату:')||'';const r=await db.rpc('sales_return_sale',{p_sale_id:id,p_shift_id:salesSession.shiftId,p_comment:comment});if(r.error){alert(r.error.message);return}await renderMovement()};
+window.returnSale=async id=>{if(!salesSession?.shiftId)return;if(!confirm('Оформить полный возврат этой продажи?'))return;const comment=prompt('Комментарий к возврату:');if(comment===null)return;const r=await db.rpc('sales_return_sale',{p_sale_id:id,p_shift_id:salesSession.shiftId,p_comment:comment});if(r.error){alert(r.error.message);return}await renderMovement()};
 window.deleteSale=async id=>{
   if(!salesSession?.shiftId)return;
 
@@ -2534,10 +2530,15 @@ window.deleteSale=async id=>{
     .update({status:'deleted'})
     .eq('id',id)
     .eq('shift_id',salesSession.shiftId)
-    .eq('status','completed');
+    .eq('status','completed')
+    .select('id');
 
   if(r.error){
     alert('Не удалось удалить продажу: '+r.error.message);
+    return;
+  }
+  if(!(r.data||[]).length){
+    alert('Удалить можно только продажу текущей смены. Для продажи из прошлой смены оформите возврат.');
     return;
   }
 
@@ -2609,7 +2610,7 @@ db.auth.onAuthStateChange(()=>refreshAuth());
 // ===== ПОЛАРОИД v4 UI/логика =====
 
 function payrollWeekDates(d=new Date()){const x=new Date(d);const day=x.getDay()||7;const fri=new Date(x);fri.setDate(x.getDate()+(5-day));const mon=new Date(fri);mon.setDate(fri.getDate()-4);return {from:mon,to:fri}}
-async function buildPayroll(){await loadSalesSetup();const from=$('payrollFrom').value,to=$('payrollTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);const sr=await db.from('sales_shifts').select('id,branch_id,started_at,ended_at,sales_branches(name)').gte('started_at',start.toISOString()).lt('started_at',end.toISOString());if(sr.error){$('payrollContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return}const shifts=(sr.data||[]).filter(x=>!isTestBranch(x.branch_id)),ids=shifts.map(x=>x.id);let parts=[],sales=[],items=[],rates=[];if(ids.length){parts=(await db.from('sales_shift_employees').select('*').in('shift_id',ids)).data||[];sales=(await db.from('sales').select('*').in('shift_id',ids).eq('status','completed').neq('payment_status','unpaid')).data||[];const saleIds=sales.map(x=>x.id);if(saleIds.length)items=(await db.from('sale_items').select('*').in('sale_id',saleIds)).data||[];rates=(await db.from('sales_pay_rates').select('*')).data||[]}const rows={};for(const sh of shifts){const ps=parts.filter(p=>Number(p.shift_id)===Number(sh.id));for(const p of ps){const employee=salesEmployees.find(e=>Number(e.id)===Number(p.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+p.employee_id, rate=rates.find(r=>Number(r.employee_id)===Number(p.employee_id)&&Number(r.branch_id)===Number(sh.branch_id)&&r.is_active!==false)||{shift_rate:0,retouch_rate:100};if(!rows[key])rows[key]={employeeId:p.employee_id,shifts:0,shiftPay:0,retouches:0,retouchPay:0,name:salesPeople.find(person=>Number(person.id)===Number(employee?.person_id))?.name||employee?.name||('Сотрудник #'+p.employee_id)};rows[key].shifts++;rows[key].shiftPay+=Number(rate.shift_rate||0);if(p.is_lead||ps.length===1){for(const sale of sales.filter(s=>Number(s.shift_id)===Number(sh.id))){for(const it of items.filter(i=>Number(i.sale_id)===Number(sale.id))){if(it.item_type==='service'&&/ретуш/i.test(it.item_name)){rows[key].retouches+=Number(it.quantity||0);rows[key].retouchPay+=Number(it.quantity||0)*Number(rate.retouch_rate||0)}}}}}}
+async function buildPayroll(){await loadSalesSetup();const from=$('payrollFrom').value,to=$('payrollTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);const sr=await db.from('sales_shifts').select('id,branch_id,started_at,ended_at,sales_branches(name)').gte('started_at',start.toISOString()).lt('started_at',end.toISOString());if(sr.error){$('payrollContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return}const shifts=(sr.data||[]).filter(x=>!isTestBranch(x.branch_id)),ids=shifts.map(x=>x.id);let parts=[],sales=[],items=[],rates=[];if(ids.length){const pr=await dbInRows(()=>db.from('sales_shift_employees').select('*'),'shift_id',ids),sl=await dbInRows(()=>db.from('sales').select('*').eq('status','completed').neq('payment_status','unpaid'),'shift_id',ids);if(pr.error||sl.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc((pr.error||sl.error).message)+'</div>';return}parts=pr.data;sales=sl.data;const saleIds=sales.map(x=>x.id);if(saleIds.length){const it=await dbInRows(()=>db.from('sale_items').select('*'),'sale_id',saleIds);if(it.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc(it.error.message)+'</div>';return}items=it.data}rates=(await db.from('sales_pay_rates').select('*')).data||[]}const rows={};for(const sh of shifts){const ps=parts.filter(p=>Number(p.shift_id)===Number(sh.id));for(const p of ps){const employee=salesEmployees.find(e=>Number(e.id)===Number(p.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+p.employee_id, rate=rates.find(r=>Number(r.employee_id)===Number(p.employee_id)&&Number(r.branch_id)===Number(sh.branch_id)&&r.is_active!==false)||{shift_rate:0,retouch_rate:100};if(!rows[key])rows[key]={employeeId:p.employee_id,shifts:0,shiftPay:0,retouches:0,retouchPay:0,name:salesPeople.find(person=>Number(person.id)===Number(employee?.person_id))?.name||employee?.name||('Сотрудник #'+p.employee_id)};rows[key].shifts++;rows[key].shiftPay+=Number(rate.shift_rate||0);if(p.is_lead||ps.length===1){for(const sale of sales.filter(s=>Number(s.shift_id)===Number(sh.id))){for(const it of items.filter(i=>Number(i.sale_id)===Number(sale.id))){if(it.item_type==='service'&&/ретуш/i.test(it.item_name)){rows[key].retouches+=Number(it.quantity||0);rows[key].retouchPay+=Number(it.quantity||0)*Number(rate.retouch_rate||0)}}}}}}
 const arr=Object.values(rows);const total=arr.reduce((a,x)=>a+x.shiftPay+x.retouchPay,0);$('payrollContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Сотрудников<br><b>${arr.length}</b></div><div class="report-card">Смен<br><b>${arr.reduce((a,x)=>a+x.shifts,0)}</b></div><div class="report-card">К выплате<br><b>${salesMoney(total)}</b></div></div><table class="customer-table" style="margin-top:14px"><thead><tr><th>Сотрудник</th><th>Смены</th><th>Ставки за смены</th><th>Ретушь</th><th>Ретушь ₽</th><th>Итого</th></tr></thead><tbody>${arr.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${x.shifts}</td><td>${salesMoney(x.shiftPay)}</td><td>${x.retouches}</td><td>${salesMoney(x.retouchPay)}</td><td><b>${salesMoney(x.shiftPay+x.retouchPay)}</b></td></tr>`).join('')||'<tr><td colspan="6">Нет смен за период.</td></tr>'}</tbody></table><div class="sales-ok">Расчёт готов. Для пятницы используйте период понедельник–пятница.</div>`}
 $('payrollBtn').onclick=async()=>{const w=payrollWeekDates();$('payrollFrom').value=salesTodayISO(w.from);$('payrollTo').value=salesTodayISO(w.to);open('payrollModal');await buildPayroll()};$('buildPayrollBtn').onclick=buildPayroll;$('closePayroll').onclick=()=>close('payrollModal');
 
@@ -2676,7 +2677,7 @@ function updateLeadEmployeeOptions() {
   lead.innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   const existingLead=workspaceShift?.leadPersonId;
   if(existingLead && ids.includes(Number(existingLead))) lead.value=String(existingLead);
-  else if(!lead.value) lead.value=String(ids[0]);
+  else { const def=people.find(p=>p.retouch_lead_default); lead.value=String(def?def.id:ids[0]); }
 }
 function refreshAdditionalEmployeeOptions() {
   const primary=Number($('salesEmployeeSelect').value||0);
@@ -2860,7 +2861,7 @@ function saleCatalogMatches(item,query){const q=normalizeSaleSearchText(query);i
 function renderSaleCatalog(){const q=$('saleCatalogSearch').value||'';const cats=salesCatalog.filter(x=>saleCatalogMatches(x,q));$('saleCatalogList').innerHTML=cats.length?cats.map(x=>`<div class="sale-catalog-item" onclick="addSaleCatalogItem(${x.id})" ondblclick="openSalesProductInfo(${x.id})"><div><b>${esc(x.name)}</b><small>${esc(x.item_type==='service'?'Услуга':'Товар')}${x.category?' · '+esc(x.category):''}${x.sku?' · '+esc(x.sku):''}</small></div><span class="sale-catalog-price">${salesMoney(x.price)}</span></div>`).join(''):'<div class="status">Ничего не найдено.</div>'}
 async function maybeUpsell(source,qty){for(const rule of v4Upsells.filter(r=>Number(r.source_catalog_id)===Number(source.id))){const min=Number(rule.min_quantity||1),max=rule.max_quantity==null?Infinity:Number(rule.max_quantity);if(qty<min||qty>max)continue;const key=rule.id+':'+source.id;if(window.v4UpsellSeen?.has(key))continue;window.v4UpsellSeen=window.v4UpsellSeen||new Set();window.v4UpsellSeen.add(key);const suggested=salesCatalog.find(x=>Number(x.id)===Number(rule.suggested_catalog_id));if(!suggested)continue;const yes=confirm(`${rule.question||'Предложить дополнительный товар?'}\n\n${suggested.name} — ${salesMoney(suggested.price)}`);if(yes){const ex=saleDraft.find(x=>Number(x.catalogId)===Number(suggested.id));if(ex)ex.quantity=Number(ex.quantity)+1;else saleDraft.push({catalogId:suggested.id,quantity:1,unitPrice:v4Price(suggested,1)})}}renderSaleDraft()}
 window.addSaleCatalogItem=async id=>{const x=salesCatalog.find(y=>Number(y.id)===Number(id));if(!x)return;let existing=saleDraft.find(y=>Number(y.catalogId)===Number(id));if(existing){existing.quantity=Number(existing.quantity||0)+1;existing.unitPrice=v4Price(x,existing.quantity)}else saleDraft.push({catalogId:x.id,quantity:1,unitPrice:v4Price(x,1)});renderSaleDraft();await maybeUpsell(x,existing?.quantity||1)};
-function saleRowHtml(i){const p=saleDraft[i],cat=salesCatalog.find(x=>Number(x.id)===Number(p.catalogId));const auto=v4Price(cat,p.quantity);return `<div class="sales-item-row" ondblclick="openSalesProductInfo(${cat?.id})"><div><b>${esc(cat?.name||'Товар')}</b><div class="status">${esc(cat?.item_type==='service'?'Услуга':'Товар')}${cat?.category?' · '+esc(cat.category):''}</div><div class="status">Двойной клик — подробная информация</div></div><div class="field"><label>Кол-во</label><input type="number" min="1" step="1" value="${p.quantity}" oninput="saleDraft[${i}].quantity=Number(this.value)||0;saleDraft[${i}].unitPrice=v4Price(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity);updateSaleTotal()" onblur="maybeUpsell(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity)"></div><div class="field"><label>Цена</label><input type="number" min="0" step="0.01" value="${p.unitPrice}" oninput="saleDraft[${i}].unitPrice=Number(this.value)||0;updateSaleTotal()"><div class="status">Авто по тиражу: ${salesMoney(auto)}</div></div><div class="field"><label>Сумма</label><input readonly value="${salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))}"></div><button class="danger small" onclick="saleDraft.splice(${i},1);renderSaleDraft()">×</button></div>`}
+function saleRowHtml(i){const p=saleDraft[i],cat=salesCatalog.find(x=>Number(x.id)===Number(p.catalogId));const auto=v4Price(cat,p.quantity);return `<div class="sales-item-row" ondblclick="openSalesProductInfo(${cat?.id})"><div><b>${esc(cat?.name||'Товар')}</b><div class="status">${esc(cat?.item_type==='service'?'Услуга':'Товар')}${cat?.category?' · '+esc(cat.category):''}</div><div class="status">Двойной клик — подробная информация</div></div><div class="field"><label>Кол-во</label><input type="number" min="1" step="1" value="${p.quantity}" oninput="saleDraft[${i}].quantity=Number(this.value)||0;saleDraft[${i}].unitPrice=v4Price(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity);{const r=this.closest('.sales-item-row'),pi=r&&r.querySelector('.field:nth-child(3) input'),ph=r&&r.querySelector('.field:nth-child(3) .status');if(pi)pi.value=saleDraft[${i}].unitPrice;if(ph)ph.textContent='Авто по тиражу: '+salesMoney(saleDraft[${i}].unitPrice)}updateSaleTotal()" onblur="maybeUpsell(salesCatalog.find(x=>Number(x.id)===Number(saleDraft[${i}].catalogId)),saleDraft[${i}].quantity)"></div><div class="field"><label>Цена</label><input type="number" min="0" step="0.01" value="${p.unitPrice}" oninput="saleDraft[${i}].unitPrice=Number(this.value)||0;updateSaleTotal()"><div class="status">Авто по тиражу: ${salesMoney(auto)}</div></div><div class="field"><label>Сумма</label><input readonly value="${salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))}"></div><button class="danger small" onclick="saleDraft.splice(${i},1);renderSaleDraft()">×</button></div>`}
 window.updateSaleTotal=()=>{const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),discount=Math.round(gross*discountPct)/100,after=Math.max(0,gross-discount),max=Math.round(after*.3*100)/100,use=salePointsUsed();$('saleGrossTotal').textContent='Сумма до скидки: '+salesMoney(gross);$('salePointsMax').value=salesMoney(max);$('saleLoyaltyDiscount').textContent=(discount>0?'Скидка: −'+salesMoney(discount):'')+(use>0?' · Баллами: −'+salesMoney(use):'');$('saleTotal').textContent=salesMoney(Math.max(0,after-use));$('openSplitPaymentBtn').disabled=$('salePayment').value!=='split';if($('salePayment').value==='split')renderSplitRows();document.querySelectorAll('.sales-item-row .field:nth-child(4) input').forEach((el,i)=>{const p=saleDraft[i];if(p)el.value=salesMoney((Number(p.quantity)||0)*(Number(p.unitPrice)||0))});const accrual=Math.round(Math.max(0,after-use)*0.05*100)/100;
 const accrualBox=$('saleClubAccrualPreview');
 
@@ -3009,10 +3010,10 @@ function updateSplitStatus(){
 
 // Enter в поиске клиента
 $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('saleClubSearchBtn').click()}});
-async function openSaleV4(){try {if(!(await validateSalesSession())){await openSalesWorkspace();return}await loadSalesSetup();saleContext={...salesSession,participants:[...salesSession.participants]};saleDraft=[];window.v4UpsellSeen=new Set();resetSaleLoyalty();$('saleClubEnabled').checked=false;$('salePayment').value='';$('saleDiscountPercent').value='0';v4SplitRows=[];$('splitPaymentBox').style.display='none';$('saleComment').value='';$('saleStatus').textContent='';$('saleSessionInfo').textContent=`${salesSession.branchName} · Кассир: ${salesSession.employeeName}`;$('saleBranchView').value=salesSession.branchName;renderSaleCashiers();$('saleLoyaltyFields').style.display='none';const key='pendingOrder_'+salesSession.branchId;let num=Number(localStorage.getItem(key)||0);if(!num){const nr=await db.rpc('sales_next_order_number',{p_branch_id:salesSession.branchId});if(nr.error){$('saleStatus').textContent='Не удалось получить номер заказа: '+nr.error.message;return}num=Number(nr.data);localStorage.setItem(key,String(num))}window.currentSaleOrderNumber=num;$('saleOrderPreview').textContent='№ '+num+' (предварительный)';renderSaleCatalog();renderSaleDraft();open('saleModal')} catch(e) {alert('Не удалось открыть продажу: '+e.message);} }
+async function openSaleV4(){try {if(!(await validateSalesSession())){await openSalesWorkspace();return}await loadSalesSetup();saleContext={...salesSession,participants:[...salesSession.participants]};saleDraft=[];window.v4UpsellSeen=new Set();resetSaleLoyalty();$('saleClubEnabled').checked=false;$('salePayment').value='';$('saleDiscountPercent').value='0';v4SplitRows=[];$('splitPaymentBox').style.display='none';$('saleComment').value='';$('saleStatus').textContent='';$('saleSessionInfo').textContent=`${salesSession.branchName} · Кассир: ${salesSession.employeeName}`;$('saleBranchView').value=salesSession.branchName;renderSaleCashiers();$('saleLoyaltyFields').style.display='none';const key='pendingOrder_'+salesSession.branchId;let num=Number(localStorage.getItem(key)||0);if(!num){const nr=await db.rpc('sales_next_order_number',{p_branch_id:salesSession.branchId});if(nr.error){alert('Не удалось получить номер заказа: '+nr.error.message+'\nПроверьте интернет и попробуйте ещё раз.');return}num=Number(nr.data);localStorage.setItem(key,String(num))}window.currentSaleOrderNumber=num;$('saleOrderPreview').textContent='№ '+num+' (предварительный)';renderSaleCatalog();renderSaleDraft();open('saleModal')} catch(e) {alert('Не удалось открыть продажу: '+e.message);} }
 $('salesBtn').onclick=openSaleV4;
 $('closeSale').onclick=()=>close('saleModal');
-$('saveSale').onclick=async()=>{if($('saveSale').disabled)return;if(!saleContext?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return}if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return}const payment=$('salePayment').value;if(!payment){$('saleStatus').textContent='Выберите способ оплаты.';return}const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),after=Math.round(gross*(1-discountPct/100)*100)/100,points=salePointsUsed(),max=Math.round(after*.3*100)/100;if(points>max){$('saleStatus').textContent='Нельзя списать больше 30% суммы после скидки: '+salesMoney(max);return}let payments=[];if(payment==='split'){payments=v4SplitRows.filter(x=>Number(x.amount)>0).map(x=>({method:x.method,amount:Math.round(Number(x.amount)*100)/100}));if(payments.length<2||Math.abs(payments.reduce((a,x)=>a+x.amount,0)-Math.max(0,after-points))>.01){$('saleStatus').textContent='Для раздельной оплаты распределите всю сумму заказа.';return}}if((payment==='bank_account'||payments.some(x=>x.method==='bank_account'))&&!$('saleClubEnabled').checked&&!confirm('Оплата «Расчётный счёт» без клубной карты не попадёт в «Долги клиентов». Продолжить без карты?'))return;let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=$('saleClubNewPhone').value.trim();if(!saleLoyaltyCustomerId&&(!loyaltyName||!loyaltyPhone)){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и полный номер.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice)}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}const context={...saleContext};const activeParticipants=context.participants.filter(p=>p.isActive);const selectedCashierId=Number($('saleEmployeeView').value||0);if(activeParticipants.length>1&&!selectedCashierId){$('saleStatus').textContent='Выберите кассира для этой продажи.';$('saleEmployeeView').focus();return;}if(activeParticipants.length>1){const selectedCashier=activeParticipants.find(p=>Number(p.employeeId)===selectedCashierId);if(!selectedCashier){$('saleStatus').textContent='Выберите кассира из участников смены.';$('saleEmployeeView').focus();return;}context.employeeId=selectedCashier.employeeId;context.personId=selectedCashier.personId;context.employeeName=selectedCashier.name;}else{const onlyCashier=activeParticipants[0];if(!onlyCashier){$('saleStatus').textContent='Не найден сотрудник для оформления продажи.';return;}context.employeeId=onlyCashier.employeeId;context.personId=onlyCashier.personId;context.employeeName=onlyCashier.name;}$('saveSale').disabled=true;$('saleEmployeeView').disabled=true;try {$('saleStatus').textContent='Оформляю продажу…';const r=await db.rpc('sales_create_sale',{p_shift_id:context.shiftId,p_employee_id:context.employeeId,p_payment_method:payment,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber,p_discount_percent:discountPct,p_payments:payments});if(r.error)throw r.error;const orderNo=r.data;localStorage.removeItem('pendingOrder_'+context.branchId);window.currentSaleOrderNumber=null;$('saleOrderPreview').textContent='№ '+orderNo;$('saleStatus').textContent=`Продажа №${orderNo} оформлена.`;saleDraft=[];close('saleModal');await openSaleV4()}catch(e){$('saleStatus').textContent='Ошибка: '+e.message;}finally{$('saveSale').disabled=false;$('saleEmployeeView').disabled=false;}};
+$('saveSale').onclick=async()=>{if($('saveSale').disabled)return;if(!saleContext?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return}if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return}const payment=$('salePayment').value;if(!payment){$('saleStatus').textContent='Выберите способ оплаты.';return}const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),after=Math.round((gross-Math.round(gross*discountPct)/100)*100)/100,points=salePointsUsed(),max=Math.round(after*.3*100)/100;if(points>max){$('saleStatus').textContent='Нельзя списать больше 30% суммы после скидки: '+salesMoney(max);return}let payments=[];if(payment==='split'){payments=v4SplitRows.filter(x=>Number(x.amount)>0).map(x=>({method:x.method,amount:Math.round(Number(x.amount)*100)/100}));if(payments.length<2||Math.abs(payments.reduce((a,x)=>a+x.amount,0)-Math.max(0,after-points))>.01){$('saleStatus').textContent='Для раздельной оплаты распределите всю сумму заказа.';return}}if((payment==='bank_account'||payments.some(x=>x.method==='bank_account'))&&!$('saleClubEnabled').checked&&!confirm('Оплата «Расчётный счёт» без клубной карты не попадёт в «Долги клиентов». Продолжить без карты?'))return;let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=$('saleClubNewPhone').value.trim();if(!saleLoyaltyCustomerId&&(!loyaltyName||!loyaltyPhone)){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и полный номер.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice)}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}const context={...saleContext};const activeParticipants=context.participants.filter(p=>p.isActive);const selectedCashierId=Number($('saleEmployeeView').value||0);if(activeParticipants.length>1&&!selectedCashierId){$('saleStatus').textContent='Выберите кассира для этой продажи.';$('saleEmployeeView').focus();return;}if(activeParticipants.length>1){const selectedCashier=activeParticipants.find(p=>Number(p.employeeId)===selectedCashierId);if(!selectedCashier){$('saleStatus').textContent='Выберите кассира из участников смены.';$('saleEmployeeView').focus();return;}context.employeeId=selectedCashier.employeeId;context.personId=selectedCashier.personId;context.employeeName=selectedCashier.name;}else{const onlyCashier=activeParticipants[0];if(!onlyCashier){$('saleStatus').textContent='Не найден сотрудник для оформления продажи.';return;}context.employeeId=onlyCashier.employeeId;context.personId=onlyCashier.personId;context.employeeName=onlyCashier.name;}$('saveSale').disabled=true;$('saleEmployeeView').disabled=true;try {$('saleStatus').textContent='Оформляю продажу…';const r=await db.rpc('sales_create_sale',{p_shift_id:context.shiftId,p_employee_id:context.employeeId,p_payment_method:payment,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber,p_discount_percent:discountPct,p_payments:payments});if(r.error)throw r.error;const orderNo=r.data;localStorage.removeItem('pendingOrder_'+context.branchId);window.currentSaleOrderNumber=null;$('saleOrderPreview').textContent='№ '+orderNo;$('saleStatus').textContent=`Продажа №${orderNo} оформлена.`;if(typeof v5Toast==='function'&&!(typeof pickupLastResult!=='undefined'&&pickupLastResult)&&orderNo!=null)v5Toast(`Продажа №${orderNo} оформлена.`);saleDraft=[];close('saleModal');await openSaleV4()}catch(e){$('saleStatus').textContent='Ошибка: '+e.message;}finally{$('saveSale').disabled=false;$('saleEmployeeView').disabled=false;}};
 
 async function renderSalesCatalogPrice(){
   const q=($('salesCatalogPriceSearch').value||'').trim().toLowerCase();
@@ -3060,7 +3061,7 @@ async function renderSalesCatalogPrice(){
             style="width:100%;text-align:left;border:0;border-radius:0;padding:13px 16px;font-weight:700"
             onclick="toggleEmployeeCatalogCategory('${key}',this)"
           >
-            ▸ ${escCat(cat)}
+            <span class="cat-arr">${q?'▾':'▸'}</span> ${escCat(cat)}
             <span style="float:right;font-weight:500">
               ${items.length} поз.
             </span>
@@ -3068,7 +3069,7 @@ async function renderSalesCatalogPrice(){
 
           <div
             id="${key}"
-            style="display:none;padding:0 10px 10px"
+            style="display:${q?'block':'none'};padding:0 10px 10px"
           >
             <table class="customer-table">
               <thead>
@@ -3082,7 +3083,7 @@ async function renderSalesCatalogPrice(){
               <tbody>
                 ${items.map(x=>`
                   <tr
-                    ondblclick="openSalesProductInfo(${x.id})"
+                    onclick="openSalesProductInfo(${x.id})"
                     style="cursor:pointer"
                   >
                     <td>
@@ -3091,7 +3092,7 @@ async function renderSalesCatalogPrice(){
                       <div class="status">
                         ${x.item_type==='service'?'Услуга':'Товар'}
                         ${x.sku?` · Артикул: ${esc(x.sku)}`:''}
-                        · Двойной клик — информация
+                        · Нажмите — подробнее
                       </div>
                     </td>
 
@@ -3127,10 +3128,8 @@ window.toggleEmployeeCatalogCategory=(key,button)=>{
 
   el.style.display=isHidden?'block':'none';
 
-  button.innerHTML=
-    button.innerHTML
-      .replace(/^▸|^▾/,'')
-      +(isHidden?'▾ ':'▸ ');
+  const arr=button.querySelector('.cat-arr');
+  if(arr)arr.textContent=isHidden?'▾':'▸';
 };$('salesCatalogPriceBtn').onclick=async()=>{await loadSalesSetup();$('salesCatalogPriceSearch').value='';await renderSalesCatalogPrice();open('salesCatalogPriceModal')};$('salesCatalogPriceSearch').oninput=renderSalesCatalogPrice;$('closeSalesCatalogPrice').onclick=()=>close('salesCatalogPriceModal');
 
 function wholesaleInputs(tiers=[]){$('wholesaleTierRows').innerHTML='';(tiers.length?tiers:[{min_qty:10,price:0}]).forEach(t=>addWholesaleTier(t))}
@@ -3145,18 +3144,18 @@ window.deleteSalesCatalog=async id=>{if(!confirm('Удалить товар/ус
 
 async function renderSalesAdminV4(){if(!isAdmin)return;const bc=await db.from('sales_branch_order_counters').select('*');salesBranches=salesBranches.map(b=>({...b,next_number:(bc.data||[]).find(x=>Number(x.branch_id)===Number(b.id))?.next_number||1000}));const people=uniquePeople();$('employeesAdminRows').innerHTML=people.length?`<table class="customer-table"><thead><tr><th>Сотрудник</th><th></th></tr></thead><tbody>${people.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><button class="danger small" onclick="deleteSalesEmployee(${p.id})">Удалить</button></td></tr>`).join('')}</tbody></table>`:'<div class="status">Сотрудников пока нет.</div>';$('branchesAdminRows').innerHTML=salesBranches.map(b=>`<div class="block"><div style="display:grid;grid-template-columns:1fr 170px auto;gap:8px;align-items:end"><div><b>${esc(b.name)}</b></div><div><label class="status">Следующий номер</label><input id="branchCounter_${b.id}" type="number" min="1" value="${Number(b.next_number||1000)}"></div><button class="secondary small" onclick="saveBranchCounter(${b.id})">Сохранить</button></div></div>`).join('')||'<div class="status">Нет филиалов.</div>';$('upsellSource').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('upsellSuggested').innerHTML=salesCatalog.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');$('rateEmployee').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');$('rateBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');$('taskBranch').innerHTML=salesBranches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');$('taskPerson').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
  const ups=await db.from('sales_upsell_rules').select('*').eq('is_active',true);$('upsellRows').innerHTML=(ups.data||[]).map(r=>{const src=salesCatalog.find(c=>Number(c.id)===Number(r.source_catalog_id)),sg=salesCatalog.find(c=>Number(c.id)===Number(r.suggested_catalog_id));return `<div class="block">${esc(src?.name||'')} → <b>${esc(sg?.name||'')}</b> · ${r.min_quantity}–${r.max_quantity??'∞'} шт <button class="danger small" onclick="deleteUpsell(${r.id})">Удалить</button></div>`}).join('')||'<div class="status">Правил пока нет.</div>';
- const rates=await db.from('sales_pay_rates').select('*');$('ratesRows').innerHTML=(rates.data||[]).map(r=>{const emp=people.find(p=>Number(p.id)===Number(r.employee_id));const br=salesBranches.find(b=>Number(b.id)===Number(r.branch_id));return `<div class="block" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><b>${esc(emp?.name||('Сотрудник #'+r.employee_id))}</b> · ${esc(br?.name||('Филиал #'+r.branch_id))} · смена ${salesMoney(r.shift_rate)} · ретушь ${salesMoney(r.retouch_rate)}</span><span><button class="secondary small" onclick="editPayRate(${r.employee_id},${r.branch_id},${Number(r.shift_rate)||0},${Number(r.retouch_rate)||0})">Изменить</button> <button class="danger small" onclick="deletePayRate(${r.employee_id},${r.branch_id})">Удалить</button></span></div>`}).join('')||'<div class="status">Ставок пока нет.</div>';
+ const rates=await db.from('sales_pay_rates').select('*');$('ratesRows').innerHTML=(rates.data||[]).map(r=>{const er=salesEmployees.find(e=>Number(e.id)===Number(r.employee_id)),emp=people.find(p=>Number(p.id)===Number(er?.person_id))||(er?{name:er.name}:null);const br=salesBranches.find(b=>Number(b.id)===Number(r.branch_id));return `<div class="block" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><b>${esc(emp?.name||('Сотрудник #'+r.employee_id))}</b> · ${esc(br?.name||('Филиал #'+r.branch_id))} · смена ${salesMoney(r.shift_rate)} · ретушь ${salesMoney(r.retouch_rate)}</span><span><button class="secondary small" onclick="editPayRate(${Number(er?.person_id)||0},${r.branch_id},${Number(r.shift_rate)||0},${Number(r.retouch_rate)||0})">Изменить</button> <button class="danger small" onclick="deletePayRate(${r.employee_id},${r.branch_id})">Удалить</button></span></div>`}).join('')||'<div class="status">Ставок пока нет.</div>';
  const tasks=await db.from('sales_shift_tasks').select('*,sales_branches(name)').eq('is_active',true).order('task_date');$('tasksRows').innerHTML=(tasks.data||[]).map(t=>`<div class="block">🏪 ${new Date(t.task_date+'T00:00:00').toLocaleDateString('ru-RU')} · ${esc(t.sales_branches?.name||'')} · <b>${esc(t.title)}</b> <button class="danger small" onclick="deleteTask(${t.id})">Удалить</button></div>`).join('')||'<div class="status">Заданий на филиал нет.</div>';$('taskDate').value=$('taskDate').value||salesTodayISO();await renderPersonTasksAdmin(people);
  const catalogGroups={};salesCatalog.forEach(c=>{const cat=(c.category||'Без категории').trim()||'Без категории';(catalogGroups[cat]||(catalogGroups[cat]=[])).push(c)});
  const escCat=v=>String(v??'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
- $('catalogAdminRows').innerHTML=salesCatalog.length?Object.entries(catalogGroups).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([cat,items],gi)=>{const key='catalogCat_'+gi;return `<div class="catalog-category-block" style="border:1px solid #d7dce5;border-radius:12px;margin:8px 0;overflow:hidden;background:#fff"><button type="button" class="secondary" style="width:100%;text-align:left;border:0;border-radius:0;padding:13px 16px;font-weight:700" onclick="toggleCatalogCategory('${key}')">▸ ${escCat(cat)} <span style="float:right;font-weight:500">${items.length} поз.</span></button><div id="${key}" style="display:none;padding:0 10px 10px"><table class="customer-table"><thead><tr><th>Тип</th><th>Название</th><th>Розница</th><th>Опт</th><th>Себестоимость</th><th></th></tr></thead><tbody>${items.map(c=>`<tr><td>${c.item_type==='service'?'Услуга':'Товар'}</td><td><b>${esc(c.name)}</b>${c.sku?`<div class="status">Артикул: ${esc(c.sku)}</div>`:''}</td><td>${salesMoney(c.price)}</td><td>${v4Tiers(c).map(t=>`от ${t.min_qty}: ${salesMoney(t.price)}`).join('<br>')||'—'}</td><td>${c.cost_price==null?'—':salesMoney(c.cost_price)}</td><td><button class="secondary small" onclick="editSalesCatalog(${c.id})">Изменить</button> <button class="danger small" onclick="deleteSalesCatalog(${c.id})">Удалить</button></td></tr>`).join('')}</tbody></table></div></div>`}).join(''):'<div class="status">Товаров и услуг пока нет.</div>';
- window.toggleCatalogCategory=key=>{const el=$(key);if(!el)return;el.style.display=el.style.display==='none'?'block':'none';const btn=el.previousElementSibling;if(btn)btn.innerHTML=btn.innerHTML.replace(/^▸|^▾/,'')+(el.style.display==='none'?'▸ ':'▾ ')};}
-$('salesAdminBtn').onclick=async()=>{if(!isAdmin){open('loginModal');return}await loadSalesSetup();clearCatalogForm();open('salesAdminModal')};$('closeSalesAdmin').onclick=()=>close('salesAdminModal');
+ $('catalogAdminRows').innerHTML=salesCatalog.length?Object.entries(catalogGroups).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([cat,items],gi)=>{const key='catalogCat_'+gi;return `<div class="catalog-category-block" style="border:1px solid #d7dce5;border-radius:12px;margin:8px 0;overflow:hidden;background:#fff"><button type="button" class="secondary" style="width:100%;text-align:left;border:0;border-radius:0;padding:13px 16px;font-weight:700" onclick="toggleCatalogCategory('${key}')"><span class="cat-arr">▸</span> ${escCat(cat)} <span style="float:right;font-weight:500">${items.length} поз.</span></button><div id="${key}" style="display:none;padding:0 10px 10px"><table class="customer-table"><thead><tr><th>Тип</th><th>Название</th><th>Розница</th><th>Опт</th><th>Себестоимость</th><th></th></tr></thead><tbody>${items.map(c=>`<tr><td>${c.item_type==='service'?'Услуга':'Товар'}</td><td><b>${esc(c.name)}</b>${c.sku?`<div class="status">Артикул: ${esc(c.sku)}</div>`:''}</td><td>${salesMoney(c.price)}</td><td>${v4Tiers(c).map(t=>`от ${t.min_qty}: ${salesMoney(t.price)}`).join('<br>')||'—'}</td><td>${c.cost_price==null?'—':salesMoney(c.cost_price)}</td><td><button class="secondary small" onclick="editSalesCatalog(${c.id})">Изменить</button> <button class="danger small" onclick="deleteSalesCatalog(${c.id})">Удалить</button></td></tr>`).join('')}</tbody></table></div></div>`}).join(''):'<div class="status">Товаров и услуг пока нет.</div>';
+ window.toggleCatalogCategory=key=>{const el=$(key);if(!el)return;el.style.display=el.style.display==='none'?'block':'none';const arr=el.previousElementSibling&&el.previousElementSibling.querySelector('.cat-arr');if(arr)arr.textContent=el.style.display==='none'?'▸':'▾'};}
+$('salesAdminBtn').onclick=async()=>{if(!isAdmin){open('loginModal');return}await loadSalesSetup();clearCatalogForm();if($('taskDate'))$('taskDate').value=salesTodayISO();open('salesAdminModal')};$('closeSalesAdmin').onclick=()=>close('salesAdminModal');
 window.saveBranchCounter=async id=>{const n=Number($('branchCounter_'+id).value);if(!(n>0))return;const r=await db.from('sales_branch_order_counters').upsert({branch_id:id,next_number:Math.floor(n),updated_at:new Date().toISOString()},{onConflict:'branch_id'});if(r.error)alert(r.error.message);else loadSalesSetup()};
 $('addBranchBtn').onclick=async()=>{const name=$('branchName').value.trim(),start=Number($('branchOrderStart').value)||1000;if(!name)return;const r=await db.from('sales_branches').insert({name}).select().single();if(r.error){$('salesAdminStatus').textContent='Ошибка: '+r.error.message;return}await db.from('sales_branch_order_counters').insert({branch_id:r.data.id,next_number:start});$('branchName').value='';await loadSalesSetup()};
-$('addEmployeeBtn').onclick=async()=>{const name=$('employeeName').value.trim();if(!name)return;const existing=salesPeople.find(p=>p.name.toLowerCase()===name.toLowerCase());if(existing){$('salesAdminStatus').textContent='Такой сотрудник уже есть.';return}const r=await db.from('sales_people').insert({name,retouch_lead_default:$('employeeLeadDefault').value==='true'}).select().single();if(r.error)alert(r.error.message);else{await loadSalesSetup();$('employeeName').value=''}};
+$('addEmployeeBtn').onclick=async()=>{const name=$('employeeName').value.trim();if(!name)return;const existing=salesPeople.find(p=>p.name.toLowerCase()===name.toLowerCase());if(existing){$('salesAdminStatus').textContent='Такой сотрудник уже есть.';return}const old=await db.from('sales_people').select('id,name').eq('is_active',false);const prev=(old.data||[]).find(p=>String(p.name).trim().toLowerCase()===name.toLowerCase());if(prev&&confirm(`«${prev.name}» уже был в списке раньше. Вернуть этого сотрудника (с прежними ставками и правилами графика)?\n\nОтмена — создать нового сотрудника с таким же именем.`)){const u=await db.from('sales_people').update({is_active:true}).eq('id',prev.id);if(u.error)alert(u.error.message);else{await loadSalesSetup();$('employeeName').value=''}return}const r=await db.from('sales_people').insert({name,retouch_lead_default:$('employeeLeadDefault').value==='true'}).select().single();if(r.error)alert(r.error.message);else{await loadSalesSetup();$('employeeName').value=''}};
 $('addUpsellBtn').onclick=async()=>{const r=await db.from('sales_upsell_rules').insert({source_catalog_id:Number($('upsellSource').value),suggested_catalog_id:Number($('upsellSuggested').value),min_quantity:Number($('upsellMin').value)||1,max_quantity:$('upsellMax').value.trim()===''?null:Number($('upsellMax').value),question:$('upsellQuestion').value.trim()||'Предложить дополнительный товар?'});if(r.error)alert(r.error.message);else loadSalesSetup()};window.deleteUpsell=async id=>{await db.from('sales_upsell_rules').update({is_active:false}).eq('id',id);loadSalesSetup()};
-window.editPayRate=(employeeId,branchId,shiftRate,retouchRate)=>{ $('rateEmployee').value=String(employeeId); $('rateBranch').value=String(branchId); $('rateShift').value=shiftRate; $('rateRetouch').value=retouchRate; $('rateShift').focus(); }; window.deletePayRate=async(employeeId,branchId)=>{if(!confirm('Удалить эту ставку?'))return;const q=await db.from('sales_pay_rates').delete().eq('employee_id',employeeId).eq('branch_id',branchId);if(q.error)alert(q.error.message);else loadSalesSetup()}; $('saveRateBtn').onclick=async()=>{const pid=Number($('rateEmployee').value),branch=Number($('rateBranch').value),r=await ensureEmployeeRow(pid,branch);const q=await db.from('sales_pay_rates').upsert({employee_id:r.id,branch_id:branch,shift_rate:Number($('rateShift').value)||0,retouch_rate:Number($('rateRetouch').value)||0},{onConflict:'employee_id,branch_id'});if(q.error)alert(q.error.message);else loadSalesSetup()};
+window.editPayRate=(employeeId,branchId,shiftRate,retouchRate)=>{ $('rateEmployee').value=String(employeeId); $('rateBranch').value=String(branchId); $('rateShift').value=shiftRate; $('rateRetouch').value=retouchRate; $('rateShift').focus(); }; window.deletePayRate=async(employeeId,branchId)=>{if(!confirm('Удалить эту ставку?'))return;const q=await db.from('sales_pay_rates').delete().eq('employee_id',employeeId).eq('branch_id',branchId);if(q.error)alert(q.error.message);else loadSalesSetup()}; $('saveRateBtn').onclick=async()=>{const pid=Number($('rateEmployee').value),branch=Number($('rateBranch').value);if(!pid||!branch){alert('Выберите сотрудника и филиал.');return}let r;try{r=await ensureEmployeeRow(pid,branch)}catch(e){alert('Не удалось сохранить ставку: '+e.message);return}const q=await db.from('sales_pay_rates').upsert({employee_id:r.id,branch_id:branch,shift_rate:Number($('rateShift').value)||0,retouch_rate:Number($('rateRetouch').value)||0},{onConflict:'employee_id,branch_id'});if(q.error)alert(q.error.message);else loadSalesSetup()};
 $('addTaskBtn').onclick=async()=>{const title=$('taskTitle').value.trim();if(!title){alert('Введите текст задания.');return}const description=$('taskDescription').value.trim()||null;const date=$('taskDate').value||salesTodayISO();const r=$('taskTarget').value==='person'?await db.from('sales_person_tasks').insert({person_id:Number($('taskPerson').value),start_date:date,title,description}):await db.from('sales_shift_tasks').insert({branch_id:Number($('taskBranch').value),task_date:date,title,description});if(r.error)alert(r.error.message);else{ $('taskTitle').value='';$('taskDescription').value='';loadSalesSetup()}};window.deleteTask=async id=>{await db.from('sales_shift_tasks').update({is_active:false}).eq('id',id);loadSalesSetup()};
 
 // Оплата по ссылке: красная строка до оплаты; после оплаты — зелёная. Неоплата закрывает продажу из выручки.
@@ -3179,13 +3178,13 @@ $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventD
 
 
 // Более подробные отчёты: раздельная оплата показывается по каждому способу.
-async function buildShiftReport(shiftId){const sr=await db.from('sales_shifts').select('*,sales_branches(name)').eq('id',shiftId).single();if(sr.error){$('shiftReportContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return}const sh=sr.data;const sales=(await db.from('sales').select('*,sales_employees(name)').eq('shift_id',shiftId).order('created_at')).data||[];const ids=sales.map(x=>x.id);const items=ids.length?(await db.from('sale_items').select('*').in('sale_id',ids)).data||[]:[];const pays=ids.length?(await db.from('sale_payments').select('*').in('sale_id',ids)).data||[]:[];const returns=(await db.from('sales_returns').select('*').eq('shift_id',shiftId)).data||[];const valid=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid');const retTotal=returns.reduce((a,x)=>a+Number(x.amount||0),0),gross=valid.reduce((a,x)=>a+Number(x.total||0),0);const byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);pays.filter(p=>valid.some(s=>s.id===p.sale_id)).forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const serviceMap={};items.filter(i=>valid.some(s=>s.id===i.sale_id)&&i.item_type==='service').forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity||0));const participants=(await db.from('sales_shift_employees').select('employee_id,is_lead,sales_employees(name)').eq('shift_id',shiftId)).data||[];$('shiftReportContent').innerHTML=`<div class="status">${esc(sh.sales_branches?.name||'')} · ${new Date(sh.started_at).toLocaleString('ru-RU')} — ${sh.ended_at?new Date(sh.ended_at).toLocaleString('ru-RU'):'сейчас'}</div><div class="info-note" style="margin-top:8px">Кассиры смены: ${participants.map(p=>esc(p.sales_employees?.name||'')).join(', ')||'—'}${participants.some(p=>p.is_lead)?' · главный по ретуши: '+participants.filter(p=>p.is_lead).map(p=>esc(p.sales_employees?.name||'')).join(', '):''}</div><div class="report-grid" style="margin-top:12px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retTotal)}</b></div><div class="report-card">Продаж<br><b>${valid.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>Оплата</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td><b>${salesMoney(byPay[k])}</b></td></tr>`).join('')}<tr><td><b>Итого</b></td><td><b>${salesMoney(gross-retTotal)}</b></td></tr></tbody></table><h3>По кассирам</h3><table class="customer-table"><thead><tr><th>Кассир</th><th>Продаж</th><th>Сумма продаж</th></tr></thead><tbody>${participants.map(p=>{const mine=valid.filter(s=>Number(s.employee_id)===Number(p.employee_id));return `<tr><td>${esc(p.sales_employees?.name||String(p.employee_id))}</td><td>${mine.length}</td><td>${salesMoney(mine.reduce((a,s)=>a+Number(s.total||0),0))}</td></tr>`}).join('')}</tbody></table><h3>Услуги</h3>${Object.keys(serviceMap).length?'<table class="customer-table"><tbody>'+Object.entries(serviceMap).map(([n,q])=>`<tr><td>${esc(n)}</td><td>${q}</td></tr>`).join('')+'</tbody></table>':'<div class="status">Услуг не продано.</div>'}`;open('shiftReportModal')}
+async function buildShiftReport(shiftId){const sr=await db.from('sales_shifts').select('*,sales_branches(name)').eq('id',shiftId).single();if(sr.error){$('shiftReportContent').innerHTML='<div class="status">Не удалось загрузить отчёт: '+esc(sr.error.message)+'</div>';open('shiftReportModal');return}const sh=sr.data;const sales=(await db.from('sales').select('*,sales_employees(name)').eq('shift_id',shiftId).order('created_at')).data||[];const ids=sales.map(x=>x.id);const items=ids.length?(await db.from('sale_items').select('*').in('sale_id',ids)).data||[]:[];const pays=ids.length?(await db.from('sale_payments').select('*').in('sale_id',ids)).data||[]:[];const returns=(await db.from('sales_returns').select('*').eq('shift_id',shiftId)).data||[];const valid=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid');const retTotal=returns.reduce((a,x)=>a+Number(x.amount||0),0),retOld=returns.filter(x=>!sales.some(s=>Number(s.id)===Number(x.sale_id))).reduce((a,x)=>a+Number(x.amount||0),0),gross=valid.reduce((a,x)=>a+Number(x.total||0),0);const byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);pays.filter(p=>valid.some(s=>s.id===p.sale_id)).forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const serviceMap={};items.filter(i=>valid.some(s=>s.id===i.sale_id)&&i.item_type==='service').forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity||0));const participants=(await db.from('sales_shift_employees').select('employee_id,is_lead,sales_employees(name)').eq('shift_id',shiftId)).data||[];$('shiftReportContent').innerHTML=`<div class="status">${esc(sh.sales_branches?.name||'')} · ${new Date(sh.started_at).toLocaleString('ru-RU')} — ${sh.ended_at?new Date(sh.ended_at).toLocaleString('ru-RU'):'сейчас'}</div><div class="info-note" style="margin-top:8px">Кассиры смены: ${participants.map(p=>esc(p.sales_employees?.name||'')).join(', ')||'—'}${participants.some(p=>p.is_lead)?' · главный по ретуши: '+participants.filter(p=>p.is_lead).map(p=>esc(p.sales_employees?.name||'')).join(', '):''}</div><div class="report-grid" style="margin-top:12px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retOld)}</b></div><div class="report-card">Продаж<br><b>${valid.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>Оплата</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td><b>${salesMoney(byPay[k])}</b></td></tr>`).join('')}<tr><td><b>Итого</b></td><td><b>${salesMoney(gross)}</b></td></tr></tbody></table><h3>По кассирам</h3><table class="customer-table"><thead><tr><th>Кассир</th><th>Продаж</th><th>Сумма продаж</th></tr></thead><tbody>${participants.map(p=>{const mine=valid.filter(s=>Number(s.employee_id)===Number(p.employee_id));return `<tr><td>${esc(p.sales_employees?.name||String(p.employee_id))}</td><td>${mine.length}</td><td>${salesMoney(mine.reduce((a,s)=>a+Number(s.total||0),0))}</td></tr>`}).join('')}</tbody></table><h3>Услуги</h3>${Object.keys(serviceMap).length?'<table class="customer-table"><tbody>'+Object.entries(serviceMap).map(([n,q])=>`<tr><td>${esc(n)}</td><td>${q}</td></tr>`).join('')+'</tbody></table>':'<div class="status">Услуг не продано.</div>'}`;open('shiftReportModal')}
 async function buildAdminReport(){await loadSalesSetup();const from=$('reportFrom').value,to=$('reportTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);try{const branchId=$('reportBranch')?.value||'';
 const{sales,items}=await loadSalesForRange(
   start,
   end,
   branchId?Number(branchId):null
-),completed=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid'),rr=await db.from('sales_returns').select('*').gte('created_at',start.toISOString()).lt('created_at',end.toISOString()),retTotal=(rr.data||[]).filter(x=>branchId?Number(x.branch_id)===Number(branchId):!isTestBranch(x.branch_id)).reduce((a,x)=>a+Number(x.amount||0),0),gross=completed.reduce((a,x)=>a+Number(x.total||0),0),cost=items.filter(i=>completed.some(s=>s.id===i.sale_id)).reduce((a,i)=>a+Number(i.cost_total||0),0),ids=completed.map(x=>x.id),payRows=ids.length?(await db.from('sale_payments').select('*').in('sale_id',ids)).data||[]:[],byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);payRows.forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const branches=Object.fromEntries(salesBranches.map(b=>[b.id,b.name])),byBranch={},byEmployee={};completed.forEach(x=>{byBranch[x.branch_id]=(byBranch[x.branch_id]||0)+Number(x.total);const employee=salesEmployees.find(e=>Number(e.id)===Number(x.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+x.employee_id;if(!byEmployee[key])byEmployee[key]={name:salesPeople.find(p=>Number(p.id)===Number(employee?.person_id))?.name||x.sales_employees?.name||String(x.employee_id),total:0};byEmployee[key].total+=Number(x.total)});const serviceMap={};items.filter(i=>i.item_type==='service'&&completed.some(s=>s.id===i.sale_id)).forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity));$('reportContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retTotal)}</b></div><div class="report-card">Продаж<br><b>${completed.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>По филиалам</h3><table class="customer-table"><tbody>${Object.entries(byBranch).map(([id,v])=>`<tr><td>${esc(branches[id]||id)}</td><td>${salesMoney(v)}</td></tr>`).join('')||'<tr><td>Нет продаж</td></tr>'}</tbody></table><h3>По кассирам</h3><table class="customer-table"><tbody>${Object.values(byEmployee).map(v=>`<tr><td>${esc(v.name)}</td><td>${salesMoney(v.total)}</td></tr>`).join('')||'<tr><td>Нет продаж</td></tr>'}</tbody></table><h3>По способам оплаты</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td>${salesMoney(byPay[k])}</td></tr>`).join('')}</tbody></table><h3>Услуги</h3><div class="status">${Object.entries(serviceMap).map(([n,q])=>`${esc(n)} — ${q}`).join(' · ')||'Нет продаж услуг.'}</div>${cost>0?`<h3>Себестоимость и валовая прибыль</h3><div class="report-grid"><div class="report-card">Себестоимость<br><b>${salesMoney(cost)}</b></div><div class="report-card">Валовая прибыль<br><b>${salesMoney(gross-retTotal-cost)}</b></div></div>`:''}`;}catch(e){$('reportContent').innerHTML='<div class="status">Ошибка: '+esc(e.message)+'</div>'}}
+),completed=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid'),rr=await db.from('sales_returns').select('*').gte('created_at',start.toISOString()).lt('created_at',end.toISOString()),retTotal=(rr.data||[]).filter(x=>branchId?Number(x.branch_id)===Number(branchId):!isTestBranch(x.branch_id)).reduce((a,x)=>a+Number(x.amount||0),0),retOld=(rr.data||[]).filter(x=>(branchId?Number(x.branch_id)===Number(branchId):!isTestBranch(x.branch_id))&&!sales.some(s=>Number(s.id)===Number(x.sale_id))).reduce((a,x)=>a+Number(x.amount||0),0),gross=completed.reduce((a,x)=>a+Number(x.total||0),0),cost=items.filter(i=>completed.some(s=>s.id===i.sale_id)).reduce((a,i)=>a+Number(i.cost_total||0),0),ids=completed.map(x=>x.id),payRows=ids.length?(await dbInRows(()=>db.from('sale_payments').select('*'),'sale_id',ids)).data||[]:[],byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);payRows.forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const branches=Object.fromEntries(salesBranches.map(b=>[b.id,b.name])),byBranch={},byEmployee={};completed.forEach(x=>{byBranch[x.branch_id]=(byBranch[x.branch_id]||0)+Number(x.total);const employee=salesEmployees.find(e=>Number(e.id)===Number(x.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+x.employee_id;if(!byEmployee[key])byEmployee[key]={name:salesPeople.find(p=>Number(p.id)===Number(employee?.person_id))?.name||x.sales_employees?.name||String(x.employee_id),total:0};byEmployee[key].total+=Number(x.total)});const serviceMap={};items.filter(i=>i.item_type==='service'&&completed.some(s=>s.id===i.sale_id)).forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity));$('reportContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retOld)}</b></div><div class="report-card">Продаж<br><b>${completed.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>По филиалам</h3><table class="customer-table"><tbody>${Object.entries(byBranch).map(([id,v])=>`<tr><td>${esc(branches[id]||id)}</td><td>${salesMoney(v)}</td></tr>`).join('')||'<tr><td>Нет продаж</td></tr>'}</tbody></table><h3>По кассирам</h3><table class="customer-table"><tbody>${Object.values(byEmployee).map(v=>`<tr><td>${esc(v.name)}</td><td>${salesMoney(v.total)}</td></tr>`).join('')||'<tr><td>Нет продаж</td></tr>'}</tbody></table><h3>По способам оплаты</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td>${salesMoney(byPay[k])}</td></tr>`).join('')}</tbody></table><h3>Услуги</h3><div class="status">${Object.entries(serviceMap).map(([n,q])=>`${esc(n)} — ${q}`).join(' · ')||'Нет продаж услуг.'}</div>${cost>0?`<h3>Себестоимость и валовая прибыль</h3><div class="report-grid"><div class="report-card">Себестоимость<br><b>${salesMoney(cost)}</b></div><div class="report-card">Валовая прибыль<br><b>${salesMoney(gross-retTotal-cost)}</b></div></div>`:''}`;}catch(e){$('reportContent').innerHTML='<div class="status">Ошибка: '+esc(e.message)+'</div>'}}
 
 // Стартовые значения после v4.
 // Закрытие выполняется только отдельной явной командой для всей смены.
@@ -3473,7 +3472,7 @@ $('debtShowPaid').onchange=loadDebts;
 // Вкладки калькуляторов: показываем один калькулятор за раз.
 document.querySelectorAll('.calc-tab').forEach(tab=>{
   tab.onclick=()=>{
-    document.querySelectorAll('.calc-tab').forEach(t=>t.setAttribute('aria-selected',t===tab?'true':'false'));
+    tab.parentElement.querySelectorAll('.calc-tab').forEach(t=>t.setAttribute('aria-selected',t===tab?'true':'false'));
     document.querySelectorAll('.calc-pane').forEach(p=>{p.hidden=p.getAttribute('aria-labelledby')!==tab.dataset.calc});
   };
 });
@@ -3677,9 +3676,11 @@ function askOpenCash(info){
       if(!(amount>=0)){$('cashOpenStatus').textContent='Напишите сумму наличных в кассе (можно 0).';return}
       if(has&&Math.abs(amount-Number(exp))>=0.01&&!confirm(`В кассе ${salesMoney(amount)}, а должно быть ${salesMoney(exp)}.\nРазница: ${amount>exp?'+':'−'}${salesMoney(Math.abs(amount-exp))}.\n\nАдминистратор увидит расхождение в сводке. Сохранить?`))return;
       const sess=salesSession;if(!sess?.shiftId){close('cashOpenModal');resolve();return}
+      if(save.busy)return;save.busy=true;
       $('cashOpenStatus').textContent='Сохраняю…';
       const r=await db.rpc('sales_set_open_cash',{p_shift_id:sess.shiftId,p_employee_id:sess.employeeId,p_amount:Math.round(amount*100)/100});
-      if(r.error){$('cashOpenStatus').textContent='Ошибка: '+r.error.message;return}
+      save.busy=false;
+      if(r.error){$('cashOpenStatus').innerHTML='Ошибка: '+esc(r.error.message)+' <button type="button" class="secondary small" id="cashOpenLater">Указать позже</button>';$('cashOpenLater').onclick=()=>{close('cashOpenModal');resolve()};return}
       close('cashOpenModal');resolve();
     };
     if(has)$('cashOpenConfirm').onclick=()=>save(Number(exp));
@@ -3826,7 +3827,7 @@ async function renderAnnDraft(){
 }
 async function renderAnnAdmin(){
   $('annAdminList').innerHTML='<div class="status">Загрузка…</div>';
-  const [a,r]=await Promise.all([db.from('announcements').select('*').order('created_at',{ascending:false}).limit(50),db.from('announcement_reads').select('announcement_id,person_id,read_at')]);
+  const [a,r]=await Promise.all([db.from('announcements').select('*').order('created_at',{ascending:false}).limit(50),dbAllRows(()=>db.from('announcement_reads').select('announcement_id,person_id,read_at').order('announcement_id').order('person_id'))]);
   if(a.error||r.error){$('annAdminList').innerHTML=`<div class="status">Ошибка: ${esc((a.error||r.error).message)}</div>`;return}
   const people=salesPeople.filter(p=>p.is_active!==false),byAnn={};
   (r.data||[]).forEach(x=>(byAnn[x.announcement_id]=byAnn[x.announcement_id]||new Set()).add(Number(x.person_id)));
@@ -4497,7 +4498,9 @@ async function openStock(){
   if(!salesBranches.length||!salesCatalog.length){try{await loadSalesSetup()}catch(e){}}
   $('stockBody').innerHTML='<div class="status">Загрузка…</div>';
   open('stockModal');
-  await stkLoad();
+  const loaded=await stkLoad();
+  if(!loaded&&!stk.data){$('stockBody').innerHTML='<div class="v5-box warn">Не удалось загрузить склад. Проверьте интернет и откройте «Склад» ещё раз.</div>';return}
+  if(!loaded&&typeof v5Toast==='function')v5Toast('Склад: нет связи, показаны последние загруженные данные.');
   stkFlushPending();
   if(stk.tab==='mat'&&!isAdmin)stk.tab='bal';
   stkWho();stkTab(stk.tab);
@@ -4623,11 +4626,12 @@ async function stkLoadOrders(){
   const list=(r.data||[]).filter(o=>stk.ordAll||o.items.some(i=>i.moves.length));
   stk.orders=list;
   el.innerHTML=list.length?list.map(o=>{
-    const prod=[...new Set(o.items.flatMap(i=>i.moves.map(m=>Number(m.b))))];
+    // Списания с мастерской не переносятся между филиалами, поэтому в выборе «кто выполнил» их не учитываем.
+    const bm=i=>i.moves.filter(m=>!stkIsWorkshop(m.b)),prod=[...new Set(o.items.flatMap(i=>bm(i).map(m=>Number(m.b))))];
     return `<div class="stk-order"><div class="stk-order-head"><div><b>№${esc(o.order_number)}</b> · ${v5Date(o.created_at)} · оформили: ${esc(stkBranchName(o.branch_id))} · ${salesMoney(o.total)}${o.comment?` · <span class="stk-sub">${esc(o.comment)}</span>`:''}</div>
     ${prod.length?`<label class="stk-sub">Весь заказ выполнил: <select data-order="${o.id}" ${can?'':'disabled'} style="width:auto">${prod.length>1?'<option value="">несколько филиалов</option>':''}${stkOpts(br,prod.length===1?prod[0]:'')}</select></label>`:''}</div>
     ${o.items.map(i=>`<div class="stk-item"><div>${esc(i.name)} × ${stkQty(i.quantity)}<div class="stk-sub">${i.moves.length?i.moves.map(m=>`${esc(m.material)}: ${stkQty(m.qty)} ${esc(m.unit)}`).join(' · '):'Материал не списывается (нет нормы)'}</div></div>
-      <div>${i.moves.length?`<select data-item="${i.id}" ${can?'':'disabled'} aria-label="Филиал, с которого списан материал">${stkOpts(br,i.moves[0].b)}</select>`:''}</div></div>`).join('')}</div>`}).join('')
+      <div>${bm(i).length?`<select data-item="${i.id}" ${can?'':'disabled'} aria-label="Филиал, с которого списан материал">${stkOpts(br,bm(i)[0].b)}</select>`:(i.moves.length?'<span class="stk-sub">🏭 мастерская</span>':'')}</div></div>`).join('')}</div>`}).join('')
     :'<div class="stk-sub">Нет продаж с материалами за этот день. Материал списывается только по позициям, к которым администратор привязал нормы.</div>';
   el.querySelectorAll('[data-item]').forEach(s=>s.onchange=()=>stkSetProducer({p_sale_item_id:Number(s.dataset.item)},Number(s.value)));
   el.querySelectorAll('[data-order]').forEach(s=>s.onchange=()=>{if(s.value)stkSetProducer({p_sale_id:Number(s.dataset.order)},Number(s.value))});
@@ -4635,6 +4639,7 @@ async function stkLoadOrders(){
 async function stkSetProducer(target,branchId){
   const r=await db.rpc('stock_set_producer',{...stkActor(),p_branch_id:branchId,p_sale_id:null,p_sale_item_id:null,...target});
   if(r.error){alert('Не удалось перенести списание: '+r.error.message);}
+  else if(r.data===0)v5Toast('Переносить нечего: этот материал списывается с мастерской.');
   else v5Toast(`Материал списан с филиала «${stkBranchName(branchId)}».`);
   await stkLoad();stkLoadOrders();
 }
@@ -5102,7 +5107,7 @@ function schDrawGrid(){
   let badge='';
   if(admin)badge=sch.dirty?'<span class="sch-badge dirty">Есть несохранённые изменения</span>':pub?'<span class="sch-badge pub">Опубликован: видят все</span>':has?'<span class="sch-badge draft">Черновик: сотрудники не видят</span>':'<span class="sch-badge draft">Месяц ещё не составлен</span>';
   let h=`<div class="sch-head"><button class="sch-nav secondary" id="schPrev" aria-label="Предыдущий месяц">‹</button><h3>${SCH_MONTHS[m]} ${y}</h3><button class="sch-nav secondary" id="schNext" aria-label="Следующий месяц">›</button>${badge}</div>`;
-  if(admin)h+=`<div class="sch-tools"><button id="schDraft" class="secondary">Составить черновик по прошлому месяцу</button><button id="schSave" class="secondary">Сохранить черновик</button>${pub?'<button id="schSavePub" class="primary">Сохранить</button><button id="schHide" class="secondary">Скрыть от сотрудников</button>':'<button id="schSavePub" class="primary">Сохранить и показать всем</button>'}${has||sch.dirty?'<button id="schClear" class="secondary">Очистить месяц</button>':''}</div>`;
+  if(admin)h+=`<div class="sch-tools"><button id="schDraft" class="secondary">Составить черновик по прошлому месяцу</button>${pub?'':'<button id="schSave" class="secondary">Сохранить черновик</button>'}${pub?'<button id="schSavePub" class="primary">Сохранить</button><button id="schHide" class="secondary">Скрыть от сотрудников</button>':'<button id="schSavePub" class="primary">Сохранить и показать всем</button>'}${has||sch.dirty?'<button id="schClear" class="secondary">Очистить месяц</button>':''}</div>`;
   if(sch.msg)h+=`<div class="status sales-warning" style="padding:8px 12px;border-radius:10px;border:1px solid;margin-bottom:10px">${esc(sch.msg)}</div>`;
   if(!admin&&!pub){$('schBody').innerHTML=h+'<div class="status" style="padding:20px 0">График на этот месяц ещё не готов.</div>';schBindNav();return}
   if(!cols.length){$('schBody').innerHTML=h+'<div class="status">Столбцы графика не настроены.</div>';schBindNav();return}
@@ -5143,7 +5148,7 @@ function schDrawGrid(){
   $('schBody').querySelectorAll('select[data-k]').forEach(s=>s.onchange=()=>{if(s.value)sch.cells.set(s.dataset.k,Number(s.value));else sch.cells.delete(s.dataset.k);sch.dirty=true;sch.msg='';const sc=$('schBody').querySelector('.sch-wrap'),top=sc.scrollTop,left=sc.scrollLeft;schDrawGrid();const nw=$('schBody').querySelector('.sch-wrap');nw.scrollTop=top;nw.scrollLeft=left});
   if(admin){
     $('schDraft').onclick=schMakeDraft;
-    $('schSave').onclick=()=>schSave(pub);
+    if($('schSave'))$('schSave').onclick=()=>schSave(pub);
     $('schSavePub').onclick=()=>schSave(true);
     if($('schHide'))$('schHide').onclick=()=>schSave(false);
     if($('schClear'))$('schClear').onclick=()=>{if(!confirm('Очистить все клетки этого месяца? Изменение сохранится, только когда вы нажмёте «Сохранить».'))return;const pre=schISO(y,m,1).slice(0,8);[...sch.cells.keys()].forEach(k=>{if(k.startsWith(pre))sch.cells.delete(k)});sch.dirty=true;schDrawGrid()};
@@ -5321,7 +5326,7 @@ function schDrawCols(){
     if(E.some(c=>!String(c.title||'').trim())){$('schColMsg').textContent='У каждого столбца должно быть название.';return}
     $('schColMsg').textContent='Сохраняю…';
     const clean=c=>({title:String(c.title).trim(),branch_id:c.branch_id||null,sort_order:c.sort_order||0,slots:Math.min(3,Math.max(1,c.slots||1)),need_weekday:Math.min(3,Math.max(0,c.need_weekday||0)),need_weekend:Math.min(3,Math.max(0,c.need_weekend||0)),is_active:!!c.is_active});
-    for(const c of E){const r=c.id?await db.from('schedule_columns').update(clean(c)).eq('id',c.id):await db.from('schedule_columns').insert(clean(c));if(r.error){$('schColMsg').textContent='Ошибка: '+r.error.message;return}}
+    for(const c of E){const r=c.id?await db.from('schedule_columns').update(clean(c)).eq('id',c.id):await db.from('schedule_columns').insert(clean(c)).select('id').single();if(r.error){$('schColMsg').textContent='Ошибка: '+r.error.message;return}if(!c.id&&r.data)c.id=r.data.id}
     const r=await db.from('schedule_columns').select('*').order('sort_order').order('id');if(!r.error)sch.cols=r.data||[];
     sch.editCols=null;schDrawCols();$('schColMsg').textContent='Сохранено.';
   };
@@ -5333,6 +5338,41 @@ function schDrawCols(){
   ref.insertAdjacentHTML('beforebegin','<button id="scheduleBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3"/></svg><span class="tile-name">График работы</span></button>');
   $('scheduleBtn').onclick=()=>{sch.editRules=null;sch.editCols=null;openSchedule()};
 })();
+</script>
+<!-- Аудит 2026-10-12: правки вёрстки и мелкие исправления -->
+<style id="auditFixes">
+/* Карточки справочника: кнопки переносятся и не вылезают за карточку */
+.card .actions{flex-wrap:wrap;gap:8px}
+/* Продажа: поля позиции на одной линии, итог виден рядом с кнопкой */
+.sales-item-row{align-items:start}
+.sales-item-row>button{align-self:center}
+.sales-item-row .field .status{font-size:12px;line-height:1.3;margin-top:4px}
+.sale-save-bar{bottom:-20px;padding-bottom:20px}
+.sale-save-bar .actions{align-items:center;justify-content:flex-end;gap:14px}
+.sale-bar-total{margin-right:auto;font-size:15px;color:var(--muted)}
+.sale-bar-total b{font-family:var(--f-head,inherit);font-size:22px;color:var(--ink);margin-left:6px;font-variant-numeric:tabular-nums}
+/* Телефон: вкладка «Ждут оплаты» не закрывает кнопки смены */
+@media(max-width:700px){
+  .pickup-panel{top:auto;bottom:14px;max-height:calc(100vh - 90px)}
+  .pickup-panel .pp-tab{writing-mode:horizontal-tb;transform:none;border-radius:var(--r-md) 0 0 var(--r-md);padding:10px 12px}
+}
+/* Широкие таблицы в окнах прокручиваются внутри, а не всё окно вбок */
+.dialog table{max-width:100%}
+.dialog .table-scroll,.dialog .price-admin{overflow-x:auto}
+</style>
+<script>
+// Итог продажи дублируется в нижней панели рядом с «Оформить продажу», чтобы не прокручивать вниз.
+// Касса: скидка сразу пересчитывает итог; «Добавить часть» в раздельной оплате работает; поле «Получено от клиента» не тянется с прошлой продажи.
+(function(){
+ const d=document.getElementById('saleDiscountPercent');if(d)d.addEventListener('input',()=>{if(typeof updateSaleTotal==='function')updateSaleTotal()});
+ const add=document.getElementById('addSplitPayment');if(add)add.onclick=()=>{v4SplitRows.push({method:'card',amount:0});renderSplitRows();if(typeof updateSplitStatus==='function')updateSplitStatus()};
+ const ob=document.getElementById('openSplitPaymentBtn');if(ob&&ob.closest('.field'))ob.closest('.field').style.display='none';
+ const base=openSaleV4;openSaleV4=async function(){['cashReceived','cashChange'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''});const st=document.getElementById('cashChangeStatus');if(st)st.textContent='';const res=await base.apply(this,arguments);document.querySelectorAll('#saleModal .sales-workspace-right,#saleModal .sale-catalog-list').forEach(e=>e.scrollTop=0);return res};
+ document.getElementById('salesBtn').onclick=()=>openSaleV4();
+})();
+(function(){const src=document.getElementById('saleTotal'),bar=document.querySelector('.sale-save-bar .actions');if(!src||!bar)return;
+ const box=document.createElement('div');box.className='sale-bar-total';box.innerHTML='Итого:<b id="saleBarTotal"></b>';bar.insertBefore(box,bar.firstChild);
+ const sync=()=>{document.getElementById('saleBarTotal').textContent=src.textContent};sync();new MutationObserver(sync).observe(src,{childList:true,characterData:true,subtree:true});})();
 </script>
 </body>
 </html>
