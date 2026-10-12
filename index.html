@@ -1023,6 +1023,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div id="sumBody"></div><div class="actions"><button id="closeSummary">Закрыть</button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="formula.js"></script>
 <script>
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -5376,6 +5377,224 @@ function schDrawCols(){
   const ref=$('reportsHomeBtn');
   ref.insertAdjacentHTML('beforebegin','<button id="scheduleBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3"/></svg><span class="tile-name">График работы</span></button>');
   $('scheduleBtn').onclick=()=>{sch.editRules=null;sch.editCols=null;openSchedule()};
+})();
+</script>
+<div class="modal" id="bigReportModal"><div class="dialog" style="max-width:1400px">
+  <h2 style="margin-top:0" id="grTitle">Общий отчет</h2>
+  <div id="grTabs" class="gr-tabs" role="tablist" aria-label="Листы отчета"></div>
+  <div id="grBody"></div>
+  <div class="actions"><span id="grAdminTools" class="gr-admin-tools"></span><button id="closeBigReport">Закрыть</button></div>
+</div></div>
+<style>
+.gr-tabs{display:flex;gap:4px;flex-wrap:wrap;background:var(--sunk);border:1px solid var(--line);border-radius:var(--r-md);padding:4px;margin:4px 0 12px}
+.gr-tabs:empty{display:none}
+.gr-tabs .calc-tab{padding:7px 12px;font-size:13.5px}
+.gr-tabs .calc-tab[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.gr-head{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.gr-head select{width:auto;min-width:170px;padding:6px 10px;min-height:0}
+.gr-head .gr-note{color:var(--muted);font-size:13px}
+.gr-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.gr-bar b{min-width:58px;font-variant-numeric:tabular-nums;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--sunk)}
+.gr-bar input{flex:1;min-width:0;padding:6px 10px;min-height:0;font-variant-numeric:tabular-nums}
+.gr-bar button{padding:7px 12px;min-height:0}
+.gr-msg{font-size:13px;min-height:18px;margin:0 0 6px;color:var(--muted)}
+.gr-msg.bad{color:var(--bad-ink)}
+.gr-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:var(--r-md);background:#fff}
+.gr-table{border-collapse:collapse;table-layout:fixed;font:12.5px/1.25 Arial,Helvetica,sans-serif;color:#111}
+.gr-table td{border:1px solid #D9DDE3;padding:2px 4px;height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.gr-table td.n{text-align:right;font-variant-numeric:tabular-nums}
+.gr-table td.mg{text-align:center;white-space:normal}
+.gr-table thead th{position:sticky;top:0;z-index:2;background:#EEF1F5;color:#5D6472;font-weight:600;border:1px solid #D9DDE3;padding:2px 0;font-size:11.5px}
+.gr-table .rh{position:sticky;left:0;z-index:1;background:#EEF1F5;color:#5D6472;text-align:center;font-size:11.5px;padding:2px 0}
+.gr-table thead th.rh{z-index:3}
+.gr-table td.f{cursor:default}
+.gr-table.edit td:not(.rh){cursor:cell}
+.gr-table td.sel{outline:2px solid #1A73E8;outline-offset:-2px}
+.gr-table td.err{color:#C00}
+.gr-admin-tools{margin-right:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.gr-admin-tools button{padding:7px 12px;min-height:0}
+@media(min-width:900px){.desk-row:has(#bigReportBtn){grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.gr-wrap{max-height:none}.gr-table{font-size:12px}}
+</style>
+<script>
+// ===== Общий отчет =====
+// Листы из Excel-файла «Отчеты» (таблица report_sheets, см. reports.sql). Формулы считает formula.js.
+// Админ видит и правит все листы; сотрудник на открытой смене видит только текущий месяц листа своего филиала.
+let gr={sheets:[],cur:0,sel:null,dirty:false,staff:null,loading:false};
+const GR_RU_MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+function grColW(data,col){const w=data.cols&&data.cols[col];return Math.round((w||8.43)*7+5)}
+function grDate(n){const d=Formula.serialDate(n);return String(d.getUTCDate()).padStart(2,'0')+'.'+String(d.getUTCMonth()+1).padStart(2,'0')+'.'+d.getUTCFullYear()}
+function grIsDateCell(sheet,col,cell){const st=cell.s!=null?sheet.data.styles[cell.s]:null;return (st&&st.d&&typeof cell.v==='number')||(col==='A'&&grDaily(sheet)&&Formula.isSerial(cell.v))}
+function grDaily(sheet){return /выручка\s*$/i.test(sheet.title)}
+function grShow(sheet,col,cell){
+  const v=cell.v;if(v==null)return '';
+  if(typeof v==='number'){if(grIsDateCell(sheet,col,cell))return grDate(v);return Number.isInteger(v)?v.toLocaleString('ru-RU'):v.toLocaleString('ru-RU',{maximumFractionDigits:2})}
+  return String(v)
+}
+function grMonthLabel(m){const [y,mm]=m.split('-');return GR_RU_MONTHS[Number(mm)-1]+' '+y}
+function grMerges(data,from,to){
+  const map=new Map(),skip=new Set();
+  for(const m of data.merges||[]){
+    const x=/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(m);if(!x)continue;
+    const c1=Formula.colNum(x[1]),r1=+x[2],c2=Math.min(Formula.colNum(x[3]),data.ncols||1),r2=+x[4];
+    if(r1<from||r2>to||c2<c1)continue;
+    map.set(x[1]+r1,{cs:c2-c1+1,rs:r2-r1+1});
+    for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++)if(r!==r1||c!==c1)skip.add(Formula.colName(c)+r);
+  }
+  return {map,skip}
+}
+// Таблица листа (строки from..to), как в Excel: буквы столбцов, номера строк, цвета, объединённые клетки.
+function grTableHTML(sheet,from,to,editable){
+  const d=sheet.data,nc=d.ncols||1,{map,skip}=grMerges(d,from,to),cols=[];
+  for(let c=1;c<=nc;c++)cols.push(Formula.colName(c));
+  let h=`<table class="gr-table${editable?' edit':''}"><colgroup><col style="width:44px">${cols.map(c=>`<col style="width:${grColW(d,c)}px">`).join('')}</colgroup><thead><tr><th class="rh"></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+  for(let r=from;r<=to;r++){
+    const row=d.rows[String(r)]||{};
+    h+=`<tr><td class="rh">${r}</td>`;
+    for(const c of cols){
+      const a=c+r;if(skip.has(a))continue;
+      const cell=row[c],mg=map.get(a);
+      let cls=[],sty='';
+      if(cell){
+        const st=cell.s!=null?d.styles[cell.s]||{}:{};
+        if(st.bg)sty+=`background:#${st.bg};`;if(st.b)sty+='font-weight:700;';if(st.c)sty+=`color:#${st.c};`;
+        if(st.al)sty+=`text-align:${st.al};`;
+        if(typeof cell.v==='number')cls.push('n');
+        if(cell.f!=null)cls.push('f');
+        if(typeof cell.v==='string'&&cell.v.startsWith('#'))cls.push('err');
+      }
+      if(mg)cls.push('mg');
+      let txt=cell?grShow(sheet,c,cell):'';if(mg)txt=txt.trim();
+      h+=`<td data-a="${a}"${mg?` colspan="${mg.cs}" rowspan="${mg.rs}"`:''}${cls.length?` class="${cls.join(' ')}"`:''}${sty?` style="${sty}"`:''}${txt.length>12?` title="${esc(txt)}"`:''}>${esc(txt)}</td>`;
+    }
+    h+='</tr>';
+  }
+  return h+'</tbody></table>'
+}
+
+async function openBigReport(){
+  if(isAdmin){await grLoadAdmin();return}
+  if(!salesSession?.shiftId){alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
+  const r=await db.rpc('report_branch_month',{p_shift_id:salesSession.shiftId});
+  if(r.error){alert('Не удалось открыть отчет: '+r.error.message);return}
+  gr.staff=r.data;$('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';
+  if(!r.data){$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
+  const s={title:r.data.title,data:r.data.data};
+  $('grBody').innerHTML=`<div class="gr-head"><b>${esc(r.data.title)}</b><span class="gr-note">${esc(grMonthLabel(r.data.month))}</span></div><div class="gr-wrap">${grTableHTML(s,r.data.from,r.data.to,false)}</div>`;
+  open('bigReportModal');
+}
+
+async function grLoadAdmin(){
+  $('grTitle').textContent='Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
+  const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months').order('sort_order').order('id');
+  if(r.error){$('grBody').innerHTML=`<p class="status">Ошибка: ${esc(r.error.message)}</p>`;return}
+  gr.sheets=r.data||[];gr.sel=null;gr.dirty=false;
+  if(gr.cur>=gr.sheets.length)gr.cur=0;
+  grDrawTabs();grDrawSheet(true);grDrawTools();
+}
+function grDrawTools(){
+  $('grAdminTools').innerHTML=isAdmin?`<label class="secondary" style="cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:6px 12px">Загрузить листы из файла<input type="file" id="grImport" accept=".json,application/json" hidden></label><span id="grImportMsg"></span>`:'';
+  const f=$('grImport');if(f)f.onchange=()=>{if(f.files[0])grImport(f.files[0])};
+}
+function grDrawTabs(){
+  $('grTabs').innerHTML=gr.sheets.map((s,i)=>`<button type="button" class="calc-tab" role="tab" data-gr="${i}" aria-selected="${i===gr.cur}">${esc(s.title)}</button>`).join('');
+  $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{gr.cur=Number(b.dataset.gr);gr.sel=null;grDrawTabs();grDrawSheet(true)});
+}
+function grCurrentMonthKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function grDrawSheet(scrollToNow){
+  const s=gr.sheets[gr.cur];
+  if(!s){$('grBody').innerHTML='<p class="status">Листов пока нет. Нажмите «Загрузить листы из файла» внизу.</p>';return}
+  const months=s.months||[];
+  const mSel=months.length?`<select id="grMonth" aria-label="Перейти к месяцу"><option value="">Перейти к месяцу…</option>${months.map(m=>`<option value="${m.from}">${esc(grMonthLabel(m.m))}</option>`).join('')}</select>`:'';
+  $('grBody').innerHTML=`<div class="gr-head">${mSel}<span class="gr-note">Нажмите на клетку, чтобы изменить. Итоги и общий отчет пересчитываются сами.</span></div>
+  <div class="gr-bar"><b id="grAddr">—</b><input id="grInput" placeholder="Значение или формула, например =SUM(D2:D31)" disabled><button id="grSave" class="primary" disabled>Сохранить</button><button id="grCancel" class="secondary" disabled>Отмена</button></div>
+  <div id="grMsg" class="gr-msg"></div>
+  <div class="gr-wrap" id="grWrap">${grTableHTML(s,1,s.data.nrows||1,true)}</div>`;
+  const wrap=$('grWrap');
+  wrap.onclick=e=>{const td=e.target.closest('td[data-a]');if(td)grSelect(td.dataset.a)};
+  if($('grMonth'))$('grMonth').onchange=e=>{const r=Number(e.target.value);if(r)grScrollTo(r)};
+  $('grInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();grSaveCell()}else if(e.key==='Escape'){grSelect(gr.sel)}};
+  $('grSave').onclick=grSaveCell;$('grCancel').onclick=()=>grSelect(gr.sel);
+  if(scrollToNow&&months.length){const now=grCurrentMonthKey();const m=months.find(x=>x.m===now)||[...months].reverse().find(x=>x.m<=now);if(m)setTimeout(()=>grScrollTo(m.from),0)}
+  if(gr.sel)grSelect(gr.sel);
+}
+function grScrollTo(r){const wrap=$('grWrap'),tr=wrap&&wrap.querySelector(`td.rh`)?wrap.querySelectorAll('tbody tr')[r-1]:null;if(tr)wrap.scrollTop=tr.offsetTop-wrap.querySelector('thead').offsetHeight}
+function grCell(s,a){const x=/^([A-Z]+)(\d+)$/.exec(a);const row=s.data.rows[x[2]];return row?row[x[1]]:undefined}
+function grEditText(s,a,cell){
+  if(!cell)return '';if(cell.f!=null)return '='+cell.f;if(cell.v==null)return '';
+  const col=a.replace(/\d+/,'');if(typeof cell.v==='number'&&grIsDateCell(s,col,cell))return grDate(cell.v);
+  return String(cell.v)
+}
+function grSelect(a){
+  const s=gr.sheets[gr.cur];if(!s||!a)return;gr.sel=a;
+  document.querySelectorAll('#grWrap td.sel').forEach(x=>x.classList.remove('sel'));
+  const td=document.querySelector(`#grWrap td[data-a="${a}"]`);if(td)td.classList.add('sel');
+  $('grAddr').textContent=a;const inp=$('grInput');inp.disabled=false;$('grSave').disabled=false;$('grCancel').disabled=false;
+  inp.value=grEditText(s,a,grCell(s,a));$('grMsg').textContent='';$('grMsg').classList.remove('bad');inp.focus();
+}
+// Разбор того, что ввели: формула, дата дд.мм.гггг, число или текст.
+function grParseInput(s,a,text){
+  const t=text.trim();
+  if(t==='')return {empty:true};
+  if(t.startsWith('=')){const f=t.slice(1);const err=Formula.checkFormula(f);if(err)return {error:'Не понял формулу: '+err};return {f}}
+  const dm=/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/.exec(t);
+  if(dm){const y=dm[3].length===2?2000+Number(dm[3]):Number(dm[3]);const ms=Date.UTC(y,Number(dm[2])-1,Number(dm[1]));return {v:Math.round((ms-Date.UTC(1899,11,30))/864e5),date:true}}
+  const n=t.replace(/[\s ]/g,'').replace(',','.');
+  if(/^-?\d+(\.\d+)?$/.test(n))return {v:Number(n)};
+  return {v:text}
+}
+async function grSaveCell(){
+  const s=gr.sheets[gr.cur],a=gr.sel;if(!s||!a)return;
+  const p=grParseInput(s,a,$('grInput').value);
+  if(p.error){$('grMsg').textContent=p.error;$('grMsg').classList.add('bad');return}
+  const x=/^([A-Z]+)(\d+)$/.exec(a),rows=s.data.rows,before=JSON.stringify(rows[x[2]]?.[x[1]]??null);
+  const old=rows[x[2]]?.[x[1]];
+  let cell=old?{...old}:{};delete cell.f;delete cell.v;
+  if(p.f!=null)cell.f=p.f;else if(!p.empty)cell.v=p.v;
+  if(p.date&&cell.s==null&&!(x[1]==='A'&&grDaily(s))){const st={d:1};let i=s.data.styles.findIndex(o=>JSON.stringify(o)===JSON.stringify(st));if(i<0){s.data.styles.push(st);i=s.data.styles.length-1}cell.s=i}
+  if(!rows[x[2]])rows[x[2]]={};
+  if(cell.f==null&&cell.v==null&&cell.s==null)delete rows[x[2]][x[1]];else rows[x[2]][x[1]]=cell;
+  if(JSON.stringify(rows[x[2]][x[1]]??null)===before){$('grMsg').textContent='Без изменений.';return}
+  const changed=Formula.recalcBook({sheets:gr.sheets});changed.add(s.title);
+  $('grMsg').textContent='Сохраняю…';$('grSave').disabled=true;
+  const now=new Date().toISOString();
+  for(const sh of gr.sheets.filter(z=>changed.has(z.title))){
+    const months=grDaily(sh)?Formula.monthBlocks(sh):(sh.months||[]);sh.months=months;
+    const r=await db.from('report_sheets').update({data:sh.data,months,updated_at:now}).eq('id',sh.id);
+    if(r.error){$('grMsg').textContent='Не сохранилось: '+r.error.message+'. Обновите окно.';$('grMsg').classList.add('bad');$('grSave').disabled=false;return}
+  }
+  const keep=$('grWrap').scrollTop,keepL=$('grWrap').scrollLeft;
+  grDrawSheet(false);$('grWrap').scrollTop=keep;$('grWrap').scrollLeft=keepL;
+  const other=[...changed].filter(t=>t!==s.title);
+  $('grMsg').textContent='Сохранено.'+(other.length?' Пересчитаны также: '+other.join(', ')+'.':'');
+}
+// Загрузка листов из подготовленного файла (.json): листы с тем же названием обновляются, новые добавляются.
+async function grImport(file){
+  const msg=$('grImportMsg');msg.textContent='Читаю файл…';
+  let list;try{list=JSON.parse(await file.text())}catch(e){msg.textContent='Это не файл листов отчета.';return}
+  if(!Array.isArray(list)||!list.every(x=>x&&x.title&&x.data&&x.data.rows)){msg.textContent='Это не файл листов отчета.';return}
+  if(gr.sheets.length&&!confirm('Листы с такими же названиями будут заменены данными из файла. Продолжить?')){msg.textContent='';return}
+  Formula.recalcBook({sheets:list});
+  let n=0;
+  for(const s of list){
+    msg.textContent=`Загружаю «${s.title}»… (${n+1} из ${list.length})`;
+    const row={sort_order:Number(s.sort_order)||0,title:String(s.title),branch_id:s.branch_id||null,data:s.data,months:grDaily(s)?Formula.monthBlocks(s):[],updated_at:new Date().toISOString()};
+    const ex=gr.sheets.find(z=>z.title.trim().toLowerCase()===row.title.trim().toLowerCase());
+    const r=ex?await db.from('report_sheets').update(row).eq('id',ex.id):await db.from('report_sheets').insert(row);
+    if(r.error){msg.textContent='Ошибка на листе «'+s.title+'»: '+r.error.message;return}
+    n++;
+  }
+  msg.textContent='Загружено листов: '+n;
+  await grLoadAdmin();
+}
+$('closeBigReport').onclick=()=>close('bigReportModal');
+
+// --- Плитка на главной ---
+(()=>{
+  const ref=$('reportsHomeBtn');
+  ref.insertAdjacentHTML('afterend','<button id="bigReportBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M3.5 14.5h17M9 3.5v17"/></svg><span class="tile-name">Общий отчет</span></button>');
+  $('bigReportBtn').onclick=openBigReport;
 })();
 </script>
 <!-- Аудит 2026-10-12: правки вёрстки и мелкие исправления -->
