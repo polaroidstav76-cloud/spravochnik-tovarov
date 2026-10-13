@@ -151,6 +151,11 @@ begin
       ||coalesce(', чек №'||r.order_number,'')||' на '||rep_money(r.total)||coalesce(' ('||rep_esc(rep_person(r.employee_id))||')','');
   end loop;
 
+  -- Общий отчет заполнен вручную (кнопка «Заполнить отчет вручную» после смены, см. report_fill.sql)
+  select string_agg(distinct rep_esc(b.name),', ') into line from public.report_fills f join public.sales_branches b on b.id=f.branch_id
+   where f.day=d and f.mode='manual';
+  if line is not null then nprob:=nprob+1; prob:=prob||E'\n✍️ Общий отчет заполнен вручную: '||line; end if;
+
   -- В долг за день
   select count(*), coalesce(sum(cd.amount),0) into cnt, rev from public.customer_debts cd join public.sales x on x.id=cd.sale_id
    where cd.created_at>=t0 and cd.created_at<t1 and x.status='completed' and not public.is_test_branch(x.branch_id);

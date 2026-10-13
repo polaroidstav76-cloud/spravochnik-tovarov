@@ -5519,12 +5519,23 @@ function schDrawCols(){
 .gr-head select{width:auto;min-width:170px;padding:6px 10px;min-height:0}
 .gr-head .gr-note{color:var(--muted);font-size:13px}
 .gr-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.gr-fx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.gr-bar .gr-msg{margin:0;min-height:0;white-space:nowrap}
+.gr-hint{background:#FFF8DB;border:1px solid #F2D675;color:#5C4A00;border-radius:10px;padding:8px 12px;font-size:13.5px;margin-bottom:8px}
+.gr-tag{background:#FDE7E7;color:#9B1C1C;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600}
+.gr-ed{position:absolute;z-index:2;box-sizing:border-box;margin:0;border:2px solid #1A73E8;border-radius:0;padding:1px 3px;font:12.5px/1.25 Arial,Helvetica,sans-serif;color:#111;outline:none;min-height:0;box-shadow:0 2px 6px rgba(26,115,232,.25)}
+.gr-table tr.today td.rh{background:#FBD34D;color:#111}
+.gr-table tr.today td{box-shadow:inset 0 1px 0 #F2C94C,inset 0 -1px 0 #F2C94C}
+.gr-table td.can{cursor:cell}
+.gr-table tr.today td:not(.rh){background-color:#FFFBEA}
+.gr-table tr.today td.can{background-color:#fff;box-shadow:inset 0 0 0 1px #F2C94C}
+.gr-fill-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .gr-bar b{min-width:58px;font-variant-numeric:tabular-nums;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--sunk)}
 .gr-bar input{flex:1;min-width:0;padding:6px 10px;min-height:0;font-variant-numeric:tabular-nums}
 .gr-bar button{padding:7px 12px;min-height:0}
 .gr-msg{font-size:13px;min-height:18px;margin:0 0 6px;color:var(--muted)}
 .gr-msg.bad{color:var(--bad-ink)}
-.gr-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:var(--r-md);background:#fff}
+.gr-wrap{position:relative;outline:none;overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:var(--r-md);background:#fff}
 .gr-table{border-collapse:collapse;table-layout:fixed;font:12.5px/1.25 Arial,Helvetica,sans-serif;color:#111}
 .gr-table td{border:1px solid #D9DDE3;padding:2px 4px;height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 .gr-table td.n{text-align:right;font-variant-numeric:tabular-nums}
@@ -5543,10 +5554,12 @@ function schDrawCols(){
 </style>
 <script>
 // ===== Общий отчет =====
-// Листы из Excel-файла «Отчеты» (таблица report_sheets, см. reports.sql). Формулы считает formula.js.
-// Админ видит и правит все листы; сотрудник на открытой смене видит только текущий месяц листа своего филиала.
-let gr={sheets:[],cur:0,sel:null,dirty:false,staff:null,loading:false};
+// Листы из Excel-файла «Отчеты» (таблица report_sheets, см. reports.sql и report_fill.sql). Формулы считает formula.js.
+// Админ видит и правит все листы; сотрудник видит месяц листа своего филиала и после смены заполняет строку дня.
+// Правка как в таблице: нажали на клетку и печатаете прямо в ней. Enter/Tab сохраняют и переходят дальше.
+let gr={sheets:[],cur:0,sel:null,view:null,month:null,staff:null,shiftId:null,ed:null,queue:new Map(),timer:null,saving:false};
 const GR_RU_MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const GR_STAFF_KEY='grFillShift';
 
 function grColW(data,col){const w=data.cols&&data.cols[col];return Math.round((w||8.43)*7+5)}
 function grDate(n){const d=Formula.serialDate(n);return String(d.getUTCDate()).padStart(2,'0')+'.'+String(d.getUTCMonth()+1).padStart(2,'0')+'.'+d.getUTCFullYear()}
@@ -5569,27 +5582,29 @@ function grMerges(data,from,to){
   }
   return {map,skip}
 }
+function grCellClass(cell,mg,can){
+  const cls=[];
+  if(cell){if(typeof cell.v==='number')cls.push('n');if(cell.f!=null)cls.push('f');if(typeof cell.v==='string'&&cell.v.startsWith('#'))cls.push('err')}
+  if(mg)cls.push('mg');if(can)cls.push('can');
+  return cls
+}
+function grCellStyle(d,cell){
+  if(!cell||cell.s==null)return '';const st=d.styles[cell.s]||{};let sty='';
+  if(st.bg)sty+=`background:#${st.bg};`;if(st.b)sty+='font-weight:700;';if(st.c)sty+=`color:#${st.c};`;if(st.al)sty+=`text-align:${st.al};`;
+  return sty
+}
 // Таблица листа (строки from..to), как в Excel: буквы столбцов, номера строк, цвета, объединённые клетки.
-function grTableHTML(sheet,from,to,editable){
+// can(a,r,c) — можно ли менять клетку; today — номер строки, которую подсветить.
+function grTableHTML(sheet,from,to,can,today){
   const d=sheet.data,nc=d.ncols||1,{map,skip}=grMerges(d,from,to),cols=[];
   for(let c=1;c<=nc;c++)cols.push(Formula.colName(c));
-  let h=`<table class="gr-table${editable?' edit':''}"><colgroup><col style="width:44px">${cols.map(c=>`<col style="width:${grColW(d,c)}px">`).join('')}</colgroup><thead><tr><th class="rh"></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+  let h=`<table class="gr-table"><colgroup><col style="width:44px">${cols.map(c=>`<col style="width:${grColW(d,c)}px">`).join('')}</colgroup><thead><tr><th class="rh"></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
   for(let r=from;r<=to;r++){
     const row=d.rows[String(r)]||{};
-    h+=`<tr><td class="rh">${r}</td>`;
+    h+=`<tr${r===today?' class="today"':''}><td class="rh">${r}</td>`;
     for(const c of cols){
       const a=c+r;if(skip.has(a))continue;
-      const cell=row[c],mg=map.get(a);
-      let cls=[],sty='';
-      if(cell){
-        const st=cell.s!=null?d.styles[cell.s]||{}:{};
-        if(st.bg)sty+=`background:#${st.bg};`;if(st.b)sty+='font-weight:700;';if(st.c)sty+=`color:#${st.c};`;
-        if(st.al)sty+=`text-align:${st.al};`;
-        if(typeof cell.v==='number')cls.push('n');
-        if(cell.f!=null)cls.push('f');
-        if(typeof cell.v==='string'&&cell.v.startsWith('#'))cls.push('err');
-      }
-      if(mg)cls.push('mg');
+      const cell=row[c],mg=map.get(a),cls=grCellClass(cell,mg,can&&can(a,r,c)),sty=grCellStyle(d,cell);
       let txt=cell?grShow(sheet,c,cell):'';if(mg)txt=txt.trim();
       h+=`<td data-a="${a}"${mg?` colspan="${mg.cs}" rowspan="${mg.rs}"`:''}${cls.length?` class="${cls.join(' ')}"`:''}${sty?` style="${sty}"`:''}${txt.length>12?` title="${esc(txt)}"`:''}>${esc(txt)}</td>`;
     }
@@ -5597,26 +5612,68 @@ function grTableHTML(sheet,from,to,editable){
   }
   return h+'</tbody></table>'
 }
+function grSplit(a){const x=/^([A-Z]+)(\d+)$/.exec(a);return x?{c:x[1],r:+x[2]}:null}
+function grCell(s,a){const x=grSplit(a);const row=s.data.rows[String(x.r)];return row?row[x.c]:undefined}
+function grSheet(){return gr.staff?gr.staff.sheet:gr.sheets[gr.cur]}
+function grCan(a){
+  const x=grSplit(a);if(!x)return false;
+  if(gr.staff){const st=gr.staff;return x.r===st.row&&(st.cols||[]).includes(x.c)}
+  return isAdmin&&!!gr.sheets[gr.cur]
+}
+// Обновить одну клетку на экране после изменения.
+function grPaint(a){
+  const td=document.querySelector(`#grWrap td[data-a="${a}"]`);if(!td)return;
+  const s=grSheet(),cell=grCell(s,a),x=grSplit(a),mg=td.hasAttribute('colspan')||td.hasAttribute('rowspan');
+  let txt=cell?grShow(s,x.c,cell):'';if(mg)txt=txt.trim();
+  if(td.textContent!==txt)td.textContent=txt;
+  if(txt.length>12)td.title=txt;else td.removeAttribute('title');
+  const keep=td.classList.contains('sel');
+  td.className=grCellClass(cell,mg,grCan(a)).join(' ');if(keep)td.classList.add('sel');
+  td.setAttribute('style',grCellStyle(s.data,cell));
+}
 
+// ---------- Открытие ----------
 async function openBigReport(){
   if(isAdmin){await grLoadAdmin();return}
-  if(!salesSession?.shiftId){alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
-  const r=await db.rpc('report_branch_month',{p_shift_id:salesSession.shiftId});
-  if(r.error){alert('Не удалось открыть отчет: '+r.error.message);return}
-  gr.staff=r.data;$('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';
-  if(!r.data){$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
-  const s={title:r.data.title,data:r.data.data};
-  $('grBody').innerHTML=`<div class="gr-head"><b>${esc(r.data.title)}</b><span class="gr-note">${esc(grMonthLabel(r.data.month))}</span></div><div class="gr-wrap">${grTableHTML(s,r.data.from,r.data.to,false)}</div>`;
-  open('bigReportModal');
+  let sid=salesSession?.shiftId||null;
+  if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&Date.now()-st.at<12*3600e3)sid=st.id}catch(e){}}
+  if(!sid){alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
+  const r=await db.rpc('report_staff_view',{p_shift_id:sid});
+  if(r.error){
+    if(!salesSession?.shiftId){alert('Не удалось открыть отчет: '+r.error.message);return}
+    const o=await db.rpc('report_branch_month',{p_shift_id:sid});
+    if(o.error){alert('Не удалось открыть отчет: '+o.error.message);return}
+    if(!o.data){gr.staff=null;$('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
+    grOpenStaff(sid,{...o.data,row:null,cols:[],mode:null});return
+  }
+  grOpenStaff(sid,r.data);
+}
+function grOpenStaff(shiftId,v){
+  gr.shiftId=shiftId;gr.sel=null;
+  gr.staff={...v,sheet:{title:v.title,data:v.data}};
+  $('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';
+  const hint=!v.cols?.length?'':(v.mode==='manual'
+    ?'Заполните строку сегодняшнего дня (выделена жёлтым): нажмите на клетку и пишите. Enter — сохранить и дальше.'
+    :'Данные из кассы уже в строке дня. Допишите наличные, остаток наличных, перезаказы, расходы, комментарий, остаток в кассе и конверт (белые клетки).');
+  $('grBody').innerHTML=`<div class="gr-head"><b>${esc(v.title)}</b><span class="gr-note">${esc(grMonthLabel(v.month))}</span>${v.mode==='manual'?'<span class="gr-tag">заполняется вручную</span>':''}</div>
+  ${hint?`<div class="gr-hint">${hint}</div>`:''}
+  <div class="gr-bar"><b id="grAddr">—</b><span id="grFx" class="gr-fx"></span><span id="grMsg" class="gr-msg"></span></div>
+  <div class="gr-wrap" id="grWrap" tabindex="0">${grTableHTML(gr.staff.sheet,v.from,v.to,(a)=>grCan(a),v.row)}</div>`;
+  gr.view={from:v.from,to:v.to};
+  open('bigReportModal');grBind();
+  if(v.row){const first=(v.cols||[])[0];setTimeout(()=>{grScrollTo(v.row);if(first)grSelect(first+v.row)},0)}
 }
 
 async function grLoadAdmin(){
+  gr.staff=null;gr.shiftId=null;
   $('grTitle').textContent='Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
   const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months').order('sort_order').order('id');
   if(r.error){$('grBody').innerHTML=`<p class="status">Ошибка: ${esc(r.error.message)}</p>`;return}
-  gr.sheets=r.data||[];gr.sel=null;gr.dirty=false;
+  gr.sheets=r.data||[];gr.sel=null;gr.month=null;
   if(gr.cur>=gr.sheets.length)gr.cur=0;
-  grDrawTabs();grDrawSheet(true);grDrawTools();
+  // Сотрудники могли дописать строки дня — пересчитываем все листы и сохраняем то, что изменилось.
+  const snap=grSnapshot();Formula.recalcBook({sheets:gr.sheets});grQueueDiff(snap);
+  grDrawTabs();grDrawSheet();grDrawTools();
 }
 function grDrawTools(){
   $('grAdminTools').innerHTML=isAdmin?`<label class="secondary" style="cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:6px 12px">Загрузить листы из файла<input type="file" id="grImport" accept=".json,application/json" hidden></label><span id="grImportMsg"></span>`:'';
@@ -5624,76 +5681,214 @@ function grDrawTools(){
 }
 function grDrawTabs(){
   $('grTabs').innerHTML=gr.sheets.map((s,i)=>`<button type="button" class="calc-tab" role="tab" data-gr="${i}" aria-selected="${i===gr.cur}">${esc(s.title)}</button>`).join('');
-  $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{gr.cur=Number(b.dataset.gr);gr.sel=null;grDrawTabs();grDrawSheet(true)});
+  $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{grCloseEd(true);gr.cur=Number(b.dataset.gr);gr.sel=null;gr.month=null;grDrawTabs();grDrawSheet()});
 }
 function grCurrentMonthKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
-function grDrawSheet(scrollToNow){
+function grTodaySerial(){const d=new Date();return Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(1899,11,30))/864e5)}
+// Лист «… Выручка» показываем по месяцу (так быстрее), остальные — целиком.
+function grDrawSheet(){
   const s=gr.sheets[gr.cur];
   if(!s){$('grBody').innerHTML='<p class="status">Листов пока нет. Нажмите «Загрузить листы из файла» внизу.</p>';return}
   const months=s.months||[];
-  const mSel=months.length?`<select id="grMonth" aria-label="Перейти к месяцу"><option value="">Перейти к месяцу…</option>${months.map(m=>`<option value="${m.from}">${esc(grMonthLabel(m.m))}</option>`).join('')}</select>`:'';
-  $('grBody').innerHTML=`<div class="gr-head">${mSel}<span class="gr-note">Нажмите на клетку, чтобы изменить. Итоги и общий отчет пересчитываются сами.</span></div>
-  <div class="gr-bar"><b id="grAddr">—</b><input id="grInput" placeholder="Значение или формула, например =SUM(D2:D31)" disabled><button id="grSave" class="primary" disabled>Сохранить</button><button id="grCancel" class="secondary" disabled>Отмена</button></div>
-  <div id="grMsg" class="gr-msg"></div>
-  <div class="gr-wrap" id="grWrap">${grTableHTML(s,1,s.data.nrows||1,true)}</div>`;
-  const wrap=$('grWrap');
-  wrap.onclick=e=>{const td=e.target.closest('td[data-a]');if(td)grSelect(td.dataset.a)};
-  if($('grMonth'))$('grMonth').onchange=e=>{const r=Number(e.target.value);if(r)grScrollTo(r)};
-  $('grInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();grSaveCell()}else if(e.key==='Escape'){grSelect(gr.sel)}};
-  $('grSave').onclick=grSaveCell;$('grCancel').onclick=()=>grSelect(gr.sel);
-  if(scrollToNow&&months.length){const now=grCurrentMonthKey();const m=months.find(x=>x.m===now)||[...months].reverse().find(x=>x.m<=now);if(m)setTimeout(()=>grScrollTo(m.from),0)}
-  if(gr.sel)grSelect(gr.sel);
+  if(gr.month==null&&months.length){const now=grCurrentMonthKey();const m=months.find(x=>x.m===now)||[...months].reverse().find(x=>x.m<=now)||months[months.length-1];gr.month=m.m}
+  const m=months.find(x=>x.m===gr.month);
+  const from=m?m.from:1,to=m?m.to:(s.data.nrows||1);
+  let today=null;if(m){const ts=grTodaySerial();for(let r=from;r<=to;r++){if(s.data.rows[String(r)]?.A?.v===ts){today=r;break}}}
+  const mSel=months.length?`<select id="grMonth" aria-label="Месяц">${months.map(x=>`<option value="${x.m}"${x.m===gr.month?' selected':''}>${esc(grMonthLabel(x.m))}</option>`).join('')}<option value="*"${gr.month==='*'?' selected':''}>Весь лист</option></select>`:'';
+  $('grBody').innerHTML=`<div class="gr-head">${mSel}<span class="gr-note">Нажмите на клетку и печатайте. Enter или Tab — сохранить и дальше, стрелки — по клеткам, Esc — отмена. Формулы начинаются с «=», например =SUM(D2:D31).</span></div>
+  <div class="gr-bar"><b id="grAddr">—</b><span id="grFx" class="gr-fx"></span><span id="grMsg" class="gr-msg"></span></div>
+  <div class="gr-wrap" id="grWrap" tabindex="0">${grTableHTML(s,from,to,()=>true,today)}</div>`;
+  gr.view={from,to};
+  if($('grMonth'))$('grMonth').onchange=e=>{grCloseEd(true);gr.month=e.target.value;gr.sel=null;grDrawSheet()};
+  grBind();grSaveMsg();
+  if(today)setTimeout(()=>grScrollTo(today),0);
 }
-function grScrollTo(r){const wrap=$('grWrap'),tr=wrap&&wrap.querySelector(`td.rh`)?wrap.querySelectorAll('tbody tr')[r-1]:null;if(tr)wrap.scrollTop=tr.offsetTop-wrap.querySelector('thead').offsetHeight}
-function grCell(s,a){const x=/^([A-Z]+)(\d+)$/.exec(a);const row=s.data.rows[x[2]];return row?row[x[1]]:undefined}
+function grScrollTo(r){const wrap=$('grWrap');if(!wrap)return;const td=wrap.querySelector(`td.rh`);const tr=[...wrap.querySelectorAll('tbody tr')][r-gr.view.from];if(tr&&td)wrap.scrollTop=Math.max(0,tr.offsetTop-wrap.querySelector('thead').offsetHeight-40)}
+
+// ---------- Выбор и правка клетки ----------
+function grBind(){
+  const wrap=$('grWrap');if(!wrap)return;
+  gr.ed=null;
+  wrap.onmousedown=e=>{const td=e.target.closest('td[data-a]');if(!td)return;if(gr.ed&&gr.ed.a===td.dataset.a)return;e.preventDefault();grCloseEd(true);grSelect(td.dataset.a)};
+  wrap.onkeydown=e=>{if(e.target!==wrap||!gr.sel)return;grNavKey(e,false)};
+}
 function grEditText(s,a,cell){
   if(!cell)return '';if(cell.f!=null)return '='+cell.f;if(cell.v==null)return '';
   const col=a.replace(/\d+/,'');if(typeof cell.v==='number'&&grIsDateCell(s,col,cell))return grDate(cell.v);
   return String(cell.v)
 }
 function grSelect(a){
-  const s=gr.sheets[gr.cur];if(!s||!a)return;gr.sel=a;
-  document.querySelectorAll('#grWrap td.sel').forEach(x=>x.classList.remove('sel'));
-  const td=document.querySelector(`#grWrap td[data-a="${a}"]`);if(td)td.classList.add('sel');
-  $('grAddr').textContent=a;const inp=$('grInput');inp.disabled=false;$('grSave').disabled=false;$('grCancel').disabled=false;
-  inp.value=grEditText(s,a,grCell(s,a));$('grMsg').textContent='';$('grMsg').classList.remove('bad');inp.focus();
+  const s=grSheet(),wrap=$('grWrap');if(!s||!a||!wrap)return;
+  const td=wrap.querySelector(`td[data-a="${a}"]`);if(!td)return;
+  gr.sel=a;wrap.querySelectorAll('td.sel').forEach(x=>x.classList.remove('sel'));td.classList.add('sel');
+  grEnsureVisible(td);
+  $('grAddr').textContent=a;const text=grEditText(s,a,grCell(s,a));$('grFx').textContent=text;
+  if(grCan(a))grOpenEd(a,td,text);else wrap.focus({preventScroll:true});
 }
+function grEnsureVisible(td){
+  const wrap=$('grWrap'),hh=wrap.querySelector('thead').offsetHeight,rw=44;
+  const top=td.offsetTop,left=td.offsetLeft,h=td.offsetHeight,w=td.offsetWidth;
+  if(top-hh<wrap.scrollTop)wrap.scrollTop=top-hh;else if(top+h>wrap.scrollTop+wrap.clientHeight)wrap.scrollTop=top+h-wrap.clientHeight;
+  if(left-rw<wrap.scrollLeft)wrap.scrollLeft=left-rw;else if(left+w>wrap.scrollLeft+wrap.clientWidth)wrap.scrollLeft=left+w-wrap.clientWidth;
+}
+function grOpenEd(a,td,text){
+  const wrap=$('grWrap');
+  const inp=document.createElement('input');inp.className='gr-ed';inp.value=text;inp.setAttribute('aria-label','Клетка '+a);
+  const cs=getComputedStyle(td);
+  inp.style.cssText=`left:${td.offsetLeft}px;top:${td.offsetTop}px;width:${Math.max(td.offsetWidth,80)}px;height:${td.offsetHeight}px;text-align:${td.classList.contains('n')?'right':cs.textAlign};font-weight:${cs.fontWeight};background:${cs.backgroundColor==='rgba(0, 0, 0, 0)'?'#fff':cs.backgroundColor}`;
+  wrap.appendChild(inp);
+  gr.ed={a,inp,orig:text,typed:false};
+  inp.oninput=()=>{gr.ed.typed=true;$('grFx').textContent=inp.value};
+  inp.onkeydown=e=>grNavKey(e,true);
+  inp.onpaste=e=>{const t=(e.clipboardData||window.clipboardData)?.getData('text')||'';if(/[\t\n]/.test(t.replace(/\r?\n$/,''))){e.preventDefault();grPasteGrid(t)}};
+  inp.onblur=()=>{setTimeout(()=>{if(gr.ed&&gr.ed.inp===inp&&document.activeElement!==inp)grCloseEd(true)},0)};
+  inp.focus({preventScroll:true});inp.select();
+}
+// Закрыть поле ввода; save=true — сохранить, если текст изменился.
+function grCloseEd(save){
+  const ed=gr.ed;if(!ed)return;gr.ed=null;
+  const val=ed.inp.value;ed.inp.remove();
+  if(save&&val!==ed.orig)grCommit(ed.a,val);
+}
+function grMove(dr,dc){
+  const x=grSplit(gr.sel);if(!x)return;const s=grSheet(),nc=s.data.ncols||1;
+  let r=x.r,c=Formula.colNum(x.c);
+  for(let i=0;i<40;i++){
+    r+=dr;c+=dc;
+    if(r<gr.view.from||r>gr.view.to||c<1||c>nc)return;
+    const a=Formula.colName(c)+r;
+    if(document.querySelector(`#grWrap td[data-a="${a}"]`)){grSelect(a);return}
+  }
+}
+function grNavKey(e,inEd){
+  const k=e.key,typed=inEd&&gr.ed&&gr.ed.typed;
+  if((k==='Enter'||k==='Tab')&&gr.staff){e.preventDefault();grCloseEd(true);grStaffNext(e.shiftKey?-1:1);return}
+  if(k==='Enter'||k==='Tab'){e.preventDefault();grCloseEd(true);if(k==='Enter')grMove(e.shiftKey?-1:1,0);else grMove(0,e.shiftKey?-1:1);return}
+  if(k==='Escape'){if(inEd){e.preventDefault();e.stopPropagation();const a=gr.ed.a;grCloseEd(false);$('grFx').textContent=grEditText(grSheet(),a,grCell(grSheet(),a));$('grWrap').focus({preventScroll:true})}return}
+  if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();grCloseEd(true);grMove(k==='ArrowUp'?-1:1,0);return}
+  if((k==='ArrowLeft'||k==='ArrowRight')&&!typed){e.preventDefault();grCloseEd(true);grMove(0,k==='ArrowLeft'?-1:1);return}
+  if(!inEd&&(k==='F2')&&grCan(gr.sel)){e.preventDefault();grSelect(gr.sel)}
+}
+// Сотрудник: Enter/Tab — к следующей клетке, которую он заполняет в строке дня.
+function grStaffNext(dir){
+  const st=gr.staff,x=grSplit(gr.sel),cols=st.cols||[];if(!x||!cols.length)return;
+  const i=cols.indexOf(x.c),j=i+dir;
+  if(i<0||j<0||j>=cols.length){grMove(dir,0);return}
+  grSelect(cols[j]+st.row);
+}
+// Вставка из Excel/таблицы: несколько клеток через Tab и перевод строки.
+function grPasteGrid(t){
+  const a0=gr.sel,x=grSplit(a0);if(!x)return;grCloseEd(false);
+  const lines=t.replace(/\r/g,'').replace(/\n$/,'').split('\n'),c0=Formula.colNum(x.c),list=[];
+  lines.forEach((ln,i)=>ln.split('\t').forEach((v,j)=>{const a=Formula.colName(c0+j)+(x.r+i);if(x.r+i<=gr.view.to&&grCan(a))list.push([a,v])}));
+  grCommitMany(list);grSelect(a0);
+}
+
 // Разбор того, что ввели: формула, дата дд.мм.гггг, число или текст.
-function grParseInput(s,a,text){
+function grParseInput(text,allowFormula){
   const t=text.trim();
   if(t==='')return {empty:true};
-  if(t.startsWith('=')){const f=t.slice(1);const err=Formula.checkFormula(f);if(err)return {error:'Не понял формулу: '+err};return {f}}
+  if(t.startsWith('=')&&allowFormula){const f=t.slice(1);const err=Formula.checkFormula(f);if(err)return {error:'Не понял формулу: '+err};return {f}}
   const dm=/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/.exec(t);
-  if(dm){const y=dm[3].length===2?2000+Number(dm[3]):Number(dm[3]);const ms=Date.UTC(y,Number(dm[2])-1,Number(dm[1]));return {v:Math.round((ms-Date.UTC(1899,11,30))/864e5),date:true}}
-  const n=t.replace(/[\s ]/g,'').replace(',','.');
+  if(dm&&allowFormula){const y=dm[3].length===2?2000+Number(dm[3]):Number(dm[3]);const ms=Date.UTC(y,Number(dm[2])-1,Number(dm[1]));return {v:Math.round((ms-Date.UTC(1899,11,30))/864e5),date:true}}
+  const n=t.replace(/[\s ]/g,'').replace(',','.');
   if(/^-?\d+(\.\d+)?$/.test(n))return {v:Number(n)};
   return {v:text}
 }
-async function grSaveCell(){
-  const s=gr.sheets[gr.cur],a=gr.sel;if(!s||!a)return;
-  const p=grParseInput(s,a,$('grInput').value);
-  if(p.error){$('grMsg').textContent=p.error;$('grMsg').classList.add('bad');return}
-  const x=/^([A-Z]+)(\d+)$/.exec(a),rows=s.data.rows,before=JSON.stringify(rows[x[2]]?.[x[1]]??null);
-  const old=rows[x[2]]?.[x[1]];
-  let cell=old?{...old}:{};delete cell.f;delete cell.v;
-  if(p.f!=null)cell.f=p.f;else if(!p.empty)cell.v=p.v;
-  if(p.date&&cell.s==null&&!(x[1]==='A'&&grDaily(s))){const st={d:1};let i=s.data.styles.findIndex(o=>JSON.stringify(o)===JSON.stringify(st));if(i<0){s.data.styles.push(st);i=s.data.styles.length-1}cell.s=i}
-  if(!rows[x[2]])rows[x[2]]={};
-  if(cell.f==null&&cell.v==null&&cell.s==null)delete rows[x[2]][x[1]];else rows[x[2]][x[1]]=cell;
-  if(JSON.stringify(rows[x[2]][x[1]]??null)===before){$('grMsg').textContent='Без изменений.';return}
-  const changed=Formula.recalcBook({sheets:gr.sheets});changed.add(s.title);
-  $('grMsg').textContent='Сохраняю…';$('grSave').disabled=true;
-  const now=new Date().toISOString();
-  for(const sh of gr.sheets.filter(z=>changed.has(z.title))){
-    const months=grDaily(sh)?Formula.monthBlocks(sh):(sh.months||[]);sh.months=months;
-    const r=await db.from('report_sheets').update({data:sh.data,months,updated_at:now}).eq('id',sh.id);
-    if(r.error){$('grMsg').textContent='Не сохранилось: '+r.error.message+'. Обновите окно.';$('grMsg').classList.add('bad');$('grSave').disabled=false;return}
+function grMsg(t,bad){const m=$('grMsg');if(!m)return;m.textContent=t||'';m.classList.toggle('bad',!!bad)}
+function grCommit(a,text){grCommitMany([[a,text]])}
+function grCommitMany(list){
+  if(!list.length)return;
+  if(gr.staff){list.forEach(([a,t])=>grStaffSet(a,t));return}
+  const s=gr.sheets[gr.cur];if(!s)return;
+  const snap=grSnapshot(),rows=s.data.rows,edited={};let monthsTouched=false;
+  for(const [a,text] of list){
+    const p=grParseInput(text,true),x=grSplit(a);
+    if(p.error){grMsg(a+': '+p.error,true);continue}
+    const old=rows[x.r]?.[x.c];let cell=old?{...old}:{};delete cell.f;delete cell.v;
+    if(p.f!=null)cell.f=p.f;else if(!p.empty)cell.v=p.v;
+    if(p.date&&cell.s==null&&!(x.c==='A'&&grDaily(s))){const st={d:1};let i=s.data.styles.findIndex(o=>JSON.stringify(o)===JSON.stringify(st));if(i<0){s.data.styles.push(st);i=s.data.styles.length-1;monthsTouched=true}cell.s=i}
+    if(!rows[x.r])rows[x.r]={};
+    if(cell.f==null&&cell.v==null&&cell.s==null)delete rows[x.r][x.c];else rows[x.r][x.c]=cell;
+    (edited[x.r]=edited[x.r]||{})[x.c]=rows[x.r][x.c]??null;
+    if(x.c==='A')monthsTouched=true;
   }
-  const keep=$('grWrap').scrollTop,keepL=$('grWrap').scrollLeft;
-  grDrawSheet(false);$('grWrap').scrollTop=keep;$('grWrap').scrollLeft=keepL;
-  const other=[...changed].filter(t=>t!==s.title);
-  $('grMsg').textContent='Сохранено.'+(other.length?' Пересчитаны также: '+other.join(', ')+'.':'');
+  Formula.recalcBook({sheets:gr.sheets});
+  grQueueCells(s,edited,monthsTouched);
+  grQueueDiff(snap);
+  for(const [r,cols] of Object.entries(edited))for(const c of Object.keys(cols))grPaint(c+r);
 }
+// Значения всех клеток с формулами — чтобы после пересчёта сохранить только изменившиеся.
+function grSnapshot(){
+  const m=new Map();
+  gr.sheets.forEach((s,i)=>{for(const [r,row] of Object.entries(s.data.rows))for(const [c,cell] of Object.entries(row))if(cell.f!=null)m.set(i+'|'+r+'|'+c,cell.v)});
+  return m
+}
+function grQueueDiff(snap){
+  gr.sheets.forEach((s,i)=>{
+    const ch={};let any=false;
+    for(const [r,row] of Object.entries(s.data.rows))for(const [c,cell] of Object.entries(row)){
+      if(cell.f==null)continue;const k=i+'|'+r+'|'+c;
+      if(snap.has(k)&&snap.get(k)===cell.v)continue;
+      (ch[r]=ch[r]||{})[c]=cell;any=true;
+      if(i===gr.cur&&!gr.staff)grPaint(c+r);
+    }
+    if(any)grQueueCells(s,ch,false);
+  });
+}
+function grQueueCells(s,cells,monthsTouched){
+  const q=gr.queue.get(s.id)||{sheet:s,cells:{},months:false};
+  for(const [r,cols] of Object.entries(cells))q.cells[r]={...(q.cells[r]||{}),...cols};
+  if(monthsTouched)q.months=true;
+  gr.queue.set(s.id,q);grSaveMsg();
+  clearTimeout(gr.timer);gr.timer=setTimeout(grFlush,500);
+}
+function grSaveMsg(){
+  if(gr.staff)return;
+  if(gr.queue.size||gr.saving)grMsg('Сохраняю…');else if(gr.lastErr)grMsg(gr.lastErr,true);else if(gr.savedOnce)grMsg('Сохранено ✓');
+}
+async function grFlush(){
+  if(gr.saving){clearTimeout(gr.timer);gr.timer=setTimeout(grFlush,300);return}
+  if(!gr.queue.size)return;
+  gr.saving=true;gr.lastErr=null;
+  const items=[...gr.queue.values()];gr.queue.clear();grSaveMsg();
+  for(const q of items){
+    let months=null;
+    if(q.months){if(grDaily(q.sheet)){months=Formula.monthBlocks(q.sheet);q.sheet.months=months}}
+    const r=await db.rpc('report_admin_set_cells',{p_sheet_id:q.sheet.id,p_cells:q.cells,p_months:months});
+    if(r.error){gr.lastErr='Не сохранилось («'+q.sheet.title+'»): '+r.error.message+'. Попробуйте ещё раз или обновите окно.';
+      const back=gr.queue.get(q.sheet.id)||{sheet:q.sheet,cells:{},months:false};
+      for(const [rr,cols] of Object.entries(q.cells))back.cells[rr]={...cols,...(back.cells[rr]||{})};back.months=back.months||q.months;gr.queue.set(q.sheet.id,back)}
+  }
+  gr.saving=false;gr.savedOnce=true;grSaveMsg();
+  if(gr.queue.size&&!gr.lastErr){gr.timer=setTimeout(grFlush,300)}
+}
+
+// ---------- Сотрудник: строка дня ----------
+let grStaffChain=Promise.resolve();
+function grStaffSet(a,text){
+  const st=gr.staff,x=grSplit(a);if(!st||!grCan(a))return;
+  const p=grParseInput(text,false),val=p.empty?null:p.v;
+  const rows=st.sheet.data.rows,row=rows[x.r]=rows[x.r]||{},cell={...(row[x.c]||{})};delete cell.f;
+  if(val==null)delete cell.v;else cell.v=val;row[x.c]=cell;grPaint(a);
+  grMsg('Сохраняю…');
+  grStaffChain=grStaffChain.then(async()=>{
+    const r=await db.rpc('report_staff_set',{p_shift_id:gr.shiftId,p_col:x.c,p_value:val});
+    if(gr.staff!==st)return;
+    if(r.error){grMsg('Не сохранилось '+a+': '+r.error.message,true);return}
+    for(const [rr,rowData] of Object.entries(r.data||{})){if(!rowData)continue;rows[rr]=rowData;for(const c of Object.keys(rowData))grPaint(c+rr)}
+    grMsg('Сохранено ✓');
+  });
+}
+// Кнопки на итоге смены.
+async function grFillFromShift(shiftId,mode){
+  if(mode==='manual'&&!confirm('Заполнить отчет вручную? Администратор увидит в сводке, что сегодня отчет заполнен вручную.'))return;
+  const r=await db.rpc('report_fill_shift',{p_shift_id:shiftId,p_mode:mode});
+  if(r.error){alert('Не удалось '+(mode==='auto'?'перенести в отчет':'открыть отчет')+': '+r.error.message);return}
+  try{localStorage.setItem(GR_STAFF_KEY,JSON.stringify({id:shiftId,at:Date.now()}))}catch(e){}
+  close('shiftReportModal');grOpenStaff(shiftId,r.data);
+}
+
 // Загрузка листов из подготовленного файла (.json): листы с тем же названием обновляются, новые добавляются.
 async function grImport(file){
   const msg=$('grImportMsg');msg.textContent='Читаю файл…';
@@ -5713,7 +5908,42 @@ async function grImport(file){
   msg.textContent='Загружено листов: '+n;
   await grLoadAdmin();
 }
-$('closeBigReport').onclick=()=>close('bigReportModal');
+$('closeBigReport').onclick=()=>{grCloseEd(true);if(gr.queue.size){clearTimeout(gr.timer);grFlush()}close('bigReportModal')};
+window.addEventListener('beforeunload',e=>{if(gr.queue.size||gr.saving){e.preventDefault();e.returnValue=''}});
+
+// Итог смены: кнопки «Перенести в общий отчет» и «Заполнить отчет вручную».
+const grBaseShiftReport=buildShiftReport;
+buildShiftReport=async function(shiftId){
+  await grBaseShiftReport(shiftId);
+  try{
+    const sr=await db.from('sales_shifts').select('id,branch_id,status,ended_at').eq('id',shiftId).single();
+    const sh=sr.data;if(!sh||sh.status!=='closed'||!sh.ended_at||Date.now()-new Date(sh.ended_at).getTime()>12*3600e3)return;
+    const br=salesBranches.find(b=>Number(b.id)===Number(sh.branch_id));if(br&&(br.is_test||br.is_workshop))return;
+    let state='';const v=await db.rpc('report_staff_view',{p_shift_id:shiftId});
+    if(!v.error&&v.data?.mode)state=v.data.mode==='manual'?'Сегодня отчет уже открыт для ручного заполнения.':'Данные смены уже перенесены в общий отчет. Нажмите ещё раз, чтобы обновить цифры.';
+    $('shiftReportContent').insertAdjacentHTML('beforeend',`<div class="v5-box gr-fill" style="margin-top:16px"><b>📋 Общий отчет</b>
+      <div class="pp-sub">Перенесите данные смены в общий отчет и допишите наличные, остаток наличных, расходы и перезаказы.</div>
+      ${state?`<div class="pp-sub"><b>${esc(state)}</b></div>`:''}
+      <div class="gr-fill-btns"><button type="button" class="primary" id="grFillAuto">Перенести в общий отчет</button><button type="button" class="secondary" id="grFillManual">Заполнить отчет вручную</button></div></div>`);
+    $('grFillAuto').onclick=()=>grFillFromShift(shiftId,'auto');
+    $('grFillManual').onclick=()=>grFillFromShift(shiftId,'manual');
+  }catch(e){console.warn(e)}
+};
+
+// Сводка: где отчет заполнили вручную.
+const grBaseRenderSummary=renderSummary;
+renderSummary=function(d,rg){
+  grBaseRenderSummary(d,rg);
+  (async()=>{
+    const ymd=t=>{const x=new Date(t);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
+    let q=db.from('report_fills').select('day,branch_id,shift_id,updated_at').eq('mode','manual').gte('day',ymd(rg.from)).lt('day',ymd(rg.to)).order('day');
+    if(sumState.branch)q=q.eq('branch_id',Number(sumState.branch));
+    const r=await q;if(r.error||!r.data?.length||sumData?.d!==d)return;
+    const bn=id=>salesBranches.find(b=>Number(b.id)===Number(id))?.name||('Филиал #'+id);
+    const dd=s=>s.slice(8,10)+'.'+s.slice(5,7);
+    $('sumBody').insertAdjacentHTML('afterbegin',`<div class="v5-box warn" style="margin-bottom:12px"><b>✍️ Общий отчет заполнен вручную</b><div class="pp-sub">${r.data.map(x=>esc(bn(x.branch_id))+' — '+dd(x.day)).join(' · ')}</div></div>`);
+  })();
+};
 
 // --- Плитка на главной ---
 (()=>{
