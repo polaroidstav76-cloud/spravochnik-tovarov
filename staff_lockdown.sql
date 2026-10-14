@@ -38,7 +38,7 @@ alter default privileges in schema public revoke execute on functions from publi
 -- Закрывает и функции SECURITY DEFINER, и случай, когда кто-то сам зарегистрировался в Supabase Auth.
 create or replace function public.staff_request_guard() returns void
 language plpgsql stable security definer set search_path = '' as $$
-declare r text := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', current_user);
+declare r text := coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', current_user);
 begin
   if r in ('service_role', 'supabase_admin', 'postgres') then return; end if;
   if r = 'authenticated' and public.is_staff() then return; end if;
