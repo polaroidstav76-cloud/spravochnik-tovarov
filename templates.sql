@@ -24,3 +24,10 @@ create policy "message_templates_admin_write" on public.message_templates
 
 grant select on public.message_templates to anon, authenticated;
 grant insert, update, delete on public.message_templates to authenticated;
+
+-- Порядок и группы шаблонов (группа = поле category).
+-- sort_order: сквозной номер места; шаблоны одной группы идут подряд, порядок групп = порядок их шаблонов.
+alter table public.message_templates add column if not exists sort_order integer;
+update public.message_templates t set sort_order = s.n
+from (select id, row_number() over (order by category nulls last, title) as n from public.message_templates) s
+where s.id = t.id and t.sort_order is null;
