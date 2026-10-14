@@ -251,6 +251,7 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-dir
 .sale-search{background:var(--sunk)}
 .sale-catalog-item{border-color:var(--line);border-radius:var(--r-sm)}
 .sale-catalog-item:hover{border-color:var(--ink);background:var(--surface)}
+.sale-catalog-item small.sale-stock{display:block;color:var(--muted,#6b7280);font-size:11px;margin-top:2px}.sale-catalog-item small.sale-stock.low{color:#c62828;font-weight:600}
 .sale-order-title{font-family:var(--f-display);font-size:22px;font-weight:700}
 .sales-item-row{border-bottom-color:var(--line)}
 .sale-loyalty-box,.loyalty-card,.report-card,.debt-customer,.tpl-item,.info-box{background:var(--sunk);border-color:var(--line);border-radius:var(--r-md)}
@@ -2865,7 +2866,7 @@ async function completeShiftTasks(){const shiftId=Number($('salesTaskModal').dat
 
 function normalizeSaleSearchText(v){return String(v||'').toLowerCase().replace(/[хx×*]/g,'x').replace(/ё/g,'е').replace(/[^a-zа-я0-9x]+/g,' ').replace(/\s+/g,' ').trim()}
 function saleCatalogMatches(item,query){const q=normalizeSaleSearchText(query);if(!q)return true;const hay=normalizeSaleSearchText([item.name,item.sku,item.category,item.description].filter(Boolean).join(' '));return q.split(' ').filter(Boolean).every(token=>hay.includes(token))}
-function renderSaleCatalog(){const q=$('saleCatalogSearch').value||'';const cats=salesCatalog.filter(x=>saleCatalogMatches(x,q));$('saleCatalogList').innerHTML=cats.length?cats.map(x=>`<div class="sale-catalog-item" onclick="addSaleCatalogItem(${x.id})" ondblclick="openSalesProductInfo(${x.id})"><div><b>${esc(x.name)}</b><small>${esc(x.item_type==='service'?'Услуга':'Товар')}${x.category?' · '+esc(x.category):''}${x.sku?' · '+esc(x.sku):''}</small></div><span class="sale-catalog-price">${salesMoney(x.price)}</span></div>`).join(''):'<div class="status">Ничего не найдено.</div>'}
+function renderSaleCatalog(){const q=$('saleCatalogSearch').value||'';const cats=salesCatalog.filter(x=>saleCatalogMatches(x,q));$('saleCatalogList').innerHTML=cats.length?cats.map(x=>`<div class="sale-catalog-item" onclick="addSaleCatalogItem(${x.id})" ondblclick="openSalesProductInfo(${x.id})"><div><b>${esc(x.name)}</b><small>${esc(x.item_type==='service'?'Услуга':'Товар')}${x.category?' · '+esc(x.category):''}${x.sku?' · '+esc(x.sku):''}</small>${saleStockLine(x)}</div><span class="sale-catalog-price">${salesMoney(x.price)}</span></div>`).join(''):'<div class="status">Ничего не найдено.</div>'}
 async function maybeUpsell(source,qty){for(const rule of v4Upsells.filter(r=>Number(r.source_catalog_id)===Number(source.id))){const min=Number(rule.min_quantity||1),max=rule.max_quantity==null?Infinity:Number(rule.max_quantity);if(qty<min||qty>max)continue;const key=rule.id+':'+source.id;if(window.v4UpsellSeen?.has(key))continue;window.v4UpsellSeen=window.v4UpsellSeen||new Set();window.v4UpsellSeen.add(key);const suggested=salesCatalog.find(x=>Number(x.id)===Number(rule.suggested_catalog_id));if(!suggested)continue;const yes=confirm(`${rule.question||'Предложить дополнительный товар?'}\n\n${suggested.name} — ${salesMoney(suggested.price)}`);if(yes){const ex=saleDraft.find(x=>Number(x.catalogId)===Number(suggested.id));if(ex)ex.quantity=Number(ex.quantity)+1;else saleDraft.push({catalogId:suggested.id,quantity:1,unitPrice:v4Price(suggested,1)})}}renderSaleDraft()}
 window.addSaleCatalogItem=async id=>{const x=salesCatalog.find(y=>Number(y.id)===Number(id));if(!x)return;let existing=x.variants?.length?null:saleDraft.find(y=>Number(y.catalogId)===Number(id));if(existing){existing.quantity=Number(existing.quantity||0)+1;existing.unitPrice=v4Price(x,existing.quantity)}else saleDraft.push({catalogId:x.id,quantity:1,unitPrice:v4Price(x,1)});renderSaleDraft();await maybeUpsell(x,existing?.quantity||1)};
 // Варианты позиции: размер и цвет. Новый способ — дочерние материалы (parent_id, var_size, var_color) у материала,
@@ -4970,7 +4971,21 @@ function stkFillSaleProducer(){
   s.innerHTML=`<option value="">Этот филиал${ctx.branchName?' — '+esc(ctx.branchName):''}</option>`+stkBranches().filter(b=>Number(b.id)!==Number(ctx.branchId)).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
 }
 const stkBaseOpenSale=openSaleV4;
-openSaleV4=async function(){await stkBaseOpenSale.apply(this,arguments);stkFillSaleProducer()};
+openSaleV4=async function(){await stkBaseOpenSale.apply(this,arguments);stkFillSaleProducer();saleStockRefresh()};
+// Остаток под названием в левом списке кассы: материалы, на которые списывается позиция (кроме «Не учитывать расход»),
+// на филиале смены; материалы мастерской — по мастерской. Позиции без материалов — без строки.
+function saleStockLine(c){try{
+  const br=stkMyBranch();if(!br||!stk.data)return '';
+  const all=stkMaterials(),mats=all.filter(m=>!m.no_track&&!m.parent_id&&(m.norms||[]).some(n=>Number(n.catalog_id)===Number(c.id)));
+  if(!mats.length)return '';let low=false;
+  const parts=mats.map(m=>{
+    const list=stkHasVars(m)?all.filter(k=>Number(k.parent_id)===Number(m.id)&&!k.no_track):[m];let q=0,ws=false;
+    list.forEach(k=>{const place=k.in_workshop?stkWorkshop()?.id:br;if(!place)return;if(k.in_workshop)ws=true;q+=stkBal(k.id,place);if(stkIsLow(k,place))low=true});
+    return (mats.length>1?esc(m.name)+': ':'')+stkQty(q)+' '+esc(m.unit||'шт')+(ws?' (мастерская)':'');
+  });
+  return `<small class="sale-stock${low?' low':''}">Остаток: ${parts.join(' · ')}</small>`;
+}catch(e){return ''}}
+async function saleStockRefresh(){try{const r=await db.rpc('stock_state',{p_days:30});if(r.error||!r.data)return;stk.data=r.data;if($('saleCatalogList'))renderSaleCatalog()}catch(e){}}
 $('salesBtn').onclick=()=>openSaleV4();
 function stkPendingRead(){try{return JSON.parse(localStorage.getItem(STK_PENDING)||'[]')||[]}catch(e){return[]}}
 function stkPendingWrite(q){try{localStorage.setItem(STK_PENDING,JSON.stringify(q))}catch(e){}}
