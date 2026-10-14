@@ -3825,6 +3825,10 @@ function showOverduePickupReminder(){
 }
 
 // --- Наличные в кассе ---
+// В АРХИВЕ (2026-10-14): запрос наличных при открытии и закрытии смены отключён по просьбе Рустама.
+// Код не удалён. Чтобы вернуть: поставить true здесь и в Supabase выполнить
+// create or replace function public.kassa_cash_check_enabled() returns boolean language sql immutable as $$ select true $$; (см. kassa_cash_off.sql)
+const CASH_CHECK_ENABLED=false;
 function askOpenCash(info){
   return new Promise(resolve=>{
     const exp=info.prev?.closeCash,has=exp!=null&&exp!=='';
@@ -3850,6 +3854,16 @@ function askOpenCash(info){
 }
 function askCloseCash(snapshot,carry,info){
   return new Promise(resolve=>{
+    if(!CASH_CHECK_ENABLED){
+      const pend=branchPickups();
+      $('cashCloseContent').innerHTML=`<p>Завершить общую смену №${snapshot.shiftId} филиала «${esc(snapshot.branchName)}»? Это завершит работу всех её кассиров.</p>
+      ${pend.length?`<div class="v5-box warn">Ждут оплаты «при получении»: ${pend.length}. Они останутся в списке на следующую смену.</div>`:''}
+      ${carry?`<div class="v5-box warn">Невыполненных личных заданий: ${carry}. Они перейдут на следующую смену этих сотрудников.</div>`:''}`;
+      $('cashCloseStatus').textContent='';
+      $('cashCloseOk').onclick=()=>{close('cashCloseModal');resolve('skip')};
+      $('cashCloseCancel').onclick=()=>{close('cashCloseModal');resolve(null)};
+      open('cashCloseModal');return;
+    }
     const openC=info?.openCash,cashSales=Number(info?.cashSales||0),pend=branchPickups();
     $('cashCloseContent').innerHTML=`<p>Завершить общую смену №${snapshot.shiftId} филиала «${esc(snapshot.branchName)}»? Это завершит работу всех её кассиров.</p>
       <div class="v5-box"><div class="cash-lines"><span>Наличные на начало смены</span><b>${openC!=null?salesMoney(openC):'не указаны'}</b><span>Продажи наличными за смену</span><b>${salesMoney(cashSales)}</b>${openC!=null?`<span class="tot">Должно быть в кассе</span><b class="tot">${salesMoney(Number(openC)+cashSales)}</b>`:''}</div><div class="pp-sub">Без учёта возвратов, выдач и инкассации наличных.</div></div>
@@ -3882,8 +3896,10 @@ closeCurrentSalesShift=async function(){
     const amount=await askCloseCash(snapshot,carry,ci.data);
     if(amount==null)return;
     if(!(await checkLinkReceiptsBeforeClose(snapshot.shiftId)))return;
-    const c=await db.rpc('sales_set_close_cash',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId,p_amount:amount});
-    if(c.error)throw c.error;
+    if(amount!=='skip'){
+      const c=await db.rpc('sales_set_close_cash',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId,p_amount:amount});
+      if(c.error)throw c.error;
+    }
     const r=await db.rpc('sales_close_team_shift',{p_shift_id:snapshot.shiftId,p_employee_id:snapshot.employeeId});
     if(r.error)throw r.error;
     salesSession=null;saleContext=null;persistSalesSession();updateSalesSessionUI();drawPickupPanel();drawPickupBadge();
@@ -3901,7 +3917,7 @@ buildShiftReport=async function(shiftId){
     if(ci.error||!ci.data)return;
     const d=ci.data,open_=d.openCash,exp=d.openCashExpected,cs=Number(d.cashSales||0),pend=(po.data||[]).filter(x=>x.status==='pending'),paid=(po.data||[]).filter(x=>x.status==='paid');
     const diff=open_!=null&&exp!=null?Number(open_)-Number(exp):0;
-    $('shiftReportContent').insertAdjacentHTML('beforeend',`<div class="v5-box" style="margin-top:16px"><b>💵 Наличные в кассе</b><div class="cash-lines"><span>На начало смены (пересчитали)</span><b>${open_!=null?salesMoney(open_):'не указано'}</b>${exp!=null?`<span>Ожидалось по прошлой смене</span><b>${salesMoney(exp)}</b>`:''}${Math.abs(diff)>=0.01?`<span style="color:var(--bad-ink)">Расхождение при открытии</span><b style="color:var(--bad-ink)">${diff>0?'+':'−'}${salesMoney(Math.abs(diff))}</b>`:''}<span>Продажи наличными</span><b>${salesMoney(cs)}</b>${open_!=null?`<span>Должно быть на конец</span><b>${salesMoney(Number(open_)+cs)}</b>`:''}<span class="tot">Остаток на конец (указали)</span><b class="tot">${d.closeCash!=null?salesMoney(d.closeCash):'ещё не указан'}</b></div></div>${po.data?.length?`<div class="v5-box"><b>🕓 Заказы «при получении», оформленные в эту смену</b><div class="cash-lines"><span>Ждут оплаты</span><b>${pend.length} · ${salesMoney(pend.reduce((a,x)=>a+Number(x.total),0))}</b><span>Уже оплачены</span><b>${paid.length}</b></div><div class="pp-sub">В выручку смены они не входят, пока клиент не оплатит.</div></div>`:''}`);
+    $('shiftReportContent').insertAdjacentHTML('beforeend',`${CASH_CHECK_ENABLED?`<div class="v5-box" style="margin-top:16px"><b>💵 Наличные в кассе</b><div class="cash-lines"><span>На начало смены (пересчитали)</span><b>${open_!=null?salesMoney(open_):'не указано'}</b>${exp!=null?`<span>Ожидалось по прошлой смене</span><b>${salesMoney(exp)}</b>`:''}${Math.abs(diff)>=0.01?`<span style="color:var(--bad-ink)">Расхождение при открытии</span><b style="color:var(--bad-ink)">${diff>0?'+':'−'}${salesMoney(Math.abs(diff))}</b>`:''}<span>Продажи наличными</span><b>${salesMoney(cs)}</b>${open_!=null?`<span>Должно быть на конец</span><b>${salesMoney(Number(open_)+cs)}</b>`:''}<span class="tot">Остаток на конец (указали)</span><b class="tot">${d.closeCash!=null?salesMoney(d.closeCash):'ещё не указан'}</b></div></div>`:''}${po.data?.length?`<div class="v5-box"${CASH_CHECK_ENABLED?'':' style="margin-top:16px"'}><b>🕓 Заказы «при получении», оформленные в эту смену</b><div class="cash-lines"><span>Ждут оплаты</span><b>${pend.length} · ${salesMoney(pend.reduce((a,x)=>a+Number(x.total),0))}</b><span>Уже оплачены</span><b>${paid.length}</b></div><div class="pp-sub">В выручку смены они не входят, пока клиент не оплатит.</div></div>`:''}`);
   }catch(e){console.warn(e)}
 };
 
@@ -4013,7 +4029,7 @@ async function runShiftOpenChecks(){
   shiftChecksRunning=true;
   try{
     const ci=await db.rpc('sales_shift_cash_info',{p_shift_id:salesSession.shiftId});
-    if(ci.error)console.warn(ci.error);else if(ci.data&&ci.data.openCash==null)await askOpenCash(ci.data);
+    if(ci.error)console.warn(ci.error);else if(CASH_CHECK_ENABLED&&ci.data&&ci.data.openCash==null)await askOpenCash(ci.data);
     await loadPickups();
     await showAnnouncements();
     await showOverduePickupReminder();
