@@ -1001,7 +1001,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 
 <div class="modal" id="debtsModal"><div class="dialog" style="max-width:950px"><h2 style="margin-top:0">Долги клиентов</h2><div class="status">Сюда попадают продажи с оплатой «Расчётный счёт» по клубной карте. В отчётах они считаются оплаченными. Когда клиент оплатит, отметьте продажи галочками и нажмите «Отметить оплаченными».</div>
 <div class="tpl-search" style="margin-top:12px"><input id="debtSearch" placeholder="Поиск по имени или телефону клиента…"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="debtShowPaid" type="checkbox" style="width:auto"> Показать оплаченные</label></div>
-<div id="debtSummary" class="debt-summary"></div><div id="debtList"></div><div class="actions"><button id="closeDebts">Закрыть</button></div></div></div>
+<div id="debtBranchNote" class="status" style="margin-top:8px;font-weight:700"></div><div id="debtSummary" class="debt-summary"></div><div id="debtList"></div><div class="actions"><button id="closeDebts">Закрыть</button></div></div></div>
 
 
 <!-- Касса v5 -->
@@ -3469,10 +3469,16 @@ $('tplSaveBtn').onclick=saveTemplate;
 // Долги клиентов: продажи по расчётному счёту с клубной картой.
 // Сотрудники отмечают оплату, администратор может вернуть в долг ошибочную отметку.
 let customerDebts=[];
+// Сотрудник видит только долги филиала своей смены, администратор — все филиалы.
+function debtBranchId(){return salesSession?.branchId?Number(salesSession.branchId):null}
+function debtPickupVisible(o){if(isAdmin)return true;const b=debtBranchId();return !!b&&Number(o.branch_id)===b}
 function debtDate(v){return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 async function loadDebts(){
+  const branchId=debtBranchId();
+  $('debtBranchNote').textContent=isAdmin?'Администратор видит долги всех филиалов.':(branchId?'Долги филиала «'+(salesSession?.branchName||'')+'».':'');
+  if(!isAdmin&&!branchId){customerDebts=[];$('debtSummary').innerHTML='';$('debtList').innerHTML='<div class="status">Откройте смену — здесь появятся долги вашего филиала.</div>';return}
   $('debtList').innerHTML='<div class="status">Загрузка…</div>';
-  const r=await db.rpc('debts_list',{p_include_paid:$('debtShowPaid').checked});
+  const r=await db.rpc('debts_list_v2',{p_include_paid:$('debtShowPaid').checked,p_branch_id:isAdmin?null:branchId});
   if(r.error){customerDebts=[];$('debtSummary').innerHTML='';$('debtList').innerHTML=`<div class="status">Не удалось загрузить долги: ${esc(r.error.message)}</div>`;return}
   customerDebts=r.data||[];renderDebts();
 }
@@ -3551,7 +3557,7 @@ async function loadPickups(){
 }
 function drawPickupBadge(){
   const btn=$('debtsBtn');if(!btn)return;
-  const n=(salesSession?.branchId?branchPickups():pickupOrders.filter(o=>o.status==='pending')).filter(pickupIsOverdue).length;
+  const n=(salesSession?.branchId?branchPickups():pickupOrders.filter(o=>o.status==='pending'&&debtPickupVisible(o))).filter(pickupIsOverdue).length;
   let b=btn.querySelector('.tile-badge');
   if(!n){b?.remove();return}
   if(!b){b=document.createElement('span');b.className='tile-badge';btn.appendChild(b)}
@@ -3678,7 +3684,7 @@ renderDebts=function(){v5BaseRenderDebts();renderPickupDebts()};
 function renderPickupDebts(){
   const box=$('pickupDebts');if(!box)return;
   const words=$('debtSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const all=pickupOrders.filter(o=>o.status==='pending'&&pickupIsOverdue(o)),list=all.filter(o=>pickupMatches(o,words));
+  const all=pickupOrders.filter(o=>o.status==='pending'&&pickupIsOverdue(o)&&debtPickupVisible(o)),list=all.filter(o=>pickupMatches(o,words));
   if(!all.length){box.innerHTML='';return}
   const sum=all.reduce((a,o)=>a+Number(o.total||0),0);
   box.innerHTML=`<h3>🕓 Не забрали заказ «при получении» (больше 2 дней): ${all.length} на ${salesMoney(sum)}</h3><div class="status">Эти продажи не в отчёте. Когда клиент придёт за заказом, нажмите «Клиент пришёл — пробить», выберите способ оплаты и клубную карту. Если клиент отказался — «Отменить заказ».</div>
