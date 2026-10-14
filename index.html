@@ -27,6 +27,7 @@
     .adminbar{display:none;background:#fff;border:1px solid var(--line);padding:14px;border-radius:14px;margin-bottom:18px}
     .adminbar.show{display:flex;gap:8px;flex-wrap:wrap}
     .modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
+    body.staff-locked>header,body.staff-locked>main,body.staff-locked #closeLogin,body.staff-locked #closeLogin_sticky{display:none!important}
     .modal.show{display:flex}.dialog{background:white;border-radius:16px;max-width:650px;width:100%;max-height:calc(100vh - 40px);overflow:auto;padding:22px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}
     .blocks{display:flex;flex-direction:column;gap:10px}.block{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc}.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.block-type{font-size:12px;font-weight:800;color:var(--muted)}.block textarea{min-height:90px}.rich-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.rich-toolbar button{padding:6px 9px;font-size:12px}.rich-text{min-height:90px;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff;outline:none;line-height:1.5}.rich-text:focus{border-color:var(--accent);box-shadow:0 0 0 2px #2563eb22}.rich-text h2{font-size:1.4em;margin:.4em 0}.rich-text h3{font-size:1.2em;margin:.4em 0}.rich-text p{margin:.4em 0}.block img{max-width:100%;max-height:220px;display:block;margin:6px auto;border-radius:8px}.block-actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 10px;font-size:12px}.instruction{line-height:1.6}.instruction img{max-width:100%;height:auto;display:block;margin:12px 0;border-radius:10px}.instruction-text{white-space:pre-wrap;margin:0 0 10px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
@@ -492,7 +493,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   <div class="brand"><span class="brand-stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><h1>ПОЛАРОИД</h1></div>
   <div class="grow"></div>
   <span id="authStatus" class="status"></span>
-  <button id="loginBtn" class="ghost">Вход администратора</button>
+  <button id="loginBtn" class="ghost">Войти</button>
   <button id="logoutBtn" class="ghost" style="display:none">Выйти</button>
 </div></header>
 
@@ -500,7 +501,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   <div id="adminbar" class="adminbar">
     <span class="adminbar-label">Управление</span>
     <button class="primary" id="addBtn">＋ Добавить товар</button>
-    <button id="salesAdminBtn" class="secondary">Настройки</button><button id="reportsBtn" class="secondary">Отчёты</button><button id="payrollBtn" class="secondary" style="display:none">Зарплата</button><button id="pricesBtn" class="secondary">Цены листов</button><button id="customersBtn" class="secondary">Клиенты</button><button id="testsBtn" class="secondary">Тесты</button><button id="refreshBtn">Обновить</button>
+    <button id="salesAdminBtn" class="secondary">Настройки</button><button id="reportsBtn" class="secondary">Отчёты</button><button id="payrollBtn" class="secondary" style="display:none">Зарплата</button><button id="pricesBtn" class="secondary">Цены листов</button><button id="customersBtn" class="secondary">Клиенты</button><button id="staffAccountsBtn" class="secondary">Логины</button><button id="testsBtn" class="secondary">Тесты</button><button id="refreshBtn">Обновить</button>
   </div>
 
 <section class="desk" aria-labelledby="salesHomeTitle">
@@ -652,11 +653,30 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 </main>
 
 <div class="modal" id="loginModal"><div class="dialog">
-  <h2>Вход администратора</h2>
-  <div class="field"><label>Email</label><input id="email" type="email"></div>
-  <div class="field"><label>Пароль</label><input id="password" type="password"></div>
+  <h2>Вход</h2>
+  <div class="field"><label>Логин</label><input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+  <div class="field"><label>Пароль</label><input id="password" type="password" autocomplete="current-password"></div>
   <div id="loginError" class="status"></div>
   <div class="actions"><button id="closeLogin">Отмена</button><button class="primary" id="doLogin">Войти</button></div>
+</div></div>
+
+<div class="modal" id="staffAccountsModal"><div class="dialog" style="max-width:820px">
+  <h2>Логины сотрудников</h2>
+  <div class="status">Сотрудник входит на сайт по логину и паролю. Администратор видит все разделы, сотрудник — кассу, клубные карты и справочник.</div>
+  <div id="staffAccountsList" style="margin:12px 0"></div>
+  <h3 id="staffFormTitle">Новый логин</h3>
+  <input type="hidden" id="staffEditId">
+  <div class="row">
+    <div class="field"><label>Сотрудник</label><select id="staffPerson"><option value="">— не привязан —</option></select></div>
+    <div class="field"><label>Имя для показа</label><input id="staffName" placeholder="Например: Анна"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Логин (латиница, цифры, точка, дефис)</label><input id="staffLogin" autocapitalize="none" spellcheck="false" placeholder="anna"></div>
+    <div class="field"><label>Пароль (не короче 8 символов)</label><input id="staffPassword" type="text" autocomplete="new-password" placeholder="при изменении — оставьте пустым, чтобы не менять"></div>
+  </div>
+  <div class="field"><label>Роль</label><select id="staffRole"><option value="staff">Сотрудник</option><option value="admin">Администратор</option></select></div>
+  <div id="staffAccountsStatus" class="status"></div>
+  <div class="actions"><button id="closeStaffAccounts">Закрыть</button><button id="staffCancelEdit" class="secondary" style="display:none">Отмена</button><button class="primary" id="staffSave">＋ Создать логин</button></div>
 </div></div>
 
 <div class="modal" id="viewModal"><div class="dialog">
@@ -1154,13 +1174,19 @@ window.viewProduct=id=>{
 $('closeView').onclick=()=>close('viewModal');
 
 $('search').oninput=render; $('category').onchange=render; $('clearBtn').onclick=()=>{$('search').value='';$('category').value='';render()};
-$('loginBtn').onclick=()=>open('loginModal'); $('closeLogin').onclick=()=>close('loginModal');
+$('loginBtn').onclick=()=>open('loginModal'); $('closeLogin').onclick=()=>{if(!document.body.classList.contains('staff-locked'))close('loginModal')};
+function staffLoginEmail(login){login=String(login||'').trim().toLowerCase();return login.includes('@')?login:login+'@'+STAFF_EMAIL_DOMAIN}
 $('doLogin').onclick=async()=>{
   $('loginError').textContent='Выполняется вход…';
-  const {error}=await db.auth.signInWithPassword({email:$('email').value,password:$('password').value});
-  if(error){$('loginError').textContent=error.message;return} close('loginModal'); await refreshAuth();
+  const {error}=await db.auth.signInWithPassword({email:staffLoginEmail($('email').value),password:$('password').value});
+  if(error){$('loginError').textContent=/invalid/i.test(error.message)?'Неверный логин или пароль.':error.message;return}
+  $('password').value='';
+  // После входа при обязательном входе перезагружаем страницу: все данные загрузятся уже от имени сотрудника.
+  if(document.body.classList.contains('staff-locked')){location.reload();return}
+  close('loginModal'); await refreshAuth();
 };
-$('logoutBtn').onclick=async()=>{await db.auth.signOut();await refreshAuth()};
+$('password').addEventListener('keydown',e=>{if(e.key==='Enter')$('doLogin').click()});
+$('logoutBtn').onclick=async()=>{await db.auth.signOut();if(STAFF_LOGIN_REQUIRED){location.reload();return}await refreshAuth()};
 $('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('reportsBtn').onclick=openReports; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
 $('clubRedeemCalcBtn').onclick=()=>{const amount=Number($('clubRedeemCalcAmount').value);if(!(amount>0)){ $('clubRedeemCalcResult').value=''; $('clubRedeemCalcStatus').textContent='Введите сумму заказа больше 0 ₽.'; return; } const max=Math.round(amount*0.30*100)/100; $('clubRedeemCalcResult').value=loyaltyMoney(max); $('clubRedeemCalcStatus').textContent='Максимально можно списать 30% от суммы заказа.';};
 
@@ -2291,11 +2317,17 @@ $('customerAdminRefresh').onclick=loadCustomerAdminRows;
 $('customerAdminSearch').addEventListener('input',()=>loadCustomerAdminRows());
 async function openCustomersAdmin(){if(!isAdmin){open('loginModal');return}await loadCustomerAdminRows();await loadGiftRules();open('customersModal')}
 
+let staffAccount=null;
 async function refreshAuth(){
-  const {data}=await db.auth.getUser(); isAdmin=!!data.user;
-  $('loginBtn').style.display=isAdmin?'none':'inline-block'; $('logoutBtn').style.display=isAdmin?'inline-block':'none';
-  $('payrollBtn').style.display=isAdmin?'inline-block':'none';
-  $('authStatus').textContent=isAdmin?'Администратор':'';
+  const {data}=await db.auth.getUser(); staffAccount=null;
+  if(data.user){const r=await db.from('staff_accounts').select('user_id,login,name,role,active').eq('user_id',data.user.id).maybeSingle();if(!r.error&&r.data?.active)staffAccount=r.data}
+  isAdmin=staffAccount?.role==='admin';
+  const signedIn=!!data.user, locked=STAFF_LOGIN_REQUIRED&&!staffAccount;
+  document.body.classList.toggle('staff-locked',locked);
+  if(locked){$('loginError').textContent=signedIn?'Учётная запись отключена. Обратитесь к администратору.':'';open('loginModal')}
+  $('loginBtn').style.display=signedIn?'none':'inline-block'; $('logoutBtn').style.display=signedIn?'inline-block':'none';
+  $('payrollBtn').style.display=isAdmin?'inline-block':'none'; $('staffAccountsBtn').style.display=isAdmin?'inline-block':'none';
+  $('authStatus').textContent=staffAccount?(staffAccount.name+(isAdmin?' · администратор':'')):'';
   $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; $('salesAdminBtn').style.display=isAdmin?'inline-block':'none'; $('reportsBtn').style.display=isAdmin?'inline-block':'none'; render();
 }
 window.editProduct=async id=>{
@@ -6169,6 +6201,39 @@ renderSummary=function(d,rg){
 (function(){const src=document.getElementById('saleTotal'),bar=document.querySelector('.sale-save-bar .actions');if(!src||!bar)return;
  const box=document.createElement('div');box.className='sale-bar-total';box.innerHTML='Итого:<b id="saleBarTotal"></b>';bar.insertBefore(box,bar.firstChild);
  const sync=()=>{document.getElementById('saleBarTotal').textContent=src.textContent};sync();new MutationObserver(sync).observe(src,{childList:true,characterData:true,subtree:true});})();
+</script>
+<script>
+// Логины сотрудников: создаются администратором через функцию staff-admin (у неё есть ключ service role, в браузере его нет).
+let staffAccountsRows=[];
+async function staffAdmin(body){const r=await db.functions.invoke('staff-admin',{body});if(r.error){let m=r.error.message;try{const j=await r.error.context.json();if(j?.error)m=j.error}catch(e){}throw new Error(m)}return r.data}
+function staffResetForm(){$('staffEditId').value='';$('staffPerson').value='';$('staffName').value='';$('staffLogin').value='';$('staffLogin').disabled=false;$('staffPassword').value='';$('staffRole').value='staff';$('staffFormTitle').textContent='Новый логин';$('staffSave').textContent='＋ Создать логин';$('staffCancelEdit').style.display='none'}
+async function loadStaffAccounts(){
+  $('staffAccountsList').innerHTML='<div class="status">Загрузка…</div>';
+  try{const d=await staffAdmin({action:'list'});staffAccountsRows=d.accounts||[]}catch(e){$('staffAccountsList').innerHTML='<div class="status">Ошибка: '+esc(e.message)+'</div>';return}
+  $('staffAccountsList').innerHTML=staffAccountsRows.length?`<table class="customer-table"><thead><tr><th>Имя</th><th>Логин</th><th>Роль</th><th>Последний вход</th><th>Статус</th><th></th></tr></thead><tbody>${staffAccountsRows.map(a=>`<tr><td>${esc(a.name)}</td><td><b>${esc(a.login)}</b></td><td>${a.role==='admin'?'Администратор':'Сотрудник'}</td><td>${a.last_sign_in_at?new Date(a.last_sign_in_at).toLocaleString('ru-RU'):'—'}</td><td>${a.active?'активен':'<span style="color:#b91c1c">отключён</span>'}</td><td style="white-space:nowrap"><button class="secondary small" onclick="editStaffAccount('${a.user_id}')">Изменить</button> ${a.user_id===staffAccount?.user_id?'':`<button class="secondary small" onclick="toggleStaffAccount('${a.user_id}',${!a.active})">${a.active?'Отключить':'Включить'}</button> <button class="danger small" onclick="deleteStaffAccount('${a.user_id}')">Удалить</button>`}</td></tr>`).join('')}</tbody></table>`:'<div class="status">Логинов пока нет.</div>';
+}
+async function openStaffAccounts(){
+  if(!isAdmin){open('loginModal');return}
+  const sel=$('staffPerson');sel.innerHTML='<option value="">— не привязан —</option>'+(salesPeople||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  staffResetForm();$('staffAccountsStatus').textContent='';open('staffAccountsModal');await loadStaffAccounts();
+}
+$('staffAccountsBtn').onclick=openStaffAccounts;$('closeStaffAccounts').onclick=()=>close('staffAccountsModal');$('staffCancelEdit').onclick=staffResetForm;
+$('staffPerson').onchange=()=>{const p=(salesPeople||[]).find(x=>String(x.id)===$('staffPerson').value);if(p&&!$('staffName').value.trim())$('staffName').value=p.name};
+window.editStaffAccount=id=>{const a=staffAccountsRows.find(x=>x.user_id===id);if(!a)return;$('staffEditId').value=a.user_id;$('staffPerson').value=a.person_id||'';$('staffName').value=a.name;$('staffLogin').value=a.login;$('staffLogin').disabled=true;$('staffPassword').value='';$('staffRole').value=a.role;$('staffFormTitle').textContent='Изменить: '+a.login;$('staffSave').textContent='Сохранить';$('staffCancelEdit').style.display='inline-block'};
+window.toggleStaffAccount=async(id,active)=>{try{await staffAdmin({action:'update',user_id:id,active});await loadStaffAccounts()}catch(e){alert(e.message)}};
+window.deleteStaffAccount=async id=>{const a=staffAccountsRows.find(x=>x.user_id===id);if(!confirm('Удалить логин «'+(a?.login||'')+'»? Сотрудник больше не сможет войти.'))return;try{await staffAdmin({action:'delete',user_id:id});await loadStaffAccounts()}catch(e){alert(e.message)}};
+$('staffSave').onclick=async()=>{
+  const id=$('staffEditId').value,name=$('staffName').value.trim(),login=$('staffLogin').value.trim().toLowerCase(),password=$('staffPassword').value,role=$('staffRole').value,person_id=Number($('staffPerson').value)||null,st=$('staffAccountsStatus');
+  if(!name){st.textContent='Укажите имя.';return}
+  if(!id&&!/^[a-z0-9._-]{3,40}$/.test(login)){st.textContent='Логин: от 3 символов, латиница, цифры, точка, дефис.';return}
+  if((!id||password)&&password.length<8){st.textContent='Пароль должен быть не короче 8 символов.';return}
+  st.textContent='Сохраняю…';$('staffSave').disabled=true;
+  try{
+    if(id)await staffAdmin({action:'update',user_id:id,name,role,person_id,...(password?{password}:{})});
+    else await staffAdmin({action:'create',login,password,name,role,person_id});
+    st.textContent=id?'Сохранено.':`Логин «${login}» создан. Передайте сотруднику логин и пароль.`;staffResetForm();await loadStaffAccounts();
+  }catch(e){st.textContent='Ошибка: '+e.message}finally{$('staffSave').disabled=false}
+};
 </script>
 </body>
 </html>
