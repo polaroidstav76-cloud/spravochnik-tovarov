@@ -5632,7 +5632,7 @@ function schDrawCols(){
   $('scheduleBtn').onclick=()=>{sch.editRules=null;sch.editCols=null;openSchedule()};
 })();
 </script>
-<div class="modal" id="bigReportModal"><div class="dialog" style="max-width:1400px">
+<div class="modal" id="bigReportModal"><div class="dialog" style="max-width:min(1900px,100%)">
   <h2 style="margin-top:0" id="grTitle">Общий отчет</h2>
   <div id="grTabs" class="gr-tabs" role="tablist" aria-label="Листы отчета"></div>
   <div id="grBody"></div>
@@ -5668,9 +5668,11 @@ function schDrawCols(){
 .gr-table td{border:1px solid #D9DDE3;padding:2px 4px;height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 .gr-table td.n{text-align:right;font-variant-numeric:tabular-nums}
 .gr-table td.mg{text-align:center;white-space:normal}
-.gr-table thead th{position:sticky;top:0;z-index:2;background:#EEF1F5;color:#5D6472;font-weight:600;border:1px solid #D9DDE3;padding:2px 0;font-size:11.5px}
+.gr-table thead th{position:sticky;top:0;z-index:2;box-shadow:0 -2px 0 #EEF1F5;background:#EEF1F5;color:#5D6472;font-weight:600;border:1px solid #D9DDE3;padding:2px 0;font-size:11.5px}
 .gr-table .rh{position:sticky;left:0;z-index:1;background:#EEF1F5;color:#5D6472;text-align:center;font-size:11.5px;padding:2px 0}
 .gr-table thead th.rh{z-index:3}
+.gr-table tr.hdr td{position:sticky;top:var(--gr-th,22px);z-index:1;background-color:#F4F6F9;font-weight:700;white-space:normal;overflow-wrap:normal;text-align:center;line-height:1.15;box-shadow:inset 0 -2px 0 #C9CED6}
+.gr-table tr.hdr td.rh{z-index:2;background:#EEF1F5}
 .gr-table td.f{cursor:default}
 .gr-table.edit td:not(.rh){cursor:cell}
 .gr-table td.sel{outline:2px solid #1A73E8;outline-offset:-2px}
@@ -5678,7 +5680,7 @@ function schDrawCols(){
 .gr-admin-tools{margin-right:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .gr-admin-tools button{padding:7px 12px;min-height:0}
 @media(min-width:900px){.desk-row:has(#bigReportBtn){grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:700px){.gr-wrap{max-height:none}.gr-table{font-size:12px}}
+@media(max-width:700px){.gr-wrap{max-height:75vh}}
 </style>
 <script>
 // ===== Общий отчет =====
@@ -5689,7 +5691,32 @@ let gr={sheets:[],cur:0,sel:null,view:null,month:null,staff:null,shiftId:null,ed
 const GR_RU_MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const GR_STAFF_KEY='grFillShift';
 
-function grColW(data,col){const w=data.cols&&data.cols[col];return Math.round((w||8.43)*7+5)}
+// Ширина столбца — по его заголовку (длинное название переносится по словам), но не уже чисел в столбце,
+// чтобы суммы не обрезались. Длинный текст (комментарии) обрезается «…», полностью виден при наведении.
+let grCanvas=null;
+function grTextW(t,bold){grCanvas=grCanvas||document.createElement('canvas').getContext('2d');grCanvas.font=(bold?'700 ':'')+'12.5px Arial,Helvetica,sans-serif';return grCanvas.measureText(t).width}
+// Строки с названиями столбцов: 4+ подписи и почти нет чисел (на сводных листах у каждого года своя такая строка).
+function grIsHeaderRow(row){let txt=0,num=0;for(const cell of Object.values(row||{})){if(typeof cell.v==='string'&&cell.v.trim())txt++;else if(typeof cell.v==='number')num++}return txt>=4&&num<=1}
+function grHeaderRows(sheet,from,to){const s=new Set();for(let r=from;r<=to;r++)if(grIsHeaderRow(sheet.data.rows[String(r)]))s.add(r);return s}
+function grColWidths(sheet,from,to,cols,hdrs,map,skip){
+  const rows=sheet.data.rows,hw={},nw={},tw={};
+  for(let r=from;r<=to;r++){
+    const row=rows[String(r)];if(!row)continue;
+    for(const c of cols){
+      const cell=row[c],a=c+r;if(!cell||cell.v==null||skip.has(a)||(map.get(a)?.cs>1))continue;
+      const t=grShow(sheet,c,cell).trim();if(!t)continue;
+      if(hdrs.has(r))hw[c]=Math.max(...t.split(/\s+/).map(w=>grTextW(w,true)),hw[c]||0);
+      else if(typeof cell.v==='number')nw[c]=Math.max(grTextW(t,!!(cell.s!=null&&sheet.data.styles[cell.s]?.b)),nw[c]||0);
+      else tw[c]=Math.max(grTextW(t),tw[c]||0);
+    }
+  }
+  return cols.map(c=>{
+    let w=Math.max(hw[c]||0,nw[c]||0);
+    if(tw[c])w=Math.max(w,Math.min(tw[c],80));
+    if(!w)return c.length>1?22:16;// пустой столбец — узкий
+    return Math.ceil(w+10)
+  })
+}
 function grDate(n){const d=Formula.serialDate(n);return String(d.getUTCDate()).padStart(2,'0')+'.'+String(d.getUTCMonth()+1).padStart(2,'0')+'.'+d.getUTCFullYear()}
 function grIsDateCell(sheet,col,cell){const st=cell.s!=null?sheet.data.styles[cell.s]:null;return (st&&st.d&&typeof cell.v==='number')||(col==='A'&&grDaily(sheet)&&Formula.isSerial(cell.v))}
 function grDaily(sheet){return /выручка\s*$/i.test(sheet.title)}
@@ -5724,12 +5751,22 @@ function grCellStyle(d,cell){
 // Таблица листа (строки from..to), как в Excel: буквы столбцов, номера строк, цвета, объединённые клетки.
 // can(a,r,c) — можно ли менять клетку; today — номер строки, которую подсветить.
 function grTableHTML(sheet,from,to,can,today){
-  const d=sheet.data,nc=d.ncols||1,{map,skip}=grMerges(d,from,to),cols=[];
+  const d=sheet.data,cols=[];
+  // Пустые столбцы справа (в этом месяце в них ничего нет) не показываем — меньше тянуть вбок.
+  let nc=1;for(let r=from;r<=to;r++)for(const [c,cell] of Object.entries(d.rows[String(r)]||{}))if(cell.v!=null&&cell.v!==''||cell.f!=null)nc=Math.max(nc,Formula.colNum(c));
+  nc=Math.min(nc,d.ncols||nc);
+  const {map,skip}=grMerges({...d,ncols:nc},from,to);
   for(let c=1;c<=nc;c++)cols.push(Formula.colName(c));
-  let h=`<table class="gr-table"><colgroup><col style="width:44px">${cols.map(c=>`<col style="width:${grColW(d,c)}px">`).join('')}</colgroup><thead><tr><th class="rh"></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+  const hdrs=grHeaderRows(sheet,from,to);
+  let ws=grColWidths(sheet,from,to,cols,hdrs,map,skip);
+  // Если всё равно не влезает в окно — чуть уменьшаем шрифт и столбцы (не мельче 70%).
+  const avail=Math.max(320,($('grBody')?.clientWidth||window.innerWidth-60)-2),pad=ws.reduce((a,w)=>a+(w<=22?w:10),44),need=ws.reduce((a,w)=>a+w,44),k=need>avail?Math.max(.7,(avail-pad)/(need-pad)):1;
+  if(k<1)ws=ws.map(w=>w<=22?w:Math.floor((w-10)*k)+10);gr.fs=+(12.5*k).toFixed(2);
+  let h=`<table class="gr-table" style="width:${44+ws.reduce((a,w)=>a+w,0)}px;font-size:${gr.fs}px"><colgroup><col style="width:44px">${ws.map(w=>`<col style="width:${w}px">`).join('')}</colgroup><thead><tr><th class="rh"></th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
   for(let r=from;r<=to;r++){
     const row=d.rows[String(r)]||{};
-    h+=`<tr${r===today?' class="today"':''}><td class="rh">${r}</td>`;
+    const tc=[r===today?'today':'',hdrs.has(r)?'hdr':''].filter(Boolean).join(' ');
+    h+=`<tr${tc?` class="${tc}"`:''}><td class="rh">${r}</td>`;
     for(const c of cols){
       const a=c+r;if(skip.has(a))continue;
       const cell=row[c],mg=map.get(a),cls=grCellClass(cell,mg,can&&can(a,r,c)),sty=grCellStyle(d,cell);
@@ -5831,12 +5868,14 @@ function grDrawSheet(){
   grBind();grSaveMsg();
   if(today)setTimeout(()=>grScrollTo(today),0);
 }
-function grScrollTo(r){const wrap=$('grWrap');if(!wrap)return;const td=wrap.querySelector(`td.rh`);const tr=[...wrap.querySelectorAll('tbody tr')][r-gr.view.from];if(tr&&td)wrap.scrollTop=Math.max(0,tr.offsetTop-wrap.querySelector('thead').offsetHeight-40)}
+function grScrollTo(r){const wrap=$('grWrap');if(!wrap)return;const td=wrap.querySelector(`td.rh`);const tr=[...wrap.querySelectorAll('tbody tr')][r-gr.view.from];if(tr&&td)wrap.scrollTop=Math.max(0,tr.offsetTop-grStickyH(tr.offsetTop)-40)}
+// Высота закреплённой сверху части: буквы столбцов + строка с названиями столбцов (если она выше строки top).
+function grStickyH(top){const wrap=$('grWrap');let h=wrap.querySelector('thead').offsetHeight;let hr=null;wrap.querySelectorAll('tbody tr.hdr').forEach(tr=>{if(tr.offsetTop<top)hr=tr});return h+(hr?hr.offsetHeight:0)}
 
 // ---------- Выбор и правка клетки ----------
 function grBind(){
   const wrap=$('grWrap');if(!wrap)return;
-  gr.ed=null;
+  gr.ed=null;wrap.style.setProperty('--gr-th',wrap.querySelector('thead').offsetHeight+'px');
   wrap.onmousedown=e=>{const td=e.target.closest('td[data-a]');if(!td)return;if(gr.ed&&gr.ed.a===td.dataset.a)return;e.preventDefault();grCloseEd(true);grSelect(td.dataset.a)};
   wrap.onkeydown=e=>{if(e.target!==wrap||!gr.sel)return;grNavKey(e,false)};
 }
@@ -5854,7 +5893,7 @@ function grSelect(a){
   if(grCan(a))grOpenEd(a,td,text);else wrap.focus({preventScroll:true});
 }
 function grEnsureVisible(td){
-  const wrap=$('grWrap'),hh=wrap.querySelector('thead').offsetHeight,rw=44;
+  const wrap=$('grWrap'),hh=grStickyH(td.parentElement.offsetTop),rw=44;
   const top=td.offsetTop,left=td.offsetLeft,h=td.offsetHeight,w=td.offsetWidth;
   if(top-hh<wrap.scrollTop)wrap.scrollTop=top-hh;else if(top+h>wrap.scrollTop+wrap.clientHeight)wrap.scrollTop=top+h-wrap.clientHeight;
   if(left-rw<wrap.scrollLeft)wrap.scrollLeft=left-rw;else if(left+w>wrap.scrollLeft+wrap.clientWidth)wrap.scrollLeft=left+w-wrap.clientWidth;
@@ -5863,7 +5902,7 @@ function grOpenEd(a,td,text){
   const wrap=$('grWrap');
   const inp=document.createElement('input');inp.className='gr-ed';inp.value=text;inp.setAttribute('aria-label','Клетка '+a);
   const cs=getComputedStyle(td);
-  inp.style.cssText=`left:${td.offsetLeft}px;top:${td.offsetTop}px;width:${Math.max(td.offsetWidth,80)}px;height:${td.offsetHeight}px;text-align:${td.classList.contains('n')?'right':cs.textAlign};font-weight:${cs.fontWeight};background:${cs.backgroundColor==='rgba(0, 0, 0, 0)'?'#fff':cs.backgroundColor}`;
+  inp.style.cssText=`font-size:${gr.fs||12.5}px;left:${td.offsetLeft}px;top:${td.offsetTop}px;width:${Math.max(td.offsetWidth,80)}px;height:${td.offsetHeight}px;text-align:${td.classList.contains('n')?'right':cs.textAlign};font-weight:${cs.fontWeight};background:${cs.backgroundColor==='rgba(0, 0, 0, 0)'?'#fff':cs.backgroundColor}`;
   wrap.appendChild(inp);
   gr.ed={a,inp,orig:text,typed:false};
   inp.oninput=()=>{gr.ed.typed=true;$('grFx').textContent=inp.value};
