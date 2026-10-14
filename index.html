@@ -74,6 +74,14 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .debt-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.debt-summary div{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:8px 12px;font-weight:700}.debt-customer{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc;margin-top:12px}.debt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.debt-name{font-weight:800;font-size:17px}.debt-total{font-weight:800;color:#c2410c}.debt-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-top:1px solid #e2e8f0}.debt-row.paid{opacity:.65}.debt-row .debt-sum{font-weight:700;white-space:nowrap}.debt-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .tpl-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}.tpl-item{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}.tpl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.tpl-title{font-weight:800;font-size:16px}.tpl-text{white-space:pre-wrap;line-height:1.5;font-size:14px;margin-top:8px}.tpl-actions{display:flex;gap:6px;flex-wrap:wrap}.tpl-actions button{padding:8px 12px}.tpl-form{border:1px solid #dbe4ef;border-radius:14px;padding:12px;background:#fff;margin-bottom:12px}.tpl-form textarea{min-height:140px}.tpl-search{display:grid;grid-template-columns:1fr 200px;gap:8px}
 @media(max-width:700px){.tpl-search{grid-template-columns:1fr}}
+.tpl-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.tpl-bar-btns{display:flex;gap:6px}
+.tpl-group{border:1px solid var(--line);border-radius:14px;background:var(--sunk,#f8fafc);overflow:hidden}
+.tpl-group-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none;flex-wrap:wrap}.tpl-group-head b{font-size:16px}.tpl-group-head .count{margin:0}
+.tpl-caret{width:14px;color:var(--muted)}.tpl-group-tools{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap}
+.tpl-group-body{display:flex;flex-direction:column;gap:10px;padding:0 10px 10px}.tpl-group .tpl-item{background:var(--surface,#fff)}
+.tpl-handle{cursor:grab;color:var(--muted);font-size:18px;line-height:1.1}
+.tpl-order{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap}.tpl-order select{width:auto;padding:6px 8px;font-size:13px}
+.tpl-item.dragging{opacity:.4}.tpl-item.drag-over{box-shadow:0 -3px 0 #2563eb}.tpl-item.drag-over-after{box-shadow:0 3px 0 #2563eb}.tpl-group-head.drag-over{background:#dbeafe}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -998,7 +1006,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div id="tplAdminBox" style="display:none"><div class="actions" style="justify-content:flex-start;margin:0 0 12px"><button id="tplNewBtn" class="primary">＋ Новый шаблон</button></div>
 <div id="tplForm" class="tpl-form" style="display:none"><input id="tplEditId" type="hidden"><h3 id="tplFormTitle" style="margin-top:0">Новый шаблон</h3><div class="row"><div class="field"><label for="tplTitle">Название *</label><input id="tplTitle" placeholder="Например: Приветствие"></div><div class="field"><label for="tplCategory">Категория</label><input id="tplCategory" list="tplCategoryList" placeholder="Например: Доставка"><datalist id="tplCategoryList"></datalist></div></div><div class="field"><label for="tplBody">Текст шаблона *</label><textarea id="tplBody" placeholder="Здравствуйте! …"></textarea></div><div id="tplFormStatus" class="status"></div><div class="actions" style="justify-content:flex-start;padding-right:0"><button id="tplSaveBtn" class="primary">Сохранить</button><button id="tplCancelBtn">Отмена</button></div></div></div>
 <div class="tpl-search"><input id="tplSearch" placeholder="Поиск по названию и тексту шаблона…"><select id="tplCategoryFilter"><option value="">Все категории</option></select></div>
-<div id="tplCount" class="count" style="margin:8px 0 0"></div><div id="tplList" class="tpl-list"></div><div class="actions"><button id="closeTemplates">Закрыть</button></div></div></div>
+<div class="tpl-bar"><div id="tplCount" class="count"></div><div class="tpl-bar-btns"><button id="tplExpandAll" class="small">Развернуть все</button><button id="tplCollapseAll" class="small">Свернуть все</button></div></div><div id="tplOrderHint" class="status" style="display:none;margin-top:6px"></div><div id="tplList" class="tpl-list"></div><div class="actions"><button id="closeTemplates">Закрыть</button></div></div></div>
 
 <div class="modal" id="debtsModal"><div class="dialog" style="max-width:950px"><h2 style="margin-top:0">Долги клиентов</h2><div class="status">Сюда попадают продажи с оплатой «Расчётный счёт» по клубной карте. В отчётах они считаются оплаченными. Когда клиент оплатит, отметьте продажи галочками и нажмите «Отметить оплаченными».</div>
 <div class="tpl-search" style="margin-top:12px"><input id="debtSearch" placeholder="Поиск по имени или телефону клиента…"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="debtShowPaid" type="checkbox" style="width:auto"> Показать оплаченные</label></div>
@@ -3391,13 +3399,24 @@ initializePolaroid();
 <script>
 // Шаблоны сообщений для переписки с клиентами.
 // Сотрудники видят и копируют шаблоны, администратор создаёт, редактирует и удаляет.
-let messageTemplates=[];
+let messageTemplates=[], tplGroupsView=[], dragTplId=null;
+const TPL_NO_GROUP='Без группы';
+let tplOpenGroups=new Set();try{tplOpenGroups=new Set(JSON.parse(localStorage.getItem('tplOpenGroups')||'[]'))}catch(e){}
+function saveTplOpenGroups(){try{localStorage.setItem('tplOpenGroups',JSON.stringify([...tplOpenGroups]))}catch(e){}}
 async function loadTemplates(){
-  const r=await db.from('message_templates').select('*').order('category').order('title');
+  const r=await db.from('message_templates').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('title');
   if(r.error){messageTemplates=[];$('tplList').innerHTML=`<div class="status">Не удалось загрузить шаблоны: ${esc(r.error.message)}</div>`;$('tplCount').textContent='';return false}
   messageTemplates=r.data||[];return true;
 }
-function templateCategories(){return [...new Set(messageTemplates.map(t=>(t.category||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'))}
+const tplCat=t=>(t.category||'').trim();
+// Группы по порядку: шаблоны с номером места идут по номеру, новые (без номера) — в конец своей группы.
+function templateGroups(list=messageTemplates){
+  const groups=new Map(),add=t=>{const k=tplCat(t);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(t)};
+  list.filter(t=>t.sort_order!=null).sort((a,b)=>a.sort_order-b.sort_order||String(a.title).localeCompare(b.title,'ru')).forEach(add);
+  list.filter(t=>t.sort_order==null).sort((a,b)=>String(a.title).localeCompare(b.title,'ru')).forEach(add);
+  return [...groups].map(([name,items])=>({name,items}));
+}
+function templateCategories(){return templateGroups().map(g=>g.name).filter(Boolean)}
 function renderTemplateCategories(){
   const cats=templateCategories(), cur=$('tplCategoryFilter').value;
   $('tplCategoryFilter').innerHTML='<option value="">Все категории</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
@@ -3407,18 +3426,99 @@ function renderTemplateCategories(){
 function renderTemplates(){
   $('tplAdminBox').style.display=isAdmin?'block':'none';
   if(!isAdmin)$('tplForm').style.display='none';
-  const words=$('tplSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), cat=$('tplCategoryFilter').value;
-  const list=messageTemplates.filter(t=>{
-    if(cat && (t.category||'').trim()!==cat) return false;
+  const words=$('tplSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), cat=$('tplCategoryFilter').value, filtered=!!(words.length||cat);
+  const match=t=>{
+    if(cat && tplCat(t)!==cat) return false;
     const hay=[t.title,t.category,t.body].join(' ').toLowerCase();
     return words.every(w=>hay.includes(w));
-  });
-  $('tplCount').textContent=`Найдено шаблонов: ${list.length}`;
-  $('tplList').innerHTML=list.length?list.map(t=>`<div class="tpl-item">
-    <div class="tpl-head"><div><div class="tpl-title">${esc(t.title)}</div>${t.category?`<span class="tag">${esc(t.category)}</span>`:''}</div>
+  };
+  const all=templateGroups();
+  tplGroupsView=all.map(g=>({name:g.name,items:g.items.filter(match)})).filter(g=>g.items.length);
+  const total=tplGroupsView.reduce((s,g)=>s+g.items.length,0), canOrder=isAdmin&&!filtered;
+  $('tplCount').textContent=`Найдено шаблонов: ${total}`;
+  $('tplOrderHint').style.display=isAdmin?'block':'none';
+  $('tplOrderHint').textContent=filtered?'Чтобы менять порядок и группы, сбросьте поиск и категорию.':'Порядок: перетащите шаблон мышкой (за ⠿) на нужное место или в другую группу, либо стрелками ↑ ↓. Группу можно поднять/опустить и переименовать в её заголовке.';
+  const groupOpts=all.map(g=>g.name).filter(Boolean);
+  const item=(t,gi,ii,g)=>`<div class="tpl-item" data-id="${t.id}">
+    <div class="tpl-head"><div style="display:flex;gap:8px;align-items:flex-start">${canOrder?'<span class="tpl-handle" title="Перетащить">⠿</span>':''}<div><div class="tpl-title">${esc(t.title)}</div>${filtered&&t.category?`<span class="tag">${esc(t.category)}</span>`:''}</div></div>
     <div class="tpl-actions"><button class="primary" onclick="copyTemplate('${t.id}',this)">📋 Копировать</button>${isAdmin?`<button class="secondary" onclick="editTemplate('${t.id}')">Редактировать</button><button class="danger" onclick="deleteTemplate('${t.id}')">Удалить</button>`:''}</div></div>
-    <div class="tpl-text">${esc(t.body)}</div></div>`).join(''):'<div class="status">Шаблоны не найдены.</div>';
+    <div class="tpl-text">${esc(t.body)}</div>
+    ${canOrder?`<div class="tpl-order"><button class="small" title="Выше" onclick="moveTemplate('${t.id}',-1)"${ii===0?' disabled':''}>↑</button><button class="small" title="Ниже" onclick="moveTemplate('${t.id}',1)"${ii===g.items.length-1?' disabled':''}>↓</button><select onchange="moveTemplateToGroup('${t.id}',this.value)" title="Переместить в группу"><option value="" selected disabled>В группу…</option>${groupOpts.filter(n=>n!==tplCat(t)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}${tplCat(t)?`<option value="__none__">${TPL_NO_GROUP}</option>`:''}<option value="__new__">＋ Новая группа…</option></select></div>`:''}</div>`;
+  $('tplList').innerHTML=total?tplGroupsView.map((g,gi)=>{
+    const opened=filtered||tplOpenGroups.has(g.name);
+    return `<div class="tpl-group${opened?' open':''}" data-gi="${gi}">
+    <div class="tpl-group-head" onclick="toggleTplGroup(${gi})"><span class="tpl-caret">${opened?'▾':'▸'}</span><b>${esc(g.name||TPL_NO_GROUP)}</b><span class="count">${g.items.length}</span>
+    ${canOrder?`<span class="tpl-group-tools" onclick="event.stopPropagation()"><button class="small" title="Группу выше" onclick="moveTplGroup(${gi},-1)"${gi===0?' disabled':''}>↑</button><button class="small" title="Группу ниже" onclick="moveTplGroup(${gi},1)"${gi===tplGroupsView.length-1?' disabled':''}>↓</button>${g.name?`<button class="small" onclick="renameTplGroup(${gi})">Переименовать</button>`:''}</span>`:''}</div>
+    ${opened?`<div class="tpl-group-body">${g.items.map((t,ii)=>item(t,gi,ii,g)).join('')}</div>`:''}</div>`}).join(''):'<div class="status">Шаблоны не найдены.</div>';
+  if(canOrder)bindTemplateDrag();
 }
+window.toggleTplGroup=gi=>{const g=tplGroupsView[gi];if(!g)return;tplOpenGroups.has(g.name)?tplOpenGroups.delete(g.name):tplOpenGroups.add(g.name);saveTplOpenGroups();renderTemplates()};
+function setAllTplGroups(openAll){tplOpenGroups=openAll?new Set(templateGroups().map(g=>g.name)):new Set();saveTplOpenGroups();renderTemplates()}
+function bindTemplateDrag(){
+  const clear=()=>document.querySelectorAll('#tplList .drag-over,#tplList .drag-over-after').forEach(x=>x.classList.remove('drag-over','drag-over-after'));
+  document.querySelectorAll('#tplList .tpl-item[data-id]').forEach(el=>{
+    // Тянуть можно только за ⠿, чтобы текст шаблона оставался выделяемым.
+    const h=el.querySelector('.tpl-handle');if(h){h.onmousedown=()=>{el.draggable=true};h.onmouseup=()=>{el.draggable=false}}
+    el.ondragstart=e=>{dragTplId=el.dataset.id;el.classList.add('dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragTplId)}catch(_){}};
+    el.ondragend=()=>{el.draggable=false;el.classList.remove('dragging');dragTplId=null;clear()};
+    el.ondragover=e=>{if(!dragTplId||dragTplId===el.dataset.id)return;e.preventDefault();const r=el.getBoundingClientRect(),after=e.clientY>r.top+r.height/2;clear();el.classList.add(after?'drag-over-after':'drag-over')};
+    el.ondragleave=()=>el.classList.remove('drag-over','drag-over-after');
+    el.ondrop=e=>{e.preventDefault();const after=el.classList.contains('drag-over-after');clear();const id=dragTplId;dragTplId=null;if(id&&id!==el.dataset.id)placeTemplate(id,el.dataset.id,after)};
+  });
+  document.querySelectorAll('#tplList .tpl-group-head').forEach(h=>{
+    const g=tplGroupsView[Number(h.parentElement.dataset.gi)];
+    h.ondragover=e=>{if(!dragTplId)return;e.preventDefault();clear();h.classList.add('drag-over')};
+    h.ondragleave=()=>h.classList.remove('drag-over');
+    h.ondrop=e=>{e.preventDefault();clear();const id=dragTplId;dragTplId=null;if(id&&g)placeTemplateInGroup(id,g.name)};
+  });
+}
+// Сохраняет новый порядок: groups — массив {name,items}; номера мест идут подряд, у перенесённых меняется группа.
+async function saveTemplateOrder(groups){
+  const changes=[];let n=0;
+  groups.forEach(g=>g.items.forEach(t=>{n++;const category=g.name||null;if(t.sort_order!==n||tplCat(t)!==g.name){t.sort_order=n;t.category=category;changes.push(t)}}));
+  renderTemplateCategories();renderTemplates();
+  const res=await Promise.all(changes.map(t=>db.from('message_templates').update({sort_order:t.sort_order,category:t.category}).eq('id',t.id)));
+  const err=res.find(r=>r.error);
+  if(err){alert('Не удалось сохранить порядок: '+err.error.message);await loadTemplates();renderTemplateCategories();renderTemplates()}
+}
+function takeTemplate(groups,id){for(const g of groups){const i=g.items.findIndex(t=>t.id===id);if(i>=0)return g.items.splice(i,1)[0]}return null}
+function placeTemplate(id,targetId,after){
+  const groups=templateGroups(),t=takeTemplate(groups,id);if(!t)return;
+  const g=groups.find(g=>g.items.some(x=>x.id===targetId));if(!g)return;
+  g.items.splice(g.items.findIndex(x=>x.id===targetId)+(after?1:0),0,t);
+  tplOpenGroups.add(g.name);saveTplOpenGroups();
+  saveTemplateOrder(groups.filter(g=>g.items.length));
+}
+function placeTemplateInGroup(id,name){
+  const groups=templateGroups(),t=takeTemplate(groups,id);if(!t)return;
+  let g=groups.find(g=>g.name===name);if(!g){g={name,items:[]};groups.push(g)}
+  g.items.push(t);tplOpenGroups.add(name);saveTplOpenGroups();
+  saveTemplateOrder(groups.filter(g=>g.items.length));
+}
+window.moveTemplate=(id,dir)=>{
+  const groups=templateGroups(),g=groups.find(g=>g.items.some(t=>t.id===id));if(!g)return;
+  const i=g.items.findIndex(t=>t.id===id),j=i+dir;if(j<0||j>=g.items.length)return;
+  [g.items[i],g.items[j]]=[g.items[j],g.items[i]];saveTemplateOrder(groups);
+};
+window.moveTemplateToGroup=(id,val)=>{
+  let name=val;
+  if(val==='__none__')name='';
+  else if(val==='__new__'){name=(prompt('Название новой группы:')||'').trim();if(!name){renderTemplates();return}}
+  placeTemplateInGroup(id,name);
+};
+window.moveTplGroup=(gi,dir)=>{
+  const groups=templateGroups(),i=groups.findIndex(g=>g.name===tplGroupsView[gi]?.name),j=i+dir;
+  if(i<0||j<0||j>=groups.length)return;
+  [groups[i],groups[j]]=[groups[j],groups[i]];saveTemplateOrder(groups);
+};
+window.renameTplGroup=gi=>{
+  const old=tplGroupsView[gi]?.name;if(!old)return;
+  const name=(prompt('Новое название группы:',old)||'').trim();if(!name||name===old)return;
+  const groups=templateGroups(),g=groups.find(g=>g.name===old),same=groups.find(g=>g.name===name);
+  if(same){same.items.push(...g.items);groups.splice(groups.indexOf(g),1)}else g.name=name;
+  if(tplOpenGroups.delete(old)){tplOpenGroups.add(name);saveTplOpenGroups()}
+  saveTemplateOrder(groups);
+};
 async function copyText(text){
   try{await navigator.clipboard.writeText(text);return true}catch(e){}
   const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
@@ -3446,12 +3546,17 @@ async function saveTemplate(){
   if(!isAdmin)return;
   const id=$('tplEditId').value, row={title:$('tplTitle').value.trim(),category:$('tplCategory').value.trim()||null,body:$('tplBody').value.trim(),updated_at:new Date().toISOString()};
   if(!row.title||!row.body){$('tplFormStatus').textContent='Заполните название и текст шаблона.';return}
+  const old=id&&messageTemplates.find(t=>t.id===id);
+  if(old&&tplCat(old)!==(row.category||''))row.sort_order=null;
   $('tplSaveBtn').disabled=true;
   const r=id?await db.from('message_templates').update(row).eq('id',id):await db.from('message_templates').insert(row);
   $('tplSaveBtn').disabled=false;
   if(r.error){$('tplFormStatus').textContent='Не удалось сохранить: '+r.error.message;return}
   $('tplForm').style.display='none';
-  await loadTemplates();renderTemplateCategories();renderTemplates();
+  if(row.category){tplOpenGroups.add(row.category);saveTplOpenGroups()}
+  await loadTemplates();
+  // Новый шаблон (или сменивший группу) встаёт в конец своей группы, номера мест пересчитываются.
+  if(messageTemplates.some(t=>t.sort_order==null))await saveTemplateOrder(templateGroups());else{renderTemplateCategories();renderTemplates()}
 }
 async function openTemplates(){
   open('templatesModal');$('tplList').innerHTML='<div class="status">Загрузка…</div>';
@@ -3465,6 +3570,8 @@ $('tplCategoryFilter').onchange=renderTemplates;
 $('tplNewBtn').onclick=()=>showTemplateForm(null);
 $('tplCancelBtn').onclick=()=>{$('tplForm').style.display='none'};
 $('tplSaveBtn').onclick=saveTemplate;
+$('tplExpandAll').onclick=()=>setAllTplGroups(true);
+$('tplCollapseAll').onclick=()=>setAllTplGroups(false);
 </script>
 <script>
 // Долги клиентов: продажи по расчётному счёту с клубной картой.
