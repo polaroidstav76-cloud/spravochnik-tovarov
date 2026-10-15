@@ -146,3 +146,7 @@ from (values
 join public.schedule_columns c on c.title = v.col
 join public.sales_people p on p.name = v.name
 on conflict (work_date, column_id, slot) do nothing;
+
+-- 2026-10-15: правило вида 5/2 — минимум рабочих дней подряд и максимум выходных подряд (у каждого своё, пусто = без правила).
+alter table public.schedule_rules add column if not exists min_in_row integer;
+alter table public.schedule_rules add column if not exists max_off_row integer;
