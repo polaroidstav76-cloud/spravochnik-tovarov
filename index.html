@@ -5335,7 +5335,7 @@ function schKey(date,col,slot){return `${date}|${col}|${slot}`}
 function schCols(){return sch.cols.filter(c=>c.is_active)}
 function schPerson(id){return sch.people.find(p=>Number(p.id)===Number(id))}
 function schName(id){return schPerson(id)?.name||'—'}
-function schRule(id){return sch.rules.get(Number(id))||{person_id:Number(id),in_schedule:false,color:'#E2E8F0',days:[],column_ids:[],helper_column_ids:[],target_shifts:null,max_in_row:6,note:''}}
+function schRule(id){return sch.rules.get(Number(id))||{person_id:Number(id),in_schedule:false,color:'#E2E8F0',days:[],column_ids:[],helper_column_ids:[],target_shifts:null,max_in_row:6,min_in_row:null,max_off_row:null,note:''}}
 function schInk(hex){const h=String(hex||'#fff').replace('#','');if(h.length<6)return '#17191E';const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return (0.299*r+0.587*g+0.114*b)/255>0.6?'#17191E':'#FFFFFF'}
 function schColTitle(c,slot){return slot>1?(slot===2?'Доп. ':'Доп. 2 ')+c.title.toLowerCase():c.title}
 function schIsWeekend(y,m,d){return schWd(y,m,d)>=6}
@@ -5406,7 +5406,9 @@ function schCheck(){
   // Сколько дней подряд человек уже отработал на конец прошлого месяца.
   const run=new Map();const [py,pm]=schShift(y,m,-1),pn=schDays(py,pm);
   sch.people.forEach(p=>{let k=0;for(let d=pn;d>=1;d--){if(schWorks(p.id,schISO(py,pm,d)))k++;else break}if(k)run.set(Number(p.id),k)});
-  const runFlag=new Set();
+  const runFlag=new Set(),runKeys=new Map(),off=new Map(),runFrom1=new Set(),prevKnown=[...sch.cells.keys()].some(k=>k.startsWith(schISO(py,pm,1).slice(0,8)));
+  // Сколько выходных подряд было в конце прошлого месяца (если он составлен).
+  if(prevKnown)sch.people.forEach(p=>{let k=0;for(let d=pn;d>=1;d--){const dt=schISO(py,pm,d);if(schWorks(p.id,dt))break;if(!schOff(p.id,dt))k++}off.set(Number(p.id),k)});
   for(let d=1;d<=n;d++){
     const date=schISO(y,m,d),seen=new Map(),dl=`${String(d).padStart(2,'0')}.${String(m+1).padStart(2,'0')}`;
     cols.forEach(c=>{
@@ -5428,8 +5430,17 @@ function schCheck(){
       if(keys.length>1){keys.forEach(k=>add(k,schName(pid)+' стоит в двух местах в этот день'));list.push({d,t:`<b>${dl}</b> ${esc(schName(pid))} стоит в двух местах сразу.`})}
     });
     sch.people.forEach(p=>{
-      const pid=Number(p.id);
-      if(!seen.has(pid)){run.delete(pid);return}
+      const pid=Number(p.id),r=schRule(pid);
+      if(!seen.has(pid)){
+        // Правило вида 5/2: короткая серия рабочих дней и слишком много выходных подряд.
+        const k=run.get(pid)||0,mn=Number(r.min_in_row)||0,req=schOff(pid,date);
+        if(mn&&k>0&&k<mn&&!req&&!(runFrom1.has(pid)&&!prevKnown)){(runKeys.get(pid)||[]).forEach(x=>add(x,p.name+': всего '+k+' дн. подряд (правило — от '+mn+')'));list.push({d:d-1,t:`<b>${dl}</b> ${esc(p.name)} работает только ${k} дн. подряд перед выходным (правило — от ${mn}).`})}
+        run.delete(pid);runKeys.delete(pid);runFrom1.delete(pid);
+        const mo=Number(r.max_off_row)||0;
+        if(r.in_schedule&&p.is_active&&!req){const o=(off.get(pid)||0)+1;off.set(pid,o);if(mo&&o===mo+1)list.push({d,t:`<b>${dl}</b> ${esc(p.name)}: уже ${o}-й выходной подряд (правило — не больше ${mo}).`})}
+        return;
+      }
+      if(d===1)runFrom1.add(pid);off.set(pid,0);runKeys.set(pid,[...(runKeys.get(pid)||[]),...seen.get(pid)]);
       const k=(run.get(pid)||0)+1;run.set(pid,k);
       const max=Number(schRule(pid).max_in_row)||0;
       if(max&&k>max){seen.get(pid).forEach(x=>add(x,schName(pid)+': '+k+'-й день подряд (правило — не больше '+max+')'));if(!runFlag.has(pid+'|'+(d-k))){runFlag.add(pid+'|'+(d-k));list.push({d,t:`<b>${dl}</b> ${esc(p.name)} работает больше ${max} дней подряд.`})}}
@@ -5526,6 +5537,7 @@ function schMakeDraft(){
   // где кто чаще работал в прошлом месяце
   const fam=new Map();sch.cells.forEach((pid,k)=>{if(!k.startsWith(schISO(py,pm,1).slice(0,8)))return;const col=k.split('|')[1];fam.set(pid+'|'+col,(fam.get(pid+'|'+col)||0)+1)});
   const run=new Map();pool.forEach(pid=>{let k=0;for(let d=pn;d>=1;d--){if(schWorks(pid,schISO(py,pm,d)))k++;else break}run.set(pid,k)});
+  const off=new Map();pool.forEach(pid=>{let k=0;if(prevHas)for(let d=pn;d>=1;d--){if(schWorks(pid,schISO(py,pm,d)))break;k++}off.set(pid,k)});
   const cnt=new Map(pool.map(p=>[p,0]));
   const totalNeed=(()=>{let s=0;for(let d=1;d<=n;d++)cols.forEach(c=>s+=schNeed(c,y,m,d));return s})();
   const noTarget=pool.filter(p=>!(schRule(p).target_shifts>0));
@@ -5543,7 +5555,9 @@ function schMakeDraft(){
       const need=()=>Math.min(c.slots,Math.max(schNeed(c,y,m,d),filled().some(p=>schRule(p).helper_column_ids?.map(Number).includes(Number(c.id)))?2:0));
       let guard=0;
       while(filled().length<need()&&guard++<3){
-        const cand=pool.filter(pid=>ok(pid,d,c.id,busy)).map(pid=>{const t=target(pid)||1,r=schRule(pid);return {pid,score:(cnt.get(pid)+1)/(t*d/n)-((fam.get(pid+'|'+c.id)||0)>0?0.15:0)-(r.column_ids?.length===1?0.2:0)}}).sort((a,b)=>a.score-b.score);
+        const cand=pool.filter(pid=>ok(pid,d,c.id,busy)).map(pid=>{const t=target(pid)||1,r=schRule(pid);const rn=run.get(pid)||0,mn=Number(r.min_in_row)||0,mo=Number(r.max_off_row)||0;
+          // 5/2: продолжаем начатую серию до минимума и не держим человека дольше разрешённых выходных.
+          return {pid,score:(cnt.get(pid)+1)/(t*d/n)-((fam.get(pid+'|'+c.id)||0)>0?0.15:0)-(r.column_ids?.length===1?0.2:0)-(mn&&rn>0&&rn<mn?0.6:0)-(mo&&(off.get(pid)||0)>=mo?1:0)}}).sort((a,b)=>a.score-b.score);
         let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;
         if(!cand.length){
           // Никого свободного: переводим человека с необязательного места (например «Вне офиса» или помощника).
@@ -5555,9 +5569,21 @@ function schMakeDraft(){
         sch.cells.set(schKey(date,c.id,s),cand[0].pid);busy.add(cand[0].pid);
       }
     });
-    pool.forEach(pid=>{if(busy.has(pid)){run.set(pid,(run.get(pid)||0)+1);cnt.set(pid,cnt.get(pid)+1)}else run.set(pid,0)});
+    // 3) правило 5/2: кто не добрал минимум рабочих дней подряд или отдыхает дольше разрешённого — встаёт вместо того,
+    // у кого серия уже не короче минимума (или кто только начинал бы новую серию).
+    const urgent=pid=>{const r=schRule(pid),mn=Number(r.min_in_row)||0,mo=Number(r.max_off_row)||0,rn=run.get(pid)||0;return (mn&&rn>0&&rn<mn)||(mo&&rn===0&&(off.get(pid)||0)>=mo)};
+    const canLeave=q=>{const r=schRule(q),mn=Number(r.min_in_row)||0,rn=run.get(q)||0;return !urgent(q)&&(rn===0||rn>=mn)&&(rn===0||!Number(r.max_off_row)||true)};
+    pool.filter(pid=>!busy.has(pid)&&urgent(pid)&&!schOff(pid,date)&&(run.get(pid)||0)<(Number(schRule(pid).max_in_row)||99)).forEach(pid=>{
+      for(const c of cols){if(schRuleProblem(pid,y,m,d,c.id))continue;
+        for(let s=1;s<=c.slots;s++){const k=schKey(date,c.id,s),q=sch.cells.get(k);if(!q||!usable(q)||!canLeave(q))continue;
+          sch.cells.set(k,pid);busy.delete(q);busy.add(pid);return}}
+    });
+    pool.forEach(pid=>{if(busy.has(pid)){run.set(pid,(run.get(pid)||0)+1);off.set(pid,0);cnt.set(pid,cnt.get(pid)+1)}else{run.set(pid,0);if(!schOff(pid,date))off.set(pid,(off.get(pid)||0)+1)}});
   }
-  // 3) выравниваем число смен: передаём смены от тех, у кого перебор, тем, у кого недобор
+  // 4) выравниваем число смен: передаём смены от тех, у кого перебор, тем, у кого недобор
+  // Не создаёт ли перестановка серию рабочих дней короче минимума (правило 5/2) рядом с днём d.
+  const schShortNear=(pid,d)=>{const mn=Number(schRule(pid).min_in_row)||0;if(!mn)return false;const w=x=>x>=1&&x<=n&&schWorks(pid,schISO(y,m,x));
+    for(const c of [d-1,d,d+1]){if(!w(c))continue;let a=c,b=c;while(w(a-1))a--;while(w(b+1))b++;if(a>1&&b<n&&b-a+1<mn)return true}return false};
   const inRow=(pid,d)=>{let k=1;for(let x=d-1;x>=1&&schWorks(pid,schISO(y,m,x));x--)k++;for(let x=d+1;x<=n&&schWorks(pid,schISO(y,m,x));x++)k++;return k};
   for(let it=0;it<300;it++){
     const over=pool.filter(p=>target(p)&&cnt.get(p)-target(p)>=2).sort((a,b)=>(cnt.get(b)-target(b))-(cnt.get(a)-target(a)));
@@ -5567,7 +5593,7 @@ function schMakeDraft(){
       for(let d=n;d>=1;d--){const date=schISO(y,m,d);if(schWorks(u,date))continue;
         for(const c of cols)for(let s=1;s<=c.slots;s++){const k=schKey(date,c.id,s);if(sch.cells.get(k)!==o||schRuleProblem(u,y,m,d,c.id))continue;
           sch.cells.set(k,u);
-          if(inRow(u,d)>(Number(schRule(u).max_in_row)||99)){sch.cells.set(k,o);continue}
+          if(inRow(u,d)>(Number(schRule(u).max_in_row)||99)||schShortNear(u,d)||schShortNear(o,d)){sch.cells.set(k,o);continue}
           cnt.set(o,cnt.get(o)-1);cnt.set(u,cnt.get(u)+1);moved=true;break outer}}
     }
     if(!moved)break;
@@ -5592,7 +5618,8 @@ function schDrawRules(){
       h+=`<div class="sch-line"><span>Где может работать</span>${cols.map(c=>box(pid,'column_ids',Number(c.id),c.title)).join('')}</div>`;
       h+=`<div class="sch-line"><span>Нужен помощник на</span>${cols.filter(c=>c.slots>1).map(c=>box(pid,'helper_column_ids',Number(c.id),c.title)).join('')||'<span class="status">нет столбцов, где можно двоих</span>'}</div>`;
       h+=`<div class="sch-line"><span>Смен в месяц</span><input type="number" min="0" max="31" data-p="${pid}" data-f="target_shifts" value="${r.target_shifts??''}" placeholder="любое"><span class="status" style="min-width:0">0 — ставить только вручную</span></div>`;
-      h+=`<div class="sch-line"><span>Подряд не больше</span><input type="number" min="1" max="31" data-p="${pid}" data-f="max_in_row" value="${r.max_in_row??6}"> дней</div>`;
+      h+=`<div class="sch-line"><span>Рабочих дней подряд</span>от <input type="number" min="1" max="31" data-p="${pid}" data-f="min_in_row" value="${r.min_in_row??''}" placeholder="любое"> до <input type="number" min="1" max="31" data-p="${pid}" data-f="max_in_row" value="${r.max_in_row??6}"> дней</div>`;
+      h+=`<div class="sch-line"><span>Выходных подряд</span>не больше <input type="number" min="1" max="31" data-p="${pid}" data-f="max_off_row" value="${r.max_off_row??''}" placeholder="любое"> дней<span class="status" style="min-width:0">график 5/2: рабочих от 5 до 5, выходных не больше 2</span></div>`;
       h+=`<div class="sch-line"><span>Заметка</span><input type="text" data-p="${pid}" data-f="note" value="${esc(r.note||'')}" placeholder="например: учится по понедельникам"></div>`;
     }
     h+='</div>';
@@ -5605,10 +5632,11 @@ function schDrawRules(){
     else if(f==='in_schedule'){r.in_schedule=x.checked;schDrawRules();return}
     else if(f==='target_shifts')r[f]=x.value===''?null:Math.max(0,Number(x.value));
     else if(f==='max_in_row')r[f]=Math.max(1,Number(x.value)||6);
+    else if(f==='min_in_row'||f==='max_off_row')r[f]=x.value===''?null:Math.max(1,Number(x.value)||1);
     else r[f]=x.value;
   });
   $('schRulesSave').onclick=async()=>{
-    const rows=[...E.values()].map(r=>({person_id:r.person_id,in_schedule:!!r.in_schedule,color:r.color||'#E2E8F0',days:r.days,column_ids:r.column_ids,helper_column_ids:r.helper_column_ids,target_shifts:r.target_shifts,max_in_row:r.max_in_row||6,note:r.note||null,updated_at:new Date().toISOString()}));
+    const rows=[...E.values()].map(r=>({person_id:r.person_id,in_schedule:!!r.in_schedule,color:r.color||'#E2E8F0',days:r.days,column_ids:r.column_ids,helper_column_ids:r.helper_column_ids,target_shifts:r.target_shifts,max_in_row:r.max_in_row||6,min_in_row:r.min_in_row??null,max_off_row:r.max_off_row??null,note:r.note||null,updated_at:new Date().toISOString()}));
     $('schRulesMsg').textContent='Сохраняю…';
     const res=await db.from('schedule_rules').upsert(rows,{onConflict:'person_id'});
     if(res.error){$('schRulesMsg').textContent='Ошибка: '+res.error.message;return}
