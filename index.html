@@ -5849,7 +5849,7 @@ function grPaint(a){
 async function openBigReport(){
   if(isAdmin){await grLoadAdmin();return}
   let sid=salesSession?.shiftId||null;
-  if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&Date.now()-st.at<12*3600e3)sid=st.id}catch(e){}}
+  if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&st.id)sid=st.id}catch(e){}}
   if(!sid){alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
   const r=await db.rpc('report_staff_view',{p_shift_id:sid});
   if(r.error){
@@ -6132,7 +6132,7 @@ buildShiftReport=async function(shiftId){
   await grBaseShiftReport(shiftId);
   try{
     const sr=await db.from('sales_shifts').select('id,branch_id,status,ended_at').eq('id',shiftId).single();
-    const sh=sr.data;if(!sh||sh.status!=='closed'||!sh.ended_at||Date.now()-new Date(sh.ended_at).getTime()>12*3600e3)return;
+    const sh=sr.data;if(!sh||sh.status!=='closed')return;
     const br=salesBranches.find(b=>Number(b.id)===Number(sh.branch_id));if(br&&(br.is_test||br.is_workshop))return;
     let state='';const v=await db.rpc('report_staff_view',{p_shift_id:shiftId});
     if(!v.error&&v.data?.mode)state=v.data.mode==='manual'?'Сегодня отчет уже открыт для ручного заполнения.':'Данные смены уже перенесены в общий отчет. Нажмите ещё раз, чтобы обновить цифры.';

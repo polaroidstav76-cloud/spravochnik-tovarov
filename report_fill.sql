@@ -6,7 +6,7 @@
 --   C смена (имена через «/»), D выручка, G карта, H QR, I ссылки, J переводы, K р/с, L кол-во клиентов (чеков), M возвраты ₽, Q ретушь.
 --   E наличные, F остаток наличных, N перезаказы, O расходы, P комментарий, R остаток в кассе, S конверт — вписывает сотрудник.
 -- manual: сотрудник вписывает всю строку сам (кроме даты и дня недели); в Сводке и в отчете в Телеграм это отмечается.
--- Сотрудник может менять только строку своего филиала за день смены, в течение 12 часов после закрытия смены.
+-- Сотрудник может менять только строку своего филиала за день смены (без ограничения по времени с 2026-10-15).
 -- Итог месяца (строка «ИТОГО», формулы SUM) пересчитывается здесь же; остальные листы пересчитает сайт админа при открытии.
 
 create table if not exists public.report_fills (
@@ -26,14 +26,14 @@ create policy report_fills_read on public.report_fills for select to authenticat
 grant select on public.report_fills to authenticated;
 revoke all on public.report_fills from anon;
 
--- Смена, к отчету которой есть доступ у сотрудника: открыта или закрыта не больше 12 часов назад.
+-- Смена, к отчету которой есть доступ у сотрудника: любая (открытая или закрытая), срока нет.
 create or replace function public.report_shift_ctx(p_shift_id bigint, out branch_id bigint, out day date)
 language plpgsql stable security definer set search_path to 'public' as $fn$
 begin
   select sh.branch_id, (sh.started_at at time zone 'Europe/Moscow')::date into branch_id, day
     from public.sales_shifts sh
-   where sh.id=p_shift_id and (sh.status='open' or sh.ended_at>now()-interval '12 hours');
-  if not found then raise exception 'Смена не найдена или закрыта давно. Отчет можно заполнить в течение 12 часов после смены.'; end if;
+   where sh.id=p_shift_id;
+  if not found then raise exception 'Смена не найдена'; end if;
 end $fn$;
 
 -- Лист филиала, блок месяца и строка дня (по дате в столбце A).
