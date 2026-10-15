@@ -5830,7 +5830,7 @@ function grCell(s,a){const x=grSplit(a);const row=s.data.rows[String(x.r)];retur
 function grSheet(){return gr.staff?gr.staff.sheet:gr.sheets[gr.cur]}
 function grCan(a){
   const x=grSplit(a);if(!x)return false;
-  if(gr.staff){const st=gr.staff;return x.r===st.row&&(st.cols||[]).includes(x.c)}
+  if(gr.staff){const st=gr.staff;if(x.r===st.row)return (st.cols||[]).includes(x.c);return (st.past||[]).includes(x.r)&&(st.past_cols||[]).includes(x.c)}
   return isAdmin&&!!gr.sheets[gr.cur]
 }
 // Обновить одну клетку на экране после изменения.
@@ -5870,6 +5870,7 @@ function grOpenStaff(shiftId,v){
     :'Данные из кассы уже в строке дня. Допишите наличные, остаток наличных, перезаказы, расходы, комментарий, остаток в кассе и конверт (белые клетки).');
   $('grBody').innerHTML=`<div class="gr-head"><b>${esc(v.title)}</b><span class="gr-note">${esc(grMonthLabel(v.month))}</span>${v.mode==='manual'?'<span class="gr-tag">заполняется вручную</span>':''}</div>
   ${hint?`<div class="gr-hint">${hint}</div>`:''}
+  ${v.past?.length?'<div class="gr-hint">Прошлые дни месяца тоже можно заполнить или исправить: нажмите на белую клетку в строке нужного дня.</div>':''}
   <div class="gr-bar"><b id="grAddr">—</b><span id="grFx" class="gr-fx"></span><span id="grMsg" class="gr-msg"></span></div>
   <div class="gr-wrap" id="grWrap" tabindex="0">${grTableHTML(gr.staff.sheet,v.from,v.to,(a)=>grCan(a),v.row)}</div>`;
   gr.view={from:v.from,to:v.to};
@@ -6088,7 +6089,8 @@ function grStaffSet(a,text){
   if(val==null)delete cell.v;else cell.v=val;row[x.c]=cell;grPaint(a);
   grMsg('Сохраняю…');
   grStaffChain=grStaffChain.then(async()=>{
-    const r=await db.rpc('report_staff_set',{p_shift_id:gr.shiftId,p_col:x.c,p_value:val});
+    const r=x.r===st.row?await db.rpc('report_staff_set',{p_shift_id:gr.shiftId,p_col:x.c,p_value:val})
+      :await db.rpc('report_staff_set_past',{p_shift_id:gr.shiftId,p_row:x.r,p_col:x.c,p_value:val});
     if(gr.staff!==st)return;
     if(r.error){grMsg('Не сохранилось '+a+': '+r.error.message,true);return}
     for(const [rr,rowData] of Object.entries(r.data||{})){if(!rowData)continue;rows[rr]=rowData;for(const c of Object.keys(rowData))grPaint(c+rr)}
