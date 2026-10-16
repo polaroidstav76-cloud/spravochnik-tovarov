@@ -5335,7 +5335,7 @@ function schKey(date,col,slot){return `${date}|${col}|${slot}`}
 function schCols(){return sch.cols.filter(c=>c.is_active)}
 function schPerson(id){return sch.people.find(p=>Number(p.id)===Number(id))}
 function schName(id){return schPerson(id)?.name||'—'}
-function schRule(id){return sch.rules.get(Number(id))||{person_id:Number(id),in_schedule:false,color:'#E2E8F0',days:[],column_ids:[],helper_column_ids:[],target_shifts:null,max_in_row:6,min_in_row:null,max_off_row:null,note:''}}
+function schRule(id){return sch.rules.get(Number(id))||{person_id:Number(id),in_schedule:false,color:'#E2E8F0',days:[],column_ids:[],helper_column_ids:[],helper_only_column_ids:[],target_shifts:null,max_in_row:6,min_in_row:null,max_off_row:null,note:''}}
 function schInk(hex){const h=String(hex||'#fff').replace('#','');if(h.length<6)return '#17191E';const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return (0.299*r+0.587*g+0.114*b)/255>0.6?'#17191E':'#FFFFFF'}
 function schColTitle(c,slot){return slot>1?(slot===2?'Доп. ':'Доп. 2 ')+c.title.toLowerCase():c.title}
 function schIsWeekend(y,m,d){return schWd(y,m,d)>=6}
@@ -5346,10 +5346,12 @@ function schCan(){return !!isAdmin}
 function schPeopleForPick(){return sch.people.filter(p=>p.is_active&&schRule(p.id).in_schedule).sort((a,b)=>a.name.localeCompare(b.name,'ru'))}
 
 // Почему человек не подходит на это место в этот день (по правилам), без учёта занятости.
-function schRuleProblem(pid,y,m,d,colId){
+function schHelperOnly(pid,colId){return (schRule(pid).helper_only_column_ids||[]).map(Number).includes(Number(colId))}
+function schRuleProblem(pid,y,m,d,colId,slot){
   const r=schRule(pid),wd=schWd(y,m,d),date=schISO(y,m,d);
   if(r.days?.length&&!r.days.map(Number).includes(wd))return 'по правилам не работает в '+SCH_WD_FULL[wd];
   if(r.column_ids?.length&&!r.column_ids.map(Number).includes(Number(colId))){const c=sch.cols.find(x=>Number(x.id)===Number(colId));return 'по правилам не работает на «'+(c?.title||'')+'»'}
+  if(slot===1&&schHelperOnly(pid,colId)){const c=sch.cols.find(x=>Number(x.id)===Number(colId));return 'на «'+(c?.title||'')+'» только помощником'}
   const off=schOff(pid,date);if(off)return 'просил(а) выходной'+(off.note?' ('+off.note+')':'');
   const p=schPerson(pid);if(p&&!p.is_active)return 'сотрудник отключён';
   return '';
@@ -5416,7 +5418,7 @@ function schCheck(){
       for(let s=1;s<=c.slots;s++){
         const k=schKey(date,c.id,s),pid=sch.cells.get(k);if(!pid)continue;filled++;
         if(!seen.has(pid))seen.set(pid,[]);seen.get(pid).push(k);
-        const pr=schRuleProblem(pid,y,m,d,c.id);if(pr){add(k,schName(pid)+' '+pr);list.push({d,t:`<b>${dl}</b> ${esc(schName(pid))} ${esc(pr)}.`})}
+        const pr=schRuleProblem(pid,y,m,d,c.id,s);if(pr){add(k,schName(pid)+' '+pr);list.push({d,t:`<b>${dl}</b> ${esc(schName(pid))} ${esc(pr)}.`})}
         if(schRule(pid).helper_column_ids?.map(Number).includes(Number(c.id)))helperFor=pid;
       }
       const need=Math.max(schNeed(c,y,m,d),helperFor?2:0);
@@ -5478,7 +5480,7 @@ function schDrawGrid(){
       if(admin){
         const busy=new Set(schDayPeople(date,k));
         const opts=['<option value="">—</option>'].concat(pick.concat(pid&&!pick.some(p=>Number(p.id)===pid)?[schPerson(pid)||{id:pid,name:'—'}]:[]).map(p=>{
-          const pr=schRuleProblem(p.id,y,m,d,c.id)||(busy.has(Number(p.id))?'уже стоит в этот день':'');
+          const pr=schRuleProblem(p.id,y,m,d,c.id,s)||(busy.has(Number(p.id))?'уже стоит в этот день':'');
           return `<option value="${p.id}" ${Number(p.id)===pid?'selected':''}>${esc(p.name)}${pr?' ⚠ '+esc(pr):''}</option>`}));
         t+=`<td class="${cls.join(' ')}" style="background:${bg};color:${ink}" title="${esc(tip)}"><select data-k="${k}" aria-label="${esc(schColTitle(c,s))}, ${d} число" style="color:${ink}">${opts.join('')}</select></td>`;
       }else t+=`<td class="${cls.join(' ')}" style="background:${bg};color:${ink}" title="${esc(tip)}"><span>${pid?esc(schName(pid)):''}</span></td>`;
@@ -5538,6 +5540,7 @@ function schMakeDraft(){
   const prevHas=[...sch.cells.keys()].some(k=>k.startsWith(prevPre));
   const fam=new Map();sch.cells.forEach((pid,k)=>{if(!k.startsWith(prevPre))return;const col=Number(k.split('|')[1]);fam.set(pid+'|'+col,(fam.get(pid+'|'+col)||0)+1)});
   const colOk=(pid,c)=>{const ids=(schRule(pid).column_ids||[]).map(Number);return !ids.length||ids.includes(Number(c.id))};
+  const slotOk=(pid,x)=>colOk(pid,x.c)&&!(x.s===1&&schHelperOnly(pid,x.c.id));
   const dayOk=(pid,d)=>{const days=(schRule(pid).days||[]).map(Number);return (!days.length||days.includes(schWd(y,m,d)))&&!schOff(pid,schISO(y,m,d))};
   const myCols=pid=>cols.filter(c=>colOk(pid,c));
   // 1) Для каждого с циклом выбираем, с какого места цикла начать месяц: продолжение прошлого месяца,
@@ -5552,22 +5555,29 @@ function schMakeDraft(){
     cont.set(pid,c);phase.set(pid,c==null?0:c)});
   // Оценка: пустые обязательные места (×3), работающие по циклу без места, рабочие дни не в свои дни недели, разрыв с прошлым месяцем.
   const dayCost=d=>{
-    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push(c)});
+    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push({c,s})});
     const ws=cyc.filter(pid=>work(pid,d)&&dayOk(pid,d));
     const match=new Array(slots.length).fill(null);
-    const tryW=(w,seen)=>{for(let i=0;i<slots.length;i++){if(seen.has(i)||!colOk(w,slots[i]))continue;seen.add(i);if(match[i]==null||tryW(match[i],seen)){match[i]=w;return true}}return false};
+    const tryW=(w,seen)=>{for(let i=0;i<slots.length;i++){if(seen.has(i)||!slotOk(w,slots[i]))continue;seen.add(i);if(match[i]==null||tryW(match[i],seen)){match[i]=w;return true}}return false};
     ws.forEach(w=>tryW(w,new Set()));
-    const used=new Map();slots.forEach((c,i)=>{if(match[i]!=null)used.set(Number(c.id),(used.get(Number(c.id))||0)+1)});
+    const used=new Map();slots.forEach((x,i)=>{if(match[i]!=null)used.set(Number(x.c.id),(used.get(Number(x.c.id))||0)+1)});
     let idle=0;ws.filter(w=>!match.includes(w)).forEach(w=>{const c=myCols(w).find(c=>(used.get(Number(c.id))||0)<c.slots);if(c)used.set(Number(c.id),(used.get(Number(c.id))||0)+1);else idle++});
     return match.filter(x=>x==null).length*3+idle;
   };
   const cost=()=>{let s=0;for(let d=1;d<=n;d++)s+=dayCost(d);cyc.forEach(pid=>{if(cont.get(pid)!=null&&phase.get(pid)!==cont.get(pid))s+=2;for(let d=1;d<=n;d++)if(work(pid,d)&&!dayOk(pid,d)&&!schOff(pid,schISO(y,m,d)))s+=1});return s};
   let cur=cost();
-  for(let round=0;round<4;round++){let better=false;
+  for(let round=0;round<12;round++){let better=false;
     order.forEach(pid=>{const cy=schCycle(pid),keep=phase.get(pid);let best=keep,bestC=cur;
       for(let p=0;p<cy.L;p++){if(p===keep)continue;phase.set(pid,p);const c=cost();if(c<bestC){bestC=c;best=p}}
       phase.set(pid,best);if(best!==keep){cur=bestC;better=true}});
-    if(!better)break}
+    if(better)continue;
+    // одиночные сдвиги не помогают — пробуем сдвинуть сразу двоих (например, развести выходные на одном филиале)
+    let bp=null,bc=cur;
+    for(let i=0;i<order.length;i++)for(let j=i+1;j<order.length;j++){const a=order[i],b=order[j],ka=phase.get(a),kb=phase.get(b);
+      for(let pa=0;pa<schCycle(a).L;pa++)for(let pb=0;pb<schCycle(b).L;pb++){if(pa===ka&&pb===kb)continue;phase.set(a,pa);phase.set(b,pb);const c=cost();if(c<bc){bc=c;bp=[a,pa,b,pb]}}
+      phase.set(a,ka);phase.set(b,kb)}
+    if(!bp)break;
+    phase.set(bp[0],bp[1]);phase.set(bp[2],bp[3]);cur=bc}
   // 2) По дням: работающие по циклу встают на обязательные места (подбор так, чтобы закрыть как можно больше),
   // лишние — на необязательные (помощник, директор); пустые места дозаполняют сотрудники без цикла.
   const free=pool.filter(p=>!schCycle(p));
@@ -5577,21 +5587,24 @@ function schMakeDraft(){
   const gaps=[],idle=[];
   for(let d=1;d<=n;d++){
     const date=schISO(y,m,d),busy=new Set(),dl=`${String(d).padStart(2,'0')}.${String(m+1).padStart(2,'0')}`;
-    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push(c)});
+    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push({c,s})});
     const workers=cyc.filter(pid=>work(pid,d)&&dayOk(pid,d)).sort((a,b)=>myCols(a).length-myCols(b).length);
-    const adj=new Map(workers.map(w=>[w,slots.map((c,i)=>i).filter(i=>colOk(w,slots[i])).sort((i,j)=>pref(w,slots[j])-pref(w,slots[i]))]));
+    const adj=new Map(workers.map(w=>[w,slots.map((c,i)=>i).filter(i=>slotOk(w,slots[i])).sort((i,j)=>pref(w,slots[j].c)-pref(w,slots[i].c)||slots[i].s-slots[j].s)]));
     const match=new Array(slots.length).fill(null);
     const tryW=(w,seen)=>{for(const i of adj.get(w)){if(seen.has(i))continue;seen.add(i);if(match[i]==null||tryW(match[i],seen)){match[i]=w;return true}}return false};
     workers.forEach(w=>tryW(w,new Set()));
-    const put=(c,pid)=>{let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;if(s>c.slots)return false;sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid);last.set(pid,Number(c.id));return true};
-    slots.forEach((c,i)=>{if(match[i]!=null)put(c,match[i])});
+    // на место s (или на первое свободное, где человеку можно стоять: «только помощником» — не на первое)
+    const put=(c,pid,at)=>{let s=at||(schHelperOnly(pid,c.id)?2:1);if(!at)while(s<=c.slots&&sch.cells.get(schKey(date,c.id,s)))s++;if(s>c.slots||sch.cells.get(schKey(date,c.id,s)))return false;sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid);last.set(pid,Number(c.id));return true};
+    slots.forEach((x,i)=>{if(match[i]!=null)put(x.c,match[i],x.s)});
     const filledIn=c=>{let k=0;for(let s=1;s<=c.slots;s++)if(sch.cells.get(schKey(date,c.id,s)))k++;return k};
     const needIn=c=>Math.min(c.slots,Math.max(schNeed(c,y,m,d),[1,2,3].some(s=>{const p=sch.cells.get(schKey(date,c.id,s));return p&&schRule(p).helper_column_ids?.map(Number).includes(Number(c.id))})?2:0));
     // лишние по циклу — на свободные места своих столбцов (сначала туда, где нужен помощник)
-    workers.filter(w=>!busy.has(w)).forEach(w=>{const opts=myCols(w).filter(c=>filledIn(c)<c.slots).sort((a,b)=>((needIn(b)-filledIn(b))-(needIn(a)-filledIn(a)))||pref(w,b)-pref(w,a));if(!opts.length||!put(opts[0],w))idle.push(schName(w))});
+    workers.filter(w=>!busy.has(w)).forEach(w=>{const freeSlot=c=>{for(let s=schHelperOnly(w,c.id)?2:1;s<=c.slots;s++)if(!sch.cells.get(schKey(date,c.id,s)))return true;return false};
+      const opts=myCols(w).filter(freeSlot).sort((a,b)=>((needIn(b)-filledIn(b))-(needIn(a)-filledIn(a)))||pref(w,b)-pref(w,a));if(!opts.length||!put(opts[0],w))idle.push(schName(w))});
     // пустые обязательные места — сотрудники без цикла
     cols.forEach(c=>{let guard=0;while(filledIn(c)<needIn(c)&&guard++<3){
-      const cand=free.filter(pid=>!busy.has(pid)&&dayOk(pid,d)&&colOk(pid,c)&&(run.get(pid)||0)<(Number(schRule(pid).max_in_row)||99))
+      const s1=!sch.cells.get(schKey(date,c.id,1));
+      const cand=free.filter(pid=>!busy.has(pid)&&dayOk(pid,d)&&colOk(pid,c)&&!(s1&&schHelperOnly(pid,c.id))&&(run.get(pid)||0)<(Number(schRule(pid).max_in_row)||99))
         .sort((a,b)=>(cnt.get(a)+1)/(Number(schRule(a).target_shifts)||20)-(cnt.get(b)+1)/(Number(schRule(b).target_shifts)||20)||pref(b,c)-pref(a,c));
       if(!cand.length){gaps.push(`«${c.title}»`);break}
       put(c,cand[0]);
@@ -5633,17 +5646,17 @@ function schMakeDraftFree(){
   for(let d=1;d<=n;d++){
     const date=schISO(y,m,d),busy=new Set(),td=prevHas?tmpl(d):null;
     // 1) повторяем тот же день прошлого месяца, если не нарушает правила
-    cols.forEach(c=>{for(let s=1;s<=c.slots;s++){if(!td)continue;const pid=sch.cells.get(schKey(schISO(py,pm,td),c.id,s));if(pid&&ok(pid,d,c.id,busy)){sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid)}}});
+    cols.forEach(c=>{for(let s=1;s<=c.slots;s++){if(!td)continue;const pid=sch.cells.get(schKey(schISO(py,pm,td),c.id,s));if(pid&&ok(pid,d,c.id,busy)&&!(s===1&&schHelperOnly(pid,c.id))){sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid)}}});
     // 2) дозаполняем обязательные места
     cols.forEach(c=>{
       const filled=()=>{const a=[];for(let s=1;s<=c.slots;s++){const p=sch.cells.get(schKey(date,c.id,s));if(p)a.push(p)}return a};
       const need=()=>Math.min(c.slots,Math.max(schNeed(c,y,m,d),filled().some(p=>schRule(p).helper_column_ids?.map(Number).includes(Number(c.id)))?2:0));
       let guard=0;
       while(filled().length<need()&&guard++<3){
-        const cand=pool.filter(pid=>ok(pid,d,c.id,busy)).map(pid=>{const t=target(pid)||1,r=schRule(pid);const rn=run.get(pid)||0,mn=Number(r.min_in_row)||0,mo=Number(r.max_off_row)||0;
+        let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;
+        const cand=pool.filter(pid=>ok(pid,d,c.id,busy)&&!(s===1&&schHelperOnly(pid,c.id))).map(pid=>{const t=target(pid)||1,r=schRule(pid);const rn=run.get(pid)||0,mn=Number(r.min_in_row)||0,mo=Number(r.max_off_row)||0;
           // 5/2: продолжаем начатую серию до минимума и не держим человека дольше разрешённых выходных.
           return {pid,score:(cnt.get(pid)+1)/(t*d/n)-((fam.get(pid+'|'+c.id)||0)>0?0.15:0)-(r.column_ids?.length===1?0.2:0)-(mn&&rn>0&&rn<mn?0.6:0)-(mo&&(off.get(pid)||0)>=mo?1:0)}}).sort((a,b)=>a.score-b.score);
-        let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;
         if(!cand.length){
           // Никого свободного: переводим человека с необязательного места (например «Вне офиса» или помощника).
           let mv=null;
@@ -5692,7 +5705,7 @@ function schMakeDraftFree(){
 // --- Вкладка «Правила сотрудников» ---
 function schDrawRules(){
   const cols=schCols(),people=sch.people.filter(p=>p.is_active).sort((a,b)=>(schRule(b.id).in_schedule-schRule(a.id).in_schedule)||a.name.localeCompare(b.name,'ru'));
-  if(!sch.editRules)sch.editRules=new Map(people.map(p=>{const r=schRule(p.id);return [Number(p.id),{...r,days:(r.days||[]).map(Number),column_ids:(r.column_ids||[]).map(Number),helper_column_ids:(r.helper_column_ids||[]).map(Number)}]}));
+  if(!sch.editRules)sch.editRules=new Map(people.map(p=>{const r=schRule(p.id);return [Number(p.id),{...r,days:(r.days||[]).map(Number),column_ids:(r.column_ids||[]).map(Number),helper_column_ids:(r.helper_column_ids||[]).map(Number),helper_only_column_ids:(r.helper_only_column_ids||[]).map(Number)}]}));
   const E=sch.editRules;
   const box=(pid,field,val,label)=>`<label><input type="checkbox" data-p="${pid}" data-f="${field}" data-v="${val}" ${E.get(pid)[field].includes(val)?'checked':''}>${esc(label)}</label>`;
   let h=`<div class="status" style="margin-bottom:10px">Ничего не отмечено в «дни» или «где работает» — значит можно в любые дни и на любом месте. Эти правила используются в подсказках и при составлении черновика.</div><div class="sch-cards">`;
@@ -5701,7 +5714,8 @@ function schDrawRules(){
     if(r.in_schedule){
       h+=`<div class="sch-line"><span>Дни недели</span>${[1,2,3,4,5,6,7].map(w=>box(pid,'days',w,SCH_WD[w])).join('')}</div>`;
       h+=`<div class="sch-line"><span>Где может работать</span>${cols.map(c=>box(pid,'column_ids',Number(c.id),c.title)).join('')}</div>`;
-      h+=`<div class="sch-line"><span>Нужен помощник на</span>${cols.filter(c=>c.slots>1).map(c=>box(pid,'helper_column_ids',Number(c.id),c.title)).join('')||'<span class="status">нет столбцов, где можно двоих</span>'}</div>`;
+      h+=`<div class="sch-line"><span>Только помощником на</span>${cols.filter(c=>c.slots>1).map(c=>box(pid,'helper_only_column_ids',Number(c.id),c.title)).join('')||'<span class="status">нет столбцов, где можно двоих</span>'}<span class="status" style="min-width:0">основным туда не ставится</span></div>`;
+      h+=`<div class="sch-line"><span>Когда он(а) там, нужен второй</span>${cols.filter(c=>c.slots>1).map(c=>box(pid,'helper_column_ids',Number(c.id),c.title)).join('')||'<span class="status">нет столбцов, где можно двоих</span>'}</div>`;
       h+=`<div class="sch-line"><span>Смен в месяц</span><input type="number" min="0" max="31" data-p="${pid}" data-f="target_shifts" value="${r.target_shifts??''}" placeholder="любое"><span class="status" style="min-width:0">0 — ставить только вручную</span></div>`;
       h+=`<div class="sch-line"><span>Рабочих дней подряд</span>от <input type="number" min="1" max="31" data-p="${pid}" data-f="min_in_row" value="${r.min_in_row??''}" placeholder="любое"> до <input type="number" min="1" max="31" data-p="${pid}" data-f="max_in_row" value="${r.max_in_row??6}"> дней</div>`;
       h+=`<div class="sch-line"><span>Выходных подряд</span>не больше <input type="number" min="1" max="31" data-p="${pid}" data-f="max_off_row" value="${r.max_off_row??''}" placeholder="любое"> дней<span class="status" style="min-width:0">график 5/2: рабочих от 5 до 5, выходных не больше 2</span></div>`;
@@ -5721,7 +5735,7 @@ function schDrawRules(){
     else r[f]=x.value;
   });
   $('schRulesSave').onclick=async()=>{
-    const rows=[...E.values()].map(r=>({person_id:r.person_id,in_schedule:!!r.in_schedule,color:r.color||'#E2E8F0',days:r.days,column_ids:r.column_ids,helper_column_ids:r.helper_column_ids,target_shifts:r.target_shifts,max_in_row:r.max_in_row||6,min_in_row:r.min_in_row??null,max_off_row:r.max_off_row??null,note:r.note||null,updated_at:new Date().toISOString()}));
+    const rows=[...E.values()].map(r=>({person_id:r.person_id,in_schedule:!!r.in_schedule,color:r.color||'#E2E8F0',days:r.days,column_ids:r.column_ids,helper_column_ids:r.helper_column_ids,helper_only_column_ids:r.helper_only_column_ids,target_shifts:r.target_shifts,max_in_row:r.max_in_row||6,min_in_row:r.min_in_row??null,max_off_row:r.max_off_row??null,note:r.note||null,updated_at:new Date().toISOString()}));
     $('schRulesMsg').textContent='Сохраняю…';
     const res=await db.from('schedule_rules').upsert(rows,{onConflict:'person_id'});
     if(res.error){$('schRulesMsg').textContent='Ошибка: '+res.error.message;return}

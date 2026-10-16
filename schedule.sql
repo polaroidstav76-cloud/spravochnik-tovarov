@@ -150,3 +150,12 @@ on conflict (work_date, column_id, slot) do nothing;
 -- 2026-10-15: правило вида 5/2 — минимум рабочих дней подряд и максимум выходных подряд (у каждого своё, пусто = без правила).
 alter table public.schedule_rules add column if not exists min_in_row integer;
 alter table public.schedule_rules add column if not exists max_off_row integer;
+
+-- 2026-10-16: «только помощником на» — на этих столбцах человек ставится только вторым (помощником), не основным.
+alter table public.schedule_rules add column if not exists helper_only_column_ids bigint[] not null default '{}';
+-- Алина и Амалия: помощниками на «Перс» или основным на «Мак».
+update public.schedule_rules r set
+  column_ids = array(select c.id from public.schedule_columns c where c.title in ('Перс','Мак') order by c.id),
+  helper_only_column_ids = array(select c.id from public.schedule_columns c where c.title = 'Перс'),
+  helper_column_ids = '{}', updated_at = now()
+from public.sales_people p where p.id = r.person_id and p.name in ('Алина','Амалия');
