@@ -5523,8 +5523,93 @@ async function schSave(publish){
   schDrawGrid();
 }
 
-// --- Черновик на месяц по прошлому месяцу и правилам ---
+// Цикл «N рабочих / M выходных» (правило 5/2): у сотрудника заданы «рабочих подряд от … до …» и «выходных не больше …».
+function schCycle(pid){const r=schRule(pid),mn=Number(r.min_in_row)||0,mx=Number(r.max_in_row)||0,o=Number(r.max_off_row)||0;if(!mn||!o)return null;const w=mx>=mn?Math.round((mn+mx)/2):mn;return {w,o,L:w+o}}
+
+// --- Черновик на месяц: у кого задан цикл (5/2) — строго по циклу, остальные дозаполняют места ---
 function schMakeDraft(){
+  const y=sch.y,m=sch.m,n=schDays(y,m),[py,pm]=schShift(y,m,-1),pn=schDays(py,pm),cols=schCols();
+  const pool=schPeopleForPick().filter(p=>schRule(p.id).target_shifts!==0).map(p=>Number(p.id));
+  const cyc=pool.filter(p=>schCycle(p));
+  if(!cyc.length)return schMakeDraftFree();
+  const pre=schISO(y,m,1).slice(0,8),prevPre=schISO(py,pm,1).slice(0,8);
+  if([...sch.cells.keys()].some(k=>k.startsWith(pre))&&!confirm('В этом месяце уже есть смены. Заменить их черновиком? Изменение сохранится, только когда вы нажмёте «Сохранить».'))return;
+  [...sch.cells.keys()].forEach(k=>{if(k.startsWith(pre))sch.cells.delete(k)});
+  const prevHas=[...sch.cells.keys()].some(k=>k.startsWith(prevPre));
+  const fam=new Map();sch.cells.forEach((pid,k)=>{if(!k.startsWith(prevPre))return;const col=Number(k.split('|')[1]);fam.set(pid+'|'+col,(fam.get(pid+'|'+col)||0)+1)});
+  const colOk=(pid,c)=>{const ids=(schRule(pid).column_ids||[]).map(Number);return !ids.length||ids.includes(Number(c.id))};
+  const dayOk=(pid,d)=>{const days=(schRule(pid).days||[]).map(Number);return (!days.length||days.includes(schWd(y,m,d)))&&!schOff(pid,schISO(y,m,d))};
+  const myCols=pid=>cols.filter(c=>colOk(pid,c));
+  // 1) Для каждого с циклом выбираем, с какого места цикла начать месяц: продолжение прошлого месяца,
+  // попадание рабочих дней в разрешённые дни недели и закрытие пустых мест на филиалах.
+  const phase=new Map();
+  const work=(pid,d)=>{const cy=schCycle(pid),p=phase.get(pid);return ((d-1+p)%cy.L)<cy.w};
+  const order=[...cyc].sort((a,b)=>((schRule(a).days||[]).length||7)-((schRule(b).days||[]).length||7)||myCols(a).length-myCols(b).length);
+  const cont=new Map();
+  order.forEach(pid=>{const cy=schCycle(pid);let c=null;
+    if(prevHas){let k=0;for(let d=pn;d>=1&&schWorks(pid,schISO(py,pm,d));d--)k++;
+      if(k)c=k>=cy.w?cy.w:k;else{let j=0;for(let d=pn;d>=1&&!schWorks(pid,schISO(py,pm,d));d--)j++;c=j>=cy.o?0:(cy.w+j)%cy.L}}
+    cont.set(pid,c);phase.set(pid,c==null?0:c)});
+  // Оценка: пустые обязательные места (×3), работающие по циклу без места, рабочие дни не в свои дни недели, разрыв с прошлым месяцем.
+  const dayCost=d=>{
+    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push(c)});
+    const ws=cyc.filter(pid=>work(pid,d)&&dayOk(pid,d));
+    const match=new Array(slots.length).fill(null);
+    const tryW=(w,seen)=>{for(let i=0;i<slots.length;i++){if(seen.has(i)||!colOk(w,slots[i]))continue;seen.add(i);if(match[i]==null||tryW(match[i],seen)){match[i]=w;return true}}return false};
+    ws.forEach(w=>tryW(w,new Set()));
+    const used=new Map();slots.forEach((c,i)=>{if(match[i]!=null)used.set(Number(c.id),(used.get(Number(c.id))||0)+1)});
+    let idle=0;ws.filter(w=>!match.includes(w)).forEach(w=>{const c=myCols(w).find(c=>(used.get(Number(c.id))||0)<c.slots);if(c)used.set(Number(c.id),(used.get(Number(c.id))||0)+1);else idle++});
+    return match.filter(x=>x==null).length*3+idle;
+  };
+  const cost=()=>{let s=0;for(let d=1;d<=n;d++)s+=dayCost(d);cyc.forEach(pid=>{if(cont.get(pid)!=null&&phase.get(pid)!==cont.get(pid))s+=2;for(let d=1;d<=n;d++)if(work(pid,d)&&!dayOk(pid,d)&&!schOff(pid,schISO(y,m,d)))s+=1});return s};
+  let cur=cost();
+  for(let round=0;round<4;round++){let better=false;
+    order.forEach(pid=>{const cy=schCycle(pid),keep=phase.get(pid);let best=keep,bestC=cur;
+      for(let p=0;p<cy.L;p++){if(p===keep)continue;phase.set(pid,p);const c=cost();if(c<bestC){bestC=c;best=p}}
+      phase.set(pid,best);if(best!==keep){cur=bestC;better=true}});
+    if(!better)break}
+  // 2) По дням: работающие по циклу встают на обязательные места (подбор так, чтобы закрыть как можно больше),
+  // лишние — на необязательные (помощник, директор); пустые места дозаполняют сотрудники без цикла.
+  const free=pool.filter(p=>!schCycle(p));
+  const run=new Map(),cnt=new Map(pool.map(p=>[p,0])),last=new Map();
+  free.forEach(pid=>{let k=0;for(let d=pn;d>=1&&schWorks(pid,schISO(py,pm,d));d--)k++;run.set(pid,k)});
+  const pref=(pid,c)=>(last.get(pid)===Number(c.id)?100:0)+(fam.get(pid+'|'+Number(c.id))||0);
+  const gaps=[],idle=[];
+  for(let d=1;d<=n;d++){
+    const date=schISO(y,m,d),busy=new Set(),dl=`${String(d).padStart(2,'0')}.${String(m+1).padStart(2,'0')}`;
+    const slots=[];cols.forEach(c=>{for(let s=1;s<=Math.min(c.slots,schNeed(c,y,m,d));s++)slots.push(c)});
+    const workers=cyc.filter(pid=>work(pid,d)&&dayOk(pid,d)).sort((a,b)=>myCols(a).length-myCols(b).length);
+    const adj=new Map(workers.map(w=>[w,slots.map((c,i)=>i).filter(i=>colOk(w,slots[i])).sort((i,j)=>pref(w,slots[j])-pref(w,slots[i]))]));
+    const match=new Array(slots.length).fill(null);
+    const tryW=(w,seen)=>{for(const i of adj.get(w)){if(seen.has(i))continue;seen.add(i);if(match[i]==null||tryW(match[i],seen)){match[i]=w;return true}}return false};
+    workers.forEach(w=>tryW(w,new Set()));
+    const put=(c,pid)=>{let s=1;while(sch.cells.get(schKey(date,c.id,s)))s++;if(s>c.slots)return false;sch.cells.set(schKey(date,c.id,s),pid);busy.add(pid);last.set(pid,Number(c.id));return true};
+    slots.forEach((c,i)=>{if(match[i]!=null)put(c,match[i])});
+    const filledIn=c=>{let k=0;for(let s=1;s<=c.slots;s++)if(sch.cells.get(schKey(date,c.id,s)))k++;return k};
+    const needIn=c=>Math.min(c.slots,Math.max(schNeed(c,y,m,d),[1,2,3].some(s=>{const p=sch.cells.get(schKey(date,c.id,s));return p&&schRule(p).helper_column_ids?.map(Number).includes(Number(c.id))})?2:0));
+    // лишние по циклу — на свободные места своих столбцов (сначала туда, где нужен помощник)
+    workers.filter(w=>!busy.has(w)).forEach(w=>{const opts=myCols(w).filter(c=>filledIn(c)<c.slots).sort((a,b)=>((needIn(b)-filledIn(b))-(needIn(a)-filledIn(a)))||pref(w,b)-pref(w,a));if(!opts.length||!put(opts[0],w))idle.push(schName(w))});
+    // пустые обязательные места — сотрудники без цикла
+    cols.forEach(c=>{let guard=0;while(filledIn(c)<needIn(c)&&guard++<3){
+      const cand=free.filter(pid=>!busy.has(pid)&&dayOk(pid,d)&&colOk(pid,c)&&(run.get(pid)||0)<(Number(schRule(pid).max_in_row)||99))
+        .sort((a,b)=>(cnt.get(a)+1)/(Number(schRule(a).target_shifts)||20)-(cnt.get(b)+1)/(Number(schRule(b).target_shifts)||20)||pref(b,c)-pref(a,c));
+      if(!cand.length){gaps.push(`«${c.title}»`);break}
+      put(c,cand[0]);
+    }});
+    pool.forEach(pid=>{if(busy.has(pid)){cnt.set(pid,cnt.get(pid)+1);run.set(pid,(run.get(pid)||0)+1)}else run.set(pid,0)});
+  }
+  sch.dirty=true;
+  const chk=schCheck();
+  const sum=list=>{const m=new Map();list.forEach(x=>m.set(x,(m.get(x)||0)+1));return [...m].map(([k,v])=>k+' — '+v+' '+(v%10===1&&v%100!==11?'день':[2,3,4].includes(v%10)&&![12,13,14].includes(v%100)?'дня':'дней')).join(', ')};
+  sch.msg='Черновик составлен строго по циклам: '+cyc.map(p=>{const c=schCycle(p);return schName(p)+' '+c.w+'/'+c.o}).join(', ')+(prevHas?', с продолжением прошлого месяца.':'.')
+    +(gaps.length?` Не хватает людей (по правилам туда некому выйти): ${sum(gaps)}.`:'')
+    +(idle.length?` По циклу должны работать, но на их местах нет свободной клетки: ${sum(idle)}.`:'')
+    +(gaps.length||idle.length?' Чтобы закрыть это, поменяйте в правилах, где и в какие дни могут работать сотрудники, или сколько людей нужно на филиале.':'')+' Проверьте и нажмите «Сохранить».';
+  schDrawGrid();
+}
+
+// --- Черновик без циклов: по прошлому месяцу и правилам ---
+function schMakeDraftFree(){
   const y=sch.y,m=sch.m,n=schDays(y,m),[py,pm]=schShift(y,m,-1),pn=schDays(py,pm),cols=schCols();
   const pre=schISO(y,m,1).slice(0,8);
   if([...sch.cells.keys()].some(k=>k.startsWith(pre))&&!confirm('В этом месяце уже есть смены. Заменить их черновиком? Изменение сохранится, только когда вы нажмёте «Сохранить».'))return;
