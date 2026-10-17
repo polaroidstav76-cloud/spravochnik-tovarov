@@ -5887,7 +5887,8 @@ function grColWidths(sheet,from,to,cols,hdrs,map,skip){
   }
   return cols.map(c=>{
     let w=Math.max(hw[c]||0,nw[c]||0);
-    if(tw[c])w=Math.max(w,Math.min(tw[c],80));
+    // Длинный текст на листах по дням обрезаем до 80px, на остальных — до ширины столбца в Excel.
+    if(tw[c])w=Math.max(w,Math.min(tw[c],grDaily(sheet)?80:Math.max(80,(sheet.data.cols?.[c]||0)*7)));
     if(!w)return c.length>1?22:16;// пустой столбец — узкий
     return Math.ceil(w+10)
   })
@@ -5975,40 +5976,56 @@ function grPaint(a){
 // ---------- Открытие ----------
 async function openBigReport(){
   if(isAdmin){await grLoadAdmin();return}
+  // Листы, которые админ открыл всем сотрудникам (например «Закупка»): только просмотр, смена не нужна.
+  const pub=await db.rpc('report_staff_sheets');
+  const shared=(pub.error?[]:(pub.data||[])).map(x=>({title:x.title,data:x.data,from:1,to:x.data?.nrows||1,row:null,cols:[],past:[],mode:null,shared:true}));
   let sid=salesSession?.shiftId||null;
   if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&st.id)sid=st.id}catch(e){}}
-  if(!sid){alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
+  if(!sid){if(shared.length){grOpenStaff(null,null,shared);return}alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
   const r=await db.rpc('report_staff_view',{p_shift_id:sid});
   if(r.error){
-    if(!salesSession?.shiftId){alert('Не удалось открыть отчет: '+r.error.message);return}
+    if(!salesSession?.shiftId){if(shared.length){grOpenStaff(null,null,shared);return}alert('Не удалось открыть отчет: '+r.error.message);return}
     const o=await db.rpc('report_branch_month',{p_shift_id:sid});
     if(o.error){alert('Не удалось открыть отчет: '+o.error.message);return}
-    if(!o.data){gr.staff=null;$('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
-    grOpenStaff(sid,{...o.data,row:null,cols:[],mode:null});return
+    grOpenStaff(sid,o.data?{...o.data,row:null,cols:[],mode:null}:null,shared);return
   }
-  grOpenStaff(sid,r.data);
+  grOpenStaff(sid,r.data,shared);
 }
-function grOpenStaff(shiftId,v){
-  gr.shiftId=shiftId;gr.sel=null;
+// Сотрудник: вкладка «Отчет филиала» (если есть) и общие листы. Переключение — по вкладкам.
+function grOpenStaff(shiftId,v,shared){
+  gr.shiftId=shiftId;
+  gr.staffTabs=[...(v?[{...v,branchTab:true}]:[]),...(shared||[])];
+  $('grTitle').textContent=v?'Отчет филиала':'Общий отчет';$('grAdminTools').innerHTML='';
+  if(!gr.staffTabs.length){gr.staff=null;$('grTabs').innerHTML='';$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
+  open('bigReportModal');grStaffTab(0);
+}
+function grStaffTab(i){
+  grCloseEd(true);
+  const tabs=gr.staffTabs||[];gr.staffCur=i;
+  $('grTabs').innerHTML=tabs.length>1?tabs.map((t,j)=>`<button type="button" class="calc-tab" role="tab" data-gst="${j}" aria-selected="${j===i}">${esc(t.branchTab?'Отчет филиала':t.title)}</button>`).join(''):'';
+  $('grTabs').querySelectorAll('[data-gst]').forEach(b=>b.onclick=()=>grStaffTab(Number(b.dataset.gst)));
+  grShowStaff(tabs[i]);
+}
+function grShowStaff(v){
+  gr.sel=null;
   gr.staff={...v,sheet:{title:v.title,data:v.data}};
-  $('grTitle').textContent='Отчет филиала';$('grTabs').innerHTML='';$('grAdminTools').innerHTML='';
   const hint=!v.cols?.length?'':(v.mode==='manual'
     ?'Заполните строку сегодняшнего дня (выделена жёлтым): нажмите на клетку и пишите. Enter — сохранить и дальше.'
     :'Данные из кассы уже в строке дня. Допишите наличные, остаток наличных, перезаказы, расходы, комментарий, остаток в кассе и конверт (белые клетки).');
-  $('grBody').innerHTML=`<div class="gr-head"><b>${esc(v.title)}</b><span class="gr-note">${esc(grMonthLabel(v.month))}</span>${v.mode==='manual'?'<span class="gr-tag">заполняется вручную</span>':''}</div>
+  $('grBody').innerHTML=`<div class="gr-head"><b>${esc(v.title)}</b>${v.shared?'<span class="gr-note">только просмотр</span>':`<span class="gr-note">${esc(grMonthLabel(v.month))}</span>`}${v.mode==='manual'?'<span class="gr-tag">заполняется вручную</span>':''}</div>
   ${hint?`<div class="gr-hint">${hint}</div>`:''}
   ${v.past?.length?'<div class="gr-hint">Прошлые дни месяца тоже можно заполнить или исправить: нажмите на белую клетку в строке нужного дня.</div>':''}
   <div class="gr-bar"><b id="grAddr">—</b><span id="grFx" class="gr-fx"></span><span id="grMsg" class="gr-msg"></span></div>
   <div class="gr-wrap" id="grWrap" tabindex="0">${grTableHTML(gr.staff.sheet,v.from,v.to,(a)=>grCan(a),v.row)}</div>`;
   gr.view={from:v.from,to:v.to};
-  open('bigReportModal');grBind();
+  grBind();
   if(v.row){const first=(v.cols||[])[0];setTimeout(()=>{grScrollTo(v.row);if(first)grSelect(first+v.row)},0)}
 }
 
 async function grLoadAdmin(){
   gr.staff=null;gr.shiftId=null;
   $('grTitle').textContent='Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
-  const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months').order('sort_order').order('id');
+  const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months,staff_visible').order('sort_order').order('id');
   if(r.error){$('grBody').innerHTML=`<p class="status">Ошибка: ${esc(r.error.message)}</p>`;return}
   gr.sheets=r.data||[];gr.sel=null;gr.month=null;
   if(gr.cur>=gr.sheets.length)gr.cur=0;
@@ -6017,12 +6034,14 @@ async function grLoadAdmin(){
   grDrawTabs();grDrawSheet();grDrawTools();
 }
 function grDrawTools(){
-  $('grAdminTools').innerHTML=isAdmin?`<label class="secondary" style="cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:6px 12px">Загрузить листы из файла<input type="file" id="grImport" accept=".json,application/json" hidden></label><span id="grImportMsg"></span>`:'';
+  const cs=isAdmin?gr.sheets?.[gr.cur]:null;
+  $('grAdminTools').innerHTML=isAdmin?`${cs&&!cs.branch_id?`<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="grStaffVis"${cs.staff_visible?' checked':''}> Лист «${esc(cs.title)}» видят все сотрудники</label>`:''}<label class="secondary" style="cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:6px 12px">Загрузить листы из файла<input type="file" id="grImport" accept=".json,application/json" hidden></label><span id="grImportMsg"></span>`:'';
   const f=$('grImport');if(f)f.onchange=()=>{if(f.files[0])grImport(f.files[0])};
+  const vis=$('grStaffVis');if(vis)vis.onchange=async()=>{const on=vis.checked;const r=await db.from('report_sheets').update({staff_visible:on}).eq('id',cs.id);if(r.error){vis.checked=!on;alert('Не сохранилось: '+r.error.message);return}cs.staff_visible=on;v5Toast(on?'Теперь этот лист видят все сотрудники.':'Этот лист снова видит только администратор.')};
 }
 function grDrawTabs(){
   $('grTabs').innerHTML=gr.sheets.map((s,i)=>`<button type="button" class="calc-tab" role="tab" data-gr="${i}" aria-selected="${i===gr.cur}">${esc(s.title)}</button>`).join('');
-  $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{grCloseEd(true);gr.cur=Number(b.dataset.gr);gr.sel=null;gr.month=null;grDrawTabs();grDrawSheet()});
+  $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{grCloseEd(true);gr.cur=Number(b.dataset.gr);gr.sel=null;gr.month=null;grDrawTabs();grDrawSheet();grDrawTools()});
 }
 function grCurrentMonthKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 function grTodaySerial(){const d=new Date();return Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(1899,11,30))/864e5)}
@@ -6230,7 +6249,7 @@ async function grFillFromShift(shiftId,mode){
   const r=await db.rpc('report_fill_shift',{p_shift_id:shiftId,p_mode:mode});
   if(r.error){alert('Не удалось '+(mode==='auto'?'перенести в отчет':'открыть отчет')+': '+r.error.message);return}
   try{localStorage.setItem(GR_STAFF_KEY,JSON.stringify({id:shiftId,at:Date.now()}))}catch(e){}
-  close('shiftReportModal');grOpenStaff(shiftId,r.data);
+  close('shiftReportModal');grOpenStaff(shiftId,r.data,(gr.staffTabs||[]).filter(t=>t.shared));
 }
 
 // Загрузка листов из подготовленного файла (.json): листы с тем же названием обновляются, новые добавляются.
