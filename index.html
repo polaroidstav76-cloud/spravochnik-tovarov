@@ -4802,7 +4802,7 @@ function stkDrawOpRows(){
   // сумма подставляется сама: упаковки × себестоимость упаковки из «Материалов». Сумму можно поправить руками.
   const mat=r=>stkMaterials(true).find(m=>Number(m.id)===Number(r.m));
   const packs=r=>price&&Number(mat(r)?.pack_qty)>0;
-  $('stkOpRows').innerHTML=stk.opRows.map((r,i)=>`<div class="stk-row ${price?'':'no-price'}"><div class="field"><label>Материал</label><select data-r="${i}" data-f="m"><option value="">Выберите материал</option>${mats.map(m=>`<option value="${m.id}" ${Number(r.m)===Number(m.id)?'selected':''}>${esc(m.name)} — есть ${stkQty(stkBal(m.id,b))} ${esc(m.unit)}</option>`).join('')}</select></div>
+  $('stkOpRows').innerHTML=stk.opRows.map((r,i)=>`<div class="stk-row ${price?'':'no-price'}"><div class="field"><label>Товар</label><div data-combo="${i}"></div><div class="stk-sub">${mat(r)?`есть ${stkQty(stkBal(mat(r).id,b))} ${esc(mat(r).unit)}`:'поиск по материалам склада и всему прайсу'}</div></div>
     <div class="field"><label>${packs(r)?'Упаковок':'Количество'}</label><input type="number" min="0" step="any" data-r="${i}" data-f="q" value="${esc(r.q)}"><div class="stk-sub" data-hint="${i}">${packs(r)?`уп. по ${stkQty(mat(r).pack_qty)} ${esc(mat(r).unit)}${Number(r.q)>0?` = ${stkQty(Number(r.q)*Number(mat(r).pack_qty))} ${esc(mat(r).unit)}`:''}`:''}</div></div>
     ${price?`<div class="field"><label>Сумма закупки, ₽</label><input type="number" min="0" step="any" data-r="${i}" data-f="p" value="${esc(r.p)}"><div class="stk-sub">${Number(mat(r)?.pack_price)>0?`по ${salesMoney(mat(r).pack_price)} за ${packs(r)?'упаковку':esc(mat(r).unit)}`:''}</div></div>`:''}
     <button class="secondary small" data-del="${i}" title="Убрать строку" aria-label="Убрать строку">×</button></div>`).join('');
@@ -4817,6 +4817,34 @@ function stkDrawOpRows(){
     const h=$('stkOpRows').querySelector(`[data-hint="${el.dataset.r}"]`);if(h&&packs(r))h.textContent=`уп. по ${stkQty(m.pack_qty)} ${m.unit}${Number(r.q)>0?` = ${stkQty(Number(r.q)*Number(m.pack_qty))} ${m.unit}`:''}`;
   });
   $('stkOpRows').querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{stk.opRows.splice(Number(el.dataset.del),1);if(!stk.opRows.length)stk.opRows=[{m:'',q:'',p:''}];stkDrawOpRows()});
+  const items=stkOpItems();
+  $('stkOpRows').querySelectorAll('[data-combo]').forEach(el=>{const i=Number(el.dataset.combo),r=stk.opRows[i];
+    stkCombo(el,{items,keep:true,value:mat(r)?.name||'',placeholder:'Начните вводить или выберите из прайса',onPick:async x=>{
+      const id=await stkOpMaterialFor(x.item);if(!id){stkDrawOpRows();return}
+      r.m=id;r.pEdited=false;const m=mat(r),unit=Number(m?.pack_price)||0;r.p=price&&unit>0&&Number(r.q)>0?String(Math.round(Number(r.q)*unit*100)/100):'';stkDrawOpRows();
+    }});
+  });
+}
+// Список для выбора товара в операциях: материалы склада и весь прайс. Позиция прайса ведёт к материалу,
+// у которого на неё стоит норма (или к материалу с тем же названием). Если такого нет, администратор
+// одним нажатием создаёт материал с этим названием и нормой 1 шт на эту позицию.
+function stkOpItems(){
+  const mats=stkStockMats(),norm=s=>stkNorm(s).trim(),byName=new Map(mats.map(m=>[norm(m.name),m]));
+  const items=mats.map(m=>({kind:'material',id:Number(m.id),name:m.name,sub:'материал склада'}));
+  salesCatalog.filter(c=>c.is_active!==false).slice().sort((a,b)=>a.name.localeCompare(b.name,'ru')).forEach(c=>{
+    if(byName.has(norm(c.name)))return;
+    const linked=mats.filter(m=>(m.norms||[]).some(n=>Number(n.catalog_id)===Number(c.id)));
+    if(linked.length)linked.forEach(m=>items.push({kind:'material',id:Number(m.id),name:c.name,sub:'прайс → '+m.name}));
+    else if(isAdmin)items.push({kind:'new',id:Number(c.id),name:c.name,sub:'прайс · будет новый материал'});
+  });
+  return items;
+}
+async function stkOpMaterialFor(it){
+  if(!it)return null;if(it.kind==='material')return it.id;
+  if(!confirm(`«${it.name}» ещё нет среди материалов склада. Создать материал с этим названием?\nПродажа этой позиции будет списывать его по 1 шт — это можно поменять в «Материалах и нормах».`))return null;
+  const r=await db.rpc('stock_save_material',{p_id:null,p_name:it.name,p_unit:'шт',p_min_qty:0,p_comment:null,p_is_active:true,p_norms:[{catalog_id:it.id,qty:1,per_line:false}]});
+  if(r.error){alert('Ошибка: '+(/stock_materials_name_key/.test(r.error.message)?'материал с таким названием уже есть':r.error.message));return null}
+  await stkLoad();v5Toast('Материал создан: '+it.name);return Number(r.data);
 }
 async function stkSaveOp(){
   const k=stk.opKind,st=$('stkOpStatus');
