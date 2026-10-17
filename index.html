@@ -4798,18 +4798,32 @@ function stkDrawOpRows(){
     return;
   }
   const price=k==='receipt';
+  // Приход у материала с упаковкой вносится упаковками (на остаток уходит упаковки × сколько в упаковке),
+  // сумма подставляется сама: упаковки × себестоимость упаковки из «Материалов». Сумму можно поправить руками.
+  const mat=r=>stkMaterials(true).find(m=>Number(m.id)===Number(r.m));
+  const packs=r=>price&&Number(mat(r)?.pack_qty)>0;
   $('stkOpRows').innerHTML=stk.opRows.map((r,i)=>`<div class="stk-row ${price?'':'no-price'}"><div class="field"><label>Материал</label><select data-r="${i}" data-f="m"><option value="">Выберите материал</option>${mats.map(m=>`<option value="${m.id}" ${Number(r.m)===Number(m.id)?'selected':''}>${esc(m.name)} — есть ${stkQty(stkBal(m.id,b))} ${esc(m.unit)}</option>`).join('')}</select></div>
-    <div class="field"><label>Количество</label><input type="number" min="0" step="any" data-r="${i}" data-f="q" value="${esc(r.q)}"></div>
-    ${price?`<div class="field"><label>Сумма закупки, ₽</label><input type="number" min="0" step="any" data-r="${i}" data-f="p" value="${esc(r.p)}"></div>`:''}
+    <div class="field"><label>${packs(r)?'Упаковок':'Количество'}</label><input type="number" min="0" step="any" data-r="${i}" data-f="q" value="${esc(r.q)}"><div class="stk-sub" data-hint="${i}">${packs(r)?`уп. по ${stkQty(mat(r).pack_qty)} ${esc(mat(r).unit)}${Number(r.q)>0?` = ${stkQty(Number(r.q)*Number(mat(r).pack_qty))} ${esc(mat(r).unit)}`:''}`:''}</div></div>
+    ${price?`<div class="field"><label>Сумма закупки, ₽</label><input type="number" min="0" step="any" data-r="${i}" data-f="p" value="${esc(r.p)}"><div class="stk-sub">${Number(mat(r)?.pack_price)>0?`по ${salesMoney(mat(r).pack_price)} за ${packs(r)?'упаковку':esc(mat(r).unit)}`:''}</div></div>`:''}
     <button class="secondary small" data-del="${i}" title="Убрать строку" aria-label="Убрать строку">×</button></div>`).join('');
-  $('stkOpRows').querySelectorAll('[data-f]').forEach(el=>el.oninput=el.onchange=()=>{stk.opRows[el.dataset.r][el.dataset.f]=el.value});
+  $('stkOpRows').querySelectorAll('[data-f]').forEach(el=>el.oninput=el.onchange=ev=>{
+    const r=stk.opRows[el.dataset.r],f=el.dataset.f;r[f]=el.value;
+    if(f==='p'){r.pEdited=el.value!=='';return}
+    if(!price)return;
+    const m=mat(r),unit=Number(m?.pack_price)||0;
+    if(!r.pEdited)r.p=unit>0&&Number(r.q)>0?String(Math.round(Number(r.q)*unit*100)/100):'';
+    if(f==='m'&&ev.type==='change'){stkDrawOpRows();return}
+    const pi=$('stkOpRows').querySelector(`[data-r="${el.dataset.r}"][data-f="p"]`);if(pi)pi.value=r.p;
+    const h=$('stkOpRows').querySelector(`[data-hint="${el.dataset.r}"]`);if(h&&packs(r))h.textContent=`уп. по ${stkQty(m.pack_qty)} ${m.unit}${Number(r.q)>0?` = ${stkQty(Number(r.q)*Number(m.pack_qty))} ${m.unit}`:''}`;
+  });
   $('stkOpRows').querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{stk.opRows.splice(Number(el.dataset.del),1);if(!stk.opRows.length)stk.opRows=[{m:'',q:'',p:''}];stkDrawOpRows()});
 }
 async function stkSaveOp(){
   const k=stk.opKind,st=$('stkOpStatus');
   const items=k==='inventory'
     ?[...document.querySelectorAll('#stkOpRows [data-inv]')].filter(i=>i.value!=='').map(i=>({material_id:Number(i.dataset.inv),qty:Number(i.value)}))
-    :stk.opRows.filter(r=>r.m&&Number(r.q)>0).map(r=>({material_id:Number(r.m),qty:Number(r.q),price_total:r.p===''?null:Number(r.p)}));
+    :stk.opRows.filter(r=>r.m&&Number(r.q)>0).map(r=>{const pq=k==='receipt'?Number(stkMaterials(true).find(m=>Number(m.id)===Number(r.m))?.pack_qty)||0:0;
+        return {material_id:Number(r.m),qty:pq>0?Number(r.q)*pq:Number(r.q),price_total:r.p===''?null:Number(r.p)}});
   if(!items.length){st.textContent='Добавьте материал и количество.';return}
   if(k==='transfer'&&!Number($('stkTo').value)){st.textContent='Выберите, в какой филиал передаёте.';return}
   if(k==='writeoff'&&!$('stkComment').value.trim()){st.textContent='Укажите причину списания.';return}
