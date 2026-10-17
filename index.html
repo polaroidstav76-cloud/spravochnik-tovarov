@@ -4673,6 +4673,9 @@ setTimeout(()=>{kqDrawBar();kqSync()},1500);
 const STK_PENDING='stockProducerPending_v1';
 const STK_KINDS={receipt:'Приход',transfer_out:'Передали',transfer_in:'Получили',sale:'Продажа',writeoff:'Списание',inventory:'Инвентаризация'};
 let stk={data:null,tab:'bal',opKind:'receipt',opRows:[],matEdit:null,matSearch:'',balSearch:'',lowOnly:false};
+// Норма может быть дробью: «1/4» (четверть листа А4 на фото 10×15), «0,5», «1.5».
+function stkParseQty(v){const t=String(v??'').trim().replace(',','.');const f=t.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);const n=f?Number(f[1])/Number(f[2]):Number(t);return t&&isFinite(n)?n:NaN}
+function stkFrac(v){const n=Number(v);if(!(n>0&&n<1))return stkQty(n);for(const d of [2,3,4,6,8]){const k=Math.round(n*d);if(k%d&&Math.abs(n*d-k)<1e-6){return k+'/'+d}}return stkQty(n)}
 function stkQty(v){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(v||0))}
 function stkBranchName(id){const w=stkWorkshop();if(w&&Number(w.id)===Number(id))return w.name;return (salesBranches.find(b=>Number(b.id)===Number(id))||{}).name||('Филиал '+id)}
 // Мастерская — отдельное место хранения (не филиал): материалы с in_workshop списываются с неё при продаже на любом филиале.
@@ -5072,14 +5075,14 @@ function stkDrawMat(){
   const mats=stkMaterials(true).filter(m=>!m.parent_id);
   $('stockBody').innerHTML=`<div class="stk-sub">Материал — то, что лежит на полке: бумага, плёнка, рамки, кружки. Норма — сколько материала уходит на 1 шт. позиции прайса: 1 фото 10×15 — 1 лист, значит 100 фото спишут 100 листов. Материал без норм по продажам не списывается. «Не учитывать расход» — материал не списывается с продаж и не уходит в минус, его заказывают вручную через «Нужно купить».</div>
   <div class="actions" style="justify-content:flex-start"><button id="stkNewMat" class="primary">＋ Новый материал</button></div>
-  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Код для закупки</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.no_track?'<div class="stk-sub">✋ Расход не учитывается — заказ вручную</div>':''}${m.in_workshop?'<div class="stk-sub">🏭 Хранится в мастерской</div>':''}${stkHasVars(m)?`<div class="stk-sub">👕 ${[(m.var_sizes||[]).join(', '),(m.var_colors||[]).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>`:''}${m.variant_catalog_id?`<div class="stk-sub">👕 Размер/цвет для «${esc(salesCatalog.find(c=>Number(c.id)===Number(m.variant_catalog_id))?.name||'позиции кассы')}»</div>`:''}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}${Number(m.pack_qty)>0?`<div class="stk-sub">уп. ${stkQty(m.pack_qty)}</div>`:''}${Number(m.pack_price)>0?`<div class="stk-sub">${salesMoney(m.pack_price)}</div>`:''}</td><td class="num">${stkQty(m.min_qty)}</td><td>${m.purchase_code?`<span class="stk-code">${esc(m.purchase_code)}</span>`:'<span class="stk-sub">—</span>'}</td><td class="stk-sub">${m.no_track?'—':m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${stkQty(n.qty)}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
+  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Код для закупки</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.no_track?'<div class="stk-sub">✋ Расход не учитывается — заказ вручную</div>':''}${m.in_workshop?'<div class="stk-sub">🏭 Хранится в мастерской</div>':''}${stkHasVars(m)?`<div class="stk-sub">👕 ${[(m.var_sizes||[]).join(', '),(m.var_colors||[]).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>`:''}${m.variant_catalog_id?`<div class="stk-sub">👕 Размер/цвет для «${esc(salesCatalog.find(c=>Number(c.id)===Number(m.variant_catalog_id))?.name||'позиции кассы')}»</div>`:''}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}${Number(m.pack_qty)>0?`<div class="stk-sub">уп. ${stkQty(m.pack_qty)}</div>`:''}${Number(m.pack_price)>0?`<div class="stk-sub">${salesMoney(m.pack_price)}</div>`:''}</td><td class="num">${stkQty(m.min_qty)}</td><td>${m.purchase_code?`<span class="stk-code">${esc(m.purchase_code)}</span>`:'<span class="stk-sub">—</span>'}</td><td class="stk-sub">${m.no_track?'—':m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${esc(stkFrac(n.qty))}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
   $('stkNewMat').onclick=()=>stkEditMat(null);
 }
 window.stkEditMat=id=>{
   const m=id?stkMaterials(true).find(x=>Number(x.id)===Number(id)):null;
   stk.matEdit={id:m?.id||null,variant:m?.variant_catalog_id||'',name:m?.name||'',unit:m?.unit||'шт',min_qty:m?.min_qty??0,comment:m?.comment||'',code:m?.purchase_code||'',workshop:!!m?.in_workshop,pack_qty:m?.pack_qty??'',pack_price:m?.pack_price??'',per_sale:Number(m?.per_sale_qty)||0,
     no_track:!!m?.no_track,is_active:m?m.is_active:true,sizes:(m?.var_sizes||[]).join(', '),colors:(m?.var_colors||[]).join(', '),
-    norms:new Map((m?.norms||[]).map(n=>[Number(n.catalog_id),String(n.qty)]))};
+    norms:new Map((m?.norms||[]).map(n=>[Number(n.catalog_id),stkFrac(n.qty)]))};
   stkDrawMatEdit();
 };
 function stkDrawMatEdit(){
@@ -5118,7 +5121,9 @@ function stkDrawMatEdit(){
   $('stkMSave').onclick=async()=>{
     keep();const st=$('stkMStatus');
     if(!e.name.trim()){st.textContent='Укажите название.';return}
-    const norms=[...e.norms].filter(([,q])=>Number(q)>0).map(([c,q])=>({catalog_id:c,qty:Number(q),per_line:false}));
+    const bad=[...e.norms].find(([,q])=>!(stkParseQty(q)>0));
+    if(bad){st.textContent=`Проверьте норму у «${salesCatalog.find(c=>Number(c.id)===bad[0])?.name||'позиции'}»: пишите число или дробь, например 1, 0,5 или 1/4.`;return}
+    const norms=[...e.norms].map(([c,q])=>({catalog_id:c,qty:stkParseQty(q),per_line:false}));
     $('stkMSave').disabled=true;st.textContent='Сохраняю…';
     const r=await db.rpc('stock_save_material',{p_id:e.id,p_name:e.name.trim(),p_unit:e.unit,p_min_qty:Number(e.min_qty)||0,p_comment:e.comment,p_is_active:e.is_active,p_norms:norms});
     if(!r.error){const c=await db.rpc('stock_set_purchase_code',{p_id:r.data,p_code:e.code});if(c.error)r.error=c.error}
@@ -5137,7 +5142,7 @@ function stkDrawMatEdit(){
 function stkDrawNorms(){
   const e=stk.matEdit,on=salesCatalog.filter(c=>e.norms.has(Number(c.id))).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
   $('stkNormInfo').textContent=`Выбрано позиций: ${on.length}.`;
-  $('stkNorms').innerHTML=on.map(c=>`<div class="stk-norm on"><span>${esc(c.name)} <span class="stk-sub">${esc(c.category||'')}</span></span><input type="number" min="0" step="any" data-q="${c.id}" value="${esc(e.norms.get(Number(c.id)))}" title="Сколько материала на 1 шт." aria-label="Норма на 1 шт."><button class="secondary small" data-x="${c.id}" title="Убрать" aria-label="Убрать">×</button></div>`).join('')||'<div class="stk-sub" style="padding:10px">Пока ничего не выбрано.</div>';
+  $('stkNorms').innerHTML=on.map(c=>`<div class="stk-norm on"><span>${esc(c.name)} <span class="stk-sub">${esc(c.category||'')}</span></span><input type="text" inputmode="decimal" data-q="${c.id}" value="${esc(e.norms.get(Number(c.id)))}" placeholder="1, 0,5 или 1/4" title="Сколько материала на 1 шт.: число или дробь (1/4 — четверть листа)" aria-label="Норма на 1 шт."><button class="secondary small" data-x="${c.id}" title="Убрать" aria-label="Убрать">×</button></div>`).join('')||'<div class="stk-sub" style="padding:10px">Пока ничего не выбрано.</div>';
   $('stkNorms').querySelectorAll('[data-q]').forEach(x=>x.oninput=()=>e.norms.set(Number(x.dataset.q),x.value));
   $('stkNorms').querySelectorAll('[data-x]').forEach(x=>x.onclick=()=>{e.norms.delete(Number(x.dataset.x));stkDrawNorms()});
 }
