@@ -4692,11 +4692,14 @@ function stkCanWork(){return isAdmin||!!(salesSession?.shiftId&&salesSession?.pe
 function stkActor(){return {p_shift_id:salesSession?.shiftId||null,p_person_id:salesSession?.personId||null}}
 function stkBal(m,b){const x=(stk.data?.balances||[]).find(r=>Number(r.m)===Number(m)&&Number(r.b)===Number(b));return x?Number(x.q):0}
 function stkUse(m,b){const x=(stk.data?.usage||[]).find(r=>Number(r.m)===Number(m)&&Number(r.b)===Number(b));return x?Number(x.q):0}
-function stkMaterials(all){return (stk.data?.materials||[]).filter(m=>all||m.is_active)}
+function stkMaterials(all){return (stk.data?.materials||[]).filter(m=>!m.archived&&(all||m.is_active))}
+// «Хранится на Тухачевского 26/4»: материал лежит на этом филиале, продажа на любом филиале списывает его оттуда.
+function stkStoreBranch(){return salesBranches.find(b=>String(b.name||'').replace(/\s+/g,' ').trim()==='Тухачевского 26/4')||null}
+function stkStoreNote(m){return m.store_branch_id?'📍 Хранится на '+esc(stkBranchName(m.store_branch_id)):''}
 // Материал с размерами/цветами сам остатка не имеет — остаток у его вариантов (дочерних материалов).
 function stkHasVars(m){return ((m.var_sizes||[]).length+(m.var_colors||[]).length)>0}
 function stkStockMats(all){return stkMaterials(all).filter(m=>!stkHasVars(m))}
-function stkIsLow(m,b){if(m.no_track||stkHasVars(m))return false;if(!!m.in_workshop!==stkIsWorkshop(b))return false;const q=stkBal(m.id,b);return q<0||(Number(m.min_qty)>0&&q<=Number(m.min_qty))}
+function stkIsLow(m,b){if(m.no_track||stkHasVars(m))return false;if(!!m.in_workshop!==stkIsWorkshop(b))return false;if(m.store_branch_id&&Number(m.store_branch_id)!==Number(b))return false;const q=stkBal(m.id,b);return q<0||(Number(m.min_qty)>0&&q<=Number(m.min_qty))}
 function stkDayStart(s){const [y,mo,d]=s.split('-').map(Number);return new Date(y,mo-1,d)}
 function stkToday(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function stkOpts(list,sel,empty){return (empty?`<option value="">${esc(empty)}</option>`:'')+list.map(b=>`<option value="${b.id}" ${Number(sel)===Number(b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}
@@ -4763,7 +4766,7 @@ function stkDrawBalRows(){
   const cell=(m,b)=>{const q=stkBal(m.id,b.id),u=stkUse(m.id,b.id),days=u>0?Math.floor(q/(u/30)):null,low=stkIsLow(m,b.id);
     return `<td class="num ${Number(b.id)===my?'cur':''} ${low?'stk-low-cell':''}" title="Расход за 30 дней: ${stkQty(u)} ${esc(m.unit)}${days!=null?` · хватит примерно на ${Math.max(days,0)} дн.`:''}"><span class="${low?'stk-low':''}">${stkQty(q)}</span></td>`};
   $('stkBalTable').innerHTML=`<thead><tr><th>Материал</th>${br.map(b=>`<th class="num ${Number(b.id)===my?'cur':''}">${esc(b.name)}</th>`).join('')}<th class="num">Всего</th></tr></thead><tbody>${
-    mats.map(m=>m.group?`<tr><td colspan="${br.length+2}"><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)} · размеры и цвета${m.in_workshop?' · 🏭 мастерская':''}</span></td></tr>`:`<tr><td>${m.child?`<span style="padding-left:18px">↳ <b>${esc([m.var_color,m.var_size].filter(Boolean).join(' ')||m.name)}</b></span>`:`<b>${esc(m.name)}</b>`} <span class="stk-sub">${esc(m.unit)}${Number(m.min_qty)>0?` · мин. ${stkQty(m.min_qty)}`:''}</span>${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}<div class="stk-sub" ${m.child?'hidden':''}>${m.in_workshop?'🏭 Хранится в мастерской · ':''}${m.norms.length?`Списывается с ${m.norms.length} поз. прайса`:'⚠ Не привязан к позициям прайса — по продажам не списывается'}</div></td>${br.map(b=>cell(m,b)).join('')}<td class="num"><b>${stkQty(br.reduce((a,b)=>a+stkBal(m.id,b.id),0))}</b></td></tr>`).join('')||`<tr><td colspan="${br.length+2}" class="stk-sub">Ничего не найдено.</td></tr>`}</tbody>`;
+    mats.map(m=>m.group?`<tr><td colspan="${br.length+2}"><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)} · размеры и цвета${m.in_workshop?' · 🏭 мастерская':''}</span></td></tr>`:`<tr><td>${m.child?`<span style="padding-left:18px">↳ <b>${esc([m.var_color,m.var_size].filter(Boolean).join(' ')||m.name)}</b></span>`:`<b>${esc(m.name)}</b>`} <span class="stk-sub">${esc(m.unit)}${Number(m.min_qty)>0?` · мин. ${stkQty(m.min_qty)}`:''}</span>${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}<div class="stk-sub" ${m.child?'hidden':''}>${m.in_workshop?'🏭 Хранится в мастерской · ':''}${m.store_branch_id?stkStoreNote(m)+' · ':''}${m.norms.length?`Списывается с ${m.norms.length} поз. прайса`:'⚠ Не привязан к позициям прайса — по продажам не списывается'}</div></td>${br.map(b=>cell(m,b)).join('')}<td class="num"><b>${stkQty(br.reduce((a,b)=>a+stkBal(m.id,b.id),0))}</b></td></tr>`).join('')||`<tr><td colspan="${br.length+2}" class="stk-sub">Ничего не найдено.</td></tr>`}</tbody>`;
 }
 
 // --- Операции: приход, перемещение, списание, инвентаризация ---
@@ -5079,12 +5082,12 @@ function stkDrawMat(){
   const mats=stkMaterials(true).filter(m=>!m.parent_id);
   $('stockBody').innerHTML=`<div class="stk-sub">Материал — то, что лежит на полке: бумага, плёнка, рамки, кружки. Норма — сколько материала уходит на 1 шт. позиции прайса: 1 фото 10×15 — 1 лист, значит 100 фото спишут 100 листов. Материал без норм по продажам не списывается. «Не учитывать расход» — материал не списывается с продаж и не уходит в минус, его заказывают вручную через «Нужно купить».</div>
   <div class="actions" style="justify-content:flex-start"><button id="stkNewMat" class="primary">＋ Новый материал</button></div>
-  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Код для закупки</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.no_track?'<div class="stk-sub">✋ Расход не учитывается — заказ вручную</div>':''}${m.in_workshop?'<div class="stk-sub">🏭 Хранится в мастерской</div>':''}${stkHasVars(m)?`<div class="stk-sub">👕 ${[(m.var_sizes||[]).join(', '),(m.var_colors||[]).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>`:''}${m.variant_catalog_id?`<div class="stk-sub">👕 Размер/цвет для «${esc(salesCatalog.find(c=>Number(c.id)===Number(m.variant_catalog_id))?.name||'позиции кассы')}»</div>`:''}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}${Number(m.pack_qty)>0?`<div class="stk-sub">уп. ${stkQty(m.pack_qty)}</div>`:''}${Number(m.pack_price)>0?`<div class="stk-sub">${salesMoney(m.pack_price)}</div>`:''}</td><td class="num">${stkQty(m.min_qty)}</td><td>${m.purchase_code?`<span class="stk-code">${esc(m.purchase_code)}</span>`:'<span class="stk-sub">—</span>'}</td><td class="stk-sub">${m.no_track?'—':m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${esc(stkFrac(n.qty))}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
+  ${mats.length?`<table class="customer-table stk-table"><thead><tr><th>Материал</th><th>Ед.</th><th class="num">Мин. остаток</th><th>Код для закупки</th><th>Списывается с позиций</th><th></th></tr></thead><tbody>${mats.map(m=>`<tr ${m.is_active?'':'style="opacity:.55"'}><td><b>${esc(m.name)}</b>${m.is_active?'':' <span class="stk-sub">(скрыт)</span>'}${m.no_track?'<div class="stk-sub">✋ Расход не учитывается — заказ вручную</div>':''}${m.in_workshop?'<div class="stk-sub">🏭 Хранится в мастерской</div>':''}${m.store_branch_id?`<div class="stk-sub">${stkStoreNote(m)}</div>`:''}${stkHasVars(m)?`<div class="stk-sub">👕 ${[(m.var_sizes||[]).join(', '),(m.var_colors||[]).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>`:''}${m.variant_catalog_id?`<div class="stk-sub">👕 Размер/цвет для «${esc(salesCatalog.find(c=>Number(c.id)===Number(m.variant_catalog_id))?.name||'позиции кассы')}»</div>`:''}${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}</td><td>${esc(m.unit)}${Number(m.pack_qty)>0?`<div class="stk-sub">уп. ${stkQty(m.pack_qty)}</div>`:''}${Number(m.pack_price)>0?`<div class="stk-sub">${salesMoney(m.pack_price)}</div>`:''}</td><td class="num">${stkQty(m.min_qty)}</td><td>${m.purchase_code?`<span class="stk-code">${esc(m.purchase_code)}</span>`:'<span class="stk-sub">—</span>'}</td><td class="stk-sub">${m.no_track?'—':m.norms.length?m.norms.slice(0,6).map(n=>`${esc(n.name)} — ${esc(stkFrac(n.qty))}`).join('<br>')+(m.norms.length>6?`<br>…и ещё ${m.norms.length-6}`:''):'—'}</td><td><button class="secondary small" onclick="stkEditMat(${m.id})">Изменить</button></td></tr>`).join('')}</tbody></table>`:'<div class="v5-box info">Материалов пока нет.</div>'}`;
   $('stkNewMat').onclick=()=>stkEditMat(null);
 }
 window.stkEditMat=id=>{
   const m=id?stkMaterials(true).find(x=>Number(x.id)===Number(id)):null;
-  stk.matEdit={id:m?.id||null,variant:m?.variant_catalog_id||'',name:m?.name||'',unit:m?.unit||'шт',min_qty:m?.min_qty??0,comment:m?.comment||'',code:m?.purchase_code||'',workshop:!!m?.in_workshop,pack_qty:m?.pack_qty??'',pack_price:m?.pack_price??'',per_sale:Number(m?.per_sale_qty)||0,
+  stk.matEdit={id:m?.id||null,variant:m?.variant_catalog_id||'',name:m?.name||'',unit:m?.unit||'шт',min_qty:m?.min_qty??0,comment:m?.comment||'',code:m?.purchase_code||'',workshop:!!m?.in_workshop,store:!!m?.store_branch_id,pack_qty:m?.pack_qty??'',pack_price:m?.pack_price??'',per_sale:Number(m?.per_sale_qty)||0,
     no_track:!!m?.no_track,is_active:m?m.is_active:true,sizes:(m?.var_sizes||[]).join(', '),colors:(m?.var_colors||[]).join(', '),
     norms:new Map((m?.norms||[]).map(n=>[Number(n.catalog_id),stkFrac(n.qty)]))};
   stkDrawMatEdit();
@@ -5111,16 +5114,26 @@ function stkDrawMatEdit(){
   <div class="field"><label for="stkMComment">Комментарий</label><input id="stkMComment" value="${esc(e.comment)}" placeholder="Где закупаем, артикул поставщика…"></div>
   <div class="field"><label><input type="checkbox" id="stkMActive" ${e.is_active?'checked':''} style="width:auto"> Используется</label><div class="stk-sub">Снимите, чтобы убрать материал из остатков и закупки. История останется.</div>
   <label><input type="checkbox" id="stkMWorkshop" ${e.workshop?'checked':''} style="width:auto"> Хранится в мастерской</label><div class="stk-sub">Продажа на любом филиале спишет его с мастерской.</div>
+  ${stkStoreBranch()||e.store?`<label><input type="checkbox" id="stkMStore" ${e.store?'checked':''} style="width:auto"> Хранится на Тухачевского 26/4</label><div class="stk-sub">Продажа на любом филиале спишет его с Тухачевского 26/4.</div>`:''}
   <label><input type="checkbox" id="stkMNoTrack" ${e.no_track?'checked':''} style="width:auto"> Не учитывать расход</label><div class="stk-sub">Не списывается с продаж и не уходит в минус. Заказывается вручную через «Нужно купить».</div></div></div>
   <div id="stkMStatus" class="status"></div>
-  <div class="actions" style="justify-content:flex-start"><button id="stkMSave" class="primary">Сохранить материал</button><button id="stkMBack" class="secondary">Назад к списку</button></div>`;
+  <div class="actions" style="justify-content:flex-start"><button id="stkMSave" class="primary">Сохранить материал</button><button id="stkMBack" class="secondary">Назад к списку</button>${e.id?'<button id="stkMDel" class="secondary" style="color:#c0392b;margin-left:auto">Удалить материал</button>':''}</div>`;
   stkCombo($('stkMNameBox'),{inputId:'stkMName',items:stkCatalogItems(),free:true,keep:true,value:e.name,placeholder:'Например: Бумага 10×15 глянец',onPick:()=>keep(),onInput:v=>{e.name=v}});
   const varInfo=()=>{const sz=vlist($('stkMSizes').value),cl=vlist($('stkMColors').value);const n=(sz.length||1)*(cl.length||1);
     $('stkMVarInfo').textContent=sz.length||cl.length?`Будет вариантов: ${n}${n<=12?' — '+(cl.length?cl:['']).flatMap(c=>(sz.length?sz:['']).map(z=>[c,z].filter(Boolean).join(' '))).join(', '):''}.`:'Без размеров и цветов — один материал.'};
   $('stkMSizes').oninput=$('stkMColors').oninput=varInfo;varInfo();
   stkCombo($('stkNormAdd'),{items:stkCatalogItems(),bulk:true,placeholder:'Начните вводить, например: 10х15',onPick:x=>{(x.bulk||[x.item]).filter(Boolean).forEach(c=>{if(!e.norms.has(c.id))e.norms.set(c.id,'1')});stkDrawNorms()}});
-  function keep(){e.name=$('stkMName').value;e.unit=$('stkMUnit').value;e.min_qty=$('stkMMin').value;e.comment=$('stkMComment').value;e.code=$('stkMCode').value;e.workshop=$('stkMWorkshop').checked;e.no_track=$('stkMNoTrack').checked;e.is_active=$('stkMActive').checked;e.pack_qty=$('stkMPack').value;e.pack_price=$('stkMPrice').value;e.sizes=$('stkMSizes').value;e.colors=$('stkMColors').value}
+  function keep(){e.name=$('stkMName').value;e.unit=$('stkMUnit').value;e.min_qty=$('stkMMin').value;e.comment=$('stkMComment').value;e.code=$('stkMCode').value;e.workshop=$('stkMWorkshop').checked;e.store=!!$('stkMStore')?.checked;e.no_track=$('stkMNoTrack').checked;e.is_active=$('stkMActive').checked;e.pack_qty=$('stkMPack').value;e.pack_price=$('stkMPrice').value;e.sizes=$('stkMSizes').value;e.colors=$('stkMColors').value}
   ['stkMUnit','stkMMin','stkMCode','stkMComment','stkMActive','stkMWorkshop','stkMNoTrack','stkMPack','stkMPrice','stkMSizes','stkMColors'].forEach(id=>$(id).onchange=keep);
+  // Мастерская и Тухачевского 26/4 — одно место хранения на выбор.
+  if($('stkMStore')){$('stkMStore').onchange=()=>{if($('stkMStore').checked)$('stkMWorkshop').checked=false;keep()};$('stkMWorkshop').onchange=()=>{if($('stkMWorkshop').checked)$('stkMStore').checked=false;keep()}}
+  if($('stkMDel'))$('stkMDel').onclick=async()=>{
+    if(!confirm(`Удалить материал «${e.name}»? Он пропадёт из списка, остатков и закупки и больше не будет списываться с продаж. История движений останется.`))return;
+    const st=$('stkMStatus');$('stkMDel').disabled=true;st.textContent='Удаляю…';
+    const r=await db.rpc('stock_archive_material',{p_id:e.id});
+    if(r.error){$('stkMDel').disabled=false;st.textContent='Ошибка: '+r.error.message;return}
+    stk.matEdit=null;await stkLoad();stkDrawMat();v5Toast('Материал удалён.');
+  };
   $('stkMBack').onclick=()=>{stk.matEdit=null;stkDrawMat()};
   $('stkMSave').onclick=async()=>{
     keep();const st=$('stkMStatus');
@@ -5132,6 +5145,7 @@ function stkDrawMatEdit(){
     const r=await db.rpc('stock_save_material',{p_id:e.id,p_name:e.name.trim(),p_unit:e.unit,p_min_qty:Number(e.min_qty)||0,p_comment:e.comment,p_is_active:e.is_active,p_norms:norms});
     if(!r.error){const c=await db.rpc('stock_set_purchase_code',{p_id:r.data,p_code:e.code});if(c.error)r.error=c.error}
     if(!r.error){const c=await db.rpc('stock_set_in_workshop',{p_id:r.data,p_on:e.workshop});if(c.error)r.error=c.error}
+    if(!r.error&&(e.store||$('stkMStore'))){const sb=e.store?stkStoreBranch()?.id||stkMaterials(true).find(x=>Number(x.id)===Number(r.data))?.store_branch_id||null:null;const c=await db.rpc('stock_set_store_branch',{p_id:r.data,p_branch_id:sb});if(c.error)r.error=c.error}
     if(!r.error){const c=await db.rpc('stock_set_no_track',{p_id:r.data,p_on:e.no_track});if(c.error)r.error=c.error}
     if(!r.error){const c=await db.rpc('stock_set_material_extra',{p_id:r.data,p_pack_qty:Number(e.pack_qty)||null,p_pack_price:Number(e.pack_price)||null,p_per_sale_qty:Number(e.per_sale)||0});if(c.error)r.error=c.error}
     if(!r.error){const c=await db.rpc('stock_set_variant',{p_id:r.data,p_catalog_id:Number(e.variant)||null});if(c.error)r.error=c.error}
@@ -5176,9 +5190,9 @@ function saleStockLine(c){try{
   const all=stkMaterials(),mats=all.filter(m=>!m.no_track&&!m.parent_id&&(m.norms||[]).some(n=>Number(n.catalog_id)===Number(c.id)));
   if(!mats.length)return '';let low=false;
   const parts=mats.map(m=>{
-    const list=stkHasVars(m)?all.filter(k=>Number(k.parent_id)===Number(m.id)&&!k.no_track):[m];let q=0,ws=false;
-    list.forEach(k=>{const place=k.in_workshop?stkWorkshop()?.id:br;if(!place)return;if(k.in_workshop)ws=true;q+=stkBal(k.id,place);if(stkIsLow(k,place))low=true});
-    return (mats.length>1?esc(m.name)+': ':'')+stkQty(q)+' '+esc(m.unit||'шт')+(ws?' (мастерская)':'');
+    const list=stkHasVars(m)?all.filter(k=>Number(k.parent_id)===Number(m.id)&&!k.no_track):[m];let q=0,ws=false,st='';
+    list.forEach(k=>{const place=k.in_workshop?stkWorkshop()?.id:k.store_branch_id?Number(k.store_branch_id):br;if(!place)return;if(k.in_workshop)ws=true;if(k.store_branch_id&&Number(k.store_branch_id)!==br)st=stkBranchName(k.store_branch_id);q+=stkBal(k.id,place);if(stkIsLow(k,place))low=true});
+    return (mats.length>1?esc(m.name)+': ':'')+stkQty(q)+' '+esc(m.unit||'шт')+(ws?' (мастерская)':'')+(st?' ('+esc(st)+')':'');
   });
   return `<small class="sale-stock${low?' low':''}">Остаток: ${parts.join(' · ')}</small>`;
 }catch(e){return ''}}
