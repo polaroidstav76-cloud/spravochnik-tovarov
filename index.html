@@ -6372,6 +6372,7 @@ renderSummary=function(d,rg){
     <button id="ckSave" class="secondary" type="button">Сохранить</button>
     <span id="ckMsg" class="ck-msg" aria-live="polite"></span>
   </div>
+  <div class="status" style="margin:0 0 8px;font-size:13px">Срок пишите так: «1-2 дня», «3 дня», «1-2 часа». Строка станет красной за 1 день до конца срока (за 2 часа, если срок в часах), зелёной — когда «Готово».</div>
   <div class="ck-wrap"><table class="ck-table"><thead id="ckHead"></thead><tbody id="ckBody"></tbody></table></div>
   <div class="actions"><button id="closeChecks">Закрыть</button></div>
 </div></div>
@@ -6392,6 +6393,10 @@ renderSummary=function(d,rg){
 .ck-table select.r-work{background:var(--warn-bg);color:var(--warn-ink);font-weight:600}
 .ck-table select.r-ready{background:var(--ok-bg);color:var(--ok-ink);font-weight:600}
 .ck-table select.r-done{background:var(--sunk);color:var(--muted)}
+.ck-table select.r-redo{background:#EAF1FB;color:#1F4E8C;font-weight:600}
+.ck-table tr.ck-late td{background:#FBE3E0}
+.ck-table tr.ck-late textarea,.ck-table tr.ck-late input{color:var(--bad-ink);font-weight:600}
+.ck-table tr.ck-ok td{background:#E3F4E8}
 .ck-table .ck-del{min-height:0;padding:4px 8px;font-size:13px;border:0;background:transparent;color:var(--muted)}
 .ck-table .ck-del:hover{color:var(--bad-ink)}
 .ck-branch{padding:8px;white-space:nowrap;color:var(--muted)}
@@ -6399,8 +6404,24 @@ renderSummary=function(d,rg){
 </style>
 <script>
 // ===== Чеки филиалов =====
-const CK_READY=['В работе','Готово','Выдано'],CK_CLS={'В работе':'r-work','Готово':'r-ready','Выдано':'r-done'};
-const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['readiness','Готовность','ready',130]];
+const CK_READY=['В работе','Готово','Отправил на перезаказ','Выдано'],CK_CLS={'В работе':'r-work','Готово':'r-ready','Отправил на перезаказ':'r-redo','Выдано':'r-done'};
+// Срок изготовления: «1-2 дня», «3 дня», «1-2 часа», «5 ч». Берём верхнюю границу и считаем от создания строки.
+function ckDue(x){
+  const m=String(x.deadline||'').toLowerCase().replace(',','.').match(/(\d+(?:\.\d+)?)(?:\s*[-–—]\s*(\d+(?:\.\d+)?))?\s*(д|сут|ч)/);
+  if(!m||!x.created_at)return null;
+  const n=Number(m[2]||m[1]),hours=m[3]==='ч',ms=n*(hours?3600e3:86400e3);
+  const end=new Date(x.created_at).getTime()+ms;
+  return {end,warn:end-(hours?2*3600e3:86400e3)};
+}
+// Красная строка: срок поджимает (за 1 день для дней, за 2 часа для часов) или прошёл. Зелёная: «Готово».
+function ckRowCls(x){
+  if(x.readiness==='Готово')return 'ck-ok';
+  if(x.readiness==='Выдано')return '';
+  const d=ckDue(x);return d&&Date.now()>=d.warn?'ck-late':'';
+}
+function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;tr.classList.remove('ck-ok','ck-late');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
+setInterval(()=>{if($('checksModal').classList.contains('show'))ckPaint()},60000);
+const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['readiness','Готовность','ready',200]];
 const ck={rows:[],dirty:new Set(),timer:null,saving:false,branch:null};
 function ckMsg(t,bad){const m=$('ckMsg');m.textContent=t||'';m.classList.toggle('bad',!!bad)}
 async function openChecks(){
@@ -6436,12 +6457,13 @@ function ckDraw(){
     if(f[2]==='ready')return `<td><select data-f="${f[0]}" class="${CK_CLS[v]||''}">${[...new Set([...CK_READY,v].filter(Boolean))].map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`;
     return `<td><textarea data-f="${f[0]}" rows="1" maxlength="1000">${esc(v)}</textarea></td>`;
   }).join('')}<td><button type="button" class="ck-del" title="Удалить строку" aria-label="Удалить строку">✕</button></td></tr>`).join('');
+  ckPaint();
 }
 function ckBn(id){return salesBranches.find(b=>Number(b.id)===Number(id))?.name||('Филиал #'+id)}
 $('ckBody').addEventListener('input',e=>{
   const el=e.target.closest('[data-f]'),tr=e.target.closest('tr[data-id]');if(!el||!tr)return;
   const row=ck.rows.find(x=>String(x.id)===tr.dataset.id);if(!row)return;
-  row[el.dataset.f]=el.value;if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';
+  row[el.dataset.f]=el.value;if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';ckPaint();
   ck.dirty.add(row.id);tr.classList.add('dirty');ckMsg('Есть несохранённые изменения');
   clearTimeout(ck.timer);ck.timer=setTimeout(ckFlush,1000);
 });
