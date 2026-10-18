@@ -899,6 +899,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   <label id="salesAddEmployeeWrap" class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="salesAddEmployee" type="checkbox" style="width:auto"> <span>Добавить сотрудника в смену</span></label>
   <div id="salesAdditionalWrap" class="field" style="display:none"><label>Дополнительный сотрудник</label><select id="salesAdditionalEmployee"></select></div>
   <div id="salesLeadWrap" class="field" style="display:none;margin-top:12px"><label>Главный по ретуши</label><select id="salesLeadEmployee"></select><div class="status">Именно этот сотрудник получает 100 ₽ за каждую оформленную ретушь за смену.</div></div>
+  <label id="salesNoPayWrap" class="field" style="display:none;align-items:flex-start;gap:8px;margin-top:10px"><input id="salesNoPay" type="checkbox" style="width:auto;margin-top:3px"> <span><b>Не учитывать смену</b> в зарплату<br><span class="status" style="margin:0">Например, смену уже закрыли, а пришёл клиент. Касса и отчет работают как обычно, но ставка за эту смену не начислится.</span></span></label>
   <div id="salesWorkspaceStatus" class="status" aria-live="polite"></div><div class="actions"><button id="adminBranchViewBtn" class="secondary" style="display:none;margin-right:auto" type="button" title="Посмотреть филиал, не открывая смену">👁 Просмотр без смены</button><button id="closeSalesWorkspace">Отмена</button><button id="startShiftBtn" class="primary">Начать смену</button></div>
 </div></div>
 
@@ -979,7 +980,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="modal" id="salesCatalogPriceModal"><div class="dialog" style="max-width:1050px"><h2>Товары и услуги — прайс</h2><div class="status">Актуальный прайс для сотрудников. Цены берутся из раздела настройки продаж.</div><div class="field" style="margin-top:12px"><label>Поиск</label><input id="salesCatalogPriceSearch" placeholder="Название или артикул…"></div><div id="salesCatalogPriceRows" class="price-admin"></div><div class="actions"><button id="closeSalesCatalogPrice">Закрыть</button></div></div></div>
 <div class="modal" id="salesMovementModal"><div class="dialog" style="max-width:1200px"><h2>Продажи за день</h2><div class="row"><div class="field"><label>Дата</label><input id="movementDate" type="date"></div><div class="field" style="display:flex;align-items:flex-end"><button id="movementRefresh" class="secondary">Обновить</button></div></div><div id="movementSummary" class="status"></div><div id="movementRows" class="price-admin"></div><div class="actions"><button id="closeMovement">Закрыть</button></div></div></div>
 <div class="modal" id="shiftReportModal"><div class="dialog" style="max-width:1050px"><h2>Отчёт за смену</h2><div id="shiftReportContent"></div><div class="actions"><button id="closeShiftReport">Закрыть</button></div></div></div>
-<div class="modal" id="payrollModal"><div class="dialog" style="max-width:1050px"><h2>Зарплата за неделю</h2><div class="status">Расчёт: количество смен × ставка филиала + ретушь × ставка ретуши главного сотрудника. Неделя считается с пятницы по четверг.</div><div class="sales-grid"><div class="field"><label>С (пятница)</label><input id="payrollFrom" type="date"></div><div class="field"><label>По (четверг)</label><input id="payrollTo" type="date"></div></div><div class="actions" style="justify-content:flex-start"><button id="buildPayrollBtn" class="primary">Рассчитать зарплату</button></div><div id="payrollContent"></div><div class="actions"><button id="closePayroll">Закрыть</button></div></div></div>
+<div class="modal" id="payrollModal"><div class="dialog" style="max-width:1050px"><h2>Зарплата за неделю</h2><div class="status">Расчёт: количество смен × ставка филиала + ретушь × ставка ретуши главного сотрудника. Смены с галочкой «Не учитывать смену» ставку не получают, ретушь в них считается. Неделя считается с пятницы по четверг.</div><div class="sales-grid"><div class="field"><label>С (пятница)</label><input id="payrollFrom" type="date"></div><div class="field"><label>По (четверг)</label><input id="payrollTo" type="date"></div></div><div class="actions" style="justify-content:flex-start"><button id="buildPayrollBtn" class="primary">Рассчитать зарплату</button></div><div id="payrollContent"></div><div class="actions"><button id="closePayroll">Закрыть</button></div></div></div>
 <div class="modal" id="reportsModal">
   <div class="dialog" style="max-width:1150px">
     <h2>Отчёты</h2>
@@ -2415,7 +2416,7 @@ const adminView=!!(
 $('salesSessionStatus').textContent=adminView
   ?`${salesSession.branchName} · 👁 ПРОСМОТР АДМИНИСТРАТОРА · Смена не открыта`
   :active
-    ?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`
+    ?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}${salesSession.noPay?' · не учитывается в зарплату':''}`
     :'Филиал и кассир ещё не выбраны.';
   $('salesBtn').disabled=false;$('shiftReportBtn').disabled=!active;$('closeShiftBtn').disabled=!active;
   $('salesSelectBtn').textContent=active?'Сменить филиал / сотрудника':'Выбрать филиал и кассира';
@@ -2653,8 +2654,8 @@ db.auth.onAuthStateChange(()=>refreshAuth());
 
 // Зарплатная неделя: с пятницы по четверг. По умолчанию — неделя, в которую входит сегодняшний день.
 function payrollWeekDates(d=new Date()){const x=new Date(d);const thu=new Date(x);thu.setDate(x.getDate()+((4-x.getDay()+7)%7));const fri=new Date(thu);fri.setDate(thu.getDate()-6);return {from:fri,to:thu}}
-async function buildPayroll(){await loadSalesSetup();const from=$('payrollFrom').value,to=$('payrollTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);const sr=await db.from('sales_shifts').select('id,branch_id,started_at,ended_at,sales_branches(name)').gte('started_at',start.toISOString()).lt('started_at',end.toISOString());if(sr.error){$('payrollContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return}const shifts=(sr.data||[]).filter(x=>!isTestBranch(x.branch_id)),ids=shifts.map(x=>x.id);let parts=[],sales=[],items=[],rates=[];if(ids.length){const pr=await dbInRows(()=>db.from('sales_shift_employees').select('*'),'shift_id',ids),sl=await dbInRows(()=>db.from('sales').select('*').eq('status','completed').neq('payment_status','unpaid'),'shift_id',ids);if(pr.error||sl.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc((pr.error||sl.error).message)+'</div>';return}parts=pr.data;sales=sl.data;const saleIds=sales.map(x=>x.id);if(saleIds.length){const it=await dbInRows(()=>db.from('sale_items').select('*'),'sale_id',saleIds);if(it.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc(it.error.message)+'</div>';return}items=it.data}rates=(await db.from('sales_pay_rates').select('*')).data||[]}const rows={};for(const sh of shifts){const ps=parts.filter(p=>Number(p.shift_id)===Number(sh.id));for(const p of ps){const employee=salesEmployees.find(e=>Number(e.id)===Number(p.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+p.employee_id, rate=rates.find(r=>Number(r.employee_id)===Number(p.employee_id)&&Number(r.branch_id)===Number(sh.branch_id)&&r.is_active!==false)||{shift_rate:0,retouch_rate:100};if(!rows[key])rows[key]={employeeId:p.employee_id,shifts:0,shiftPay:0,retouches:0,retouchPay:0,name:salesPeople.find(person=>Number(person.id)===Number(employee?.person_id))?.name||employee?.name||('Сотрудник #'+p.employee_id)};rows[key].shifts++;rows[key].shiftPay+=Number(rate.shift_rate||0);if(p.is_lead||ps.length===1){for(const sale of sales.filter(s=>Number(s.shift_id)===Number(sh.id))){for(const it of items.filter(i=>Number(i.sale_id)===Number(sale.id))){if(it.item_type==='service'&&/ретуш/i.test(it.item_name)){rows[key].retouches+=Number(it.quantity||0);rows[key].retouchPay+=Number(it.quantity||0)*Number(rate.retouch_rate||0)}}}}}}
-const arr=Object.values(rows);const total=arr.reduce((a,x)=>a+x.shiftPay+x.retouchPay,0);$('payrollContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Сотрудников<br><b>${arr.length}</b></div><div class="report-card">Смен<br><b>${arr.reduce((a,x)=>a+x.shifts,0)}</b></div><div class="report-card">К выплате<br><b>${salesMoney(total)}</b></div></div><table class="customer-table" style="margin-top:14px"><thead><tr><th>Сотрудник</th><th>Смены</th><th>Ставки за смены</th><th>Ретушь</th><th>Ретушь ₽</th><th>Итого</th></tr></thead><tbody>${arr.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${x.shifts}</td><td>${salesMoney(x.shiftPay)}</td><td>${x.retouches}</td><td>${salesMoney(x.retouchPay)}</td><td><b>${salesMoney(x.shiftPay+x.retouchPay)}</b></td></tr>`).join('')||'<tr><td colspan="6">Нет смен за период.</td></tr>'}</tbody></table><div class="sales-ok">Расчёт готов. Зарплатная неделя — с пятницы по четверг.</div>`}
+async function buildPayroll(){await loadSalesSetup();const from=$('payrollFrom').value,to=$('payrollTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);const sr=await db.from('sales_shifts').select('id,branch_id,started_at,ended_at,no_pay,sales_branches(name)').gte('started_at',start.toISOString()).lt('started_at',end.toISOString());if(sr.error){$('payrollContent').innerHTML='<div class="status">'+esc(sr.error.message)+'</div>';return}const shifts=(sr.data||[]).filter(x=>!isTestBranch(x.branch_id)),ids=shifts.map(x=>x.id);let parts=[],sales=[],items=[],rates=[];if(ids.length){const pr=await dbInRows(()=>db.from('sales_shift_employees').select('*'),'shift_id',ids),sl=await dbInRows(()=>db.from('sales').select('*').eq('status','completed').neq('payment_status','unpaid'),'shift_id',ids);if(pr.error||sl.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc((pr.error||sl.error).message)+'</div>';return}parts=pr.data;sales=sl.data;const saleIds=sales.map(x=>x.id);if(saleIds.length){const it=await dbInRows(()=>db.from('sale_items').select('*'),'sale_id',saleIds);if(it.error){$('payrollContent').innerHTML='<div class="status">Ошибка загрузки: '+esc(it.error.message)+'</div>';return}items=it.data}rates=(await db.from('sales_pay_rates').select('*')).data||[]}const rows={};for(const sh of shifts){const ps=parts.filter(p=>Number(p.shift_id)===Number(sh.id));for(const p of ps){const employee=salesEmployees.find(e=>Number(e.id)===Number(p.employee_id));const key=employee?.person_id?'person:'+employee.person_id:'employee:'+p.employee_id, rate=rates.find(r=>Number(r.employee_id)===Number(p.employee_id)&&Number(r.branch_id)===Number(sh.branch_id)&&r.is_active!==false)||{shift_rate:0,retouch_rate:100};if(!rows[key])rows[key]={employeeId:p.employee_id,shifts:0,shiftPay:0,retouches:0,retouchPay:0,name:salesPeople.find(person=>Number(person.id)===Number(employee?.person_id))?.name||employee?.name||('Сотрудник #'+p.employee_id)};if(sh.no_pay)rows[key].freeShifts=(rows[key].freeShifts||0)+1;else{rows[key].shifts++;rows[key].shiftPay+=Number(rate.shift_rate||0)}if(p.is_lead||ps.length===1){for(const sale of sales.filter(s=>Number(s.shift_id)===Number(sh.id))){for(const it of items.filter(i=>Number(i.sale_id)===Number(sale.id))){if(it.item_type==='service'&&/ретуш/i.test(it.item_name)){rows[key].retouches+=Number(it.quantity||0);rows[key].retouchPay+=Number(it.quantity||0)*Number(rate.retouch_rate||0)}}}}}}
+const arr=Object.values(rows);const total=arr.reduce((a,x)=>a+x.shiftPay+x.retouchPay,0);$('payrollContent').innerHTML=`<div class="report-grid" style="margin-top:14px"><div class="report-card">Сотрудников<br><b>${arr.length}</b></div><div class="report-card">Смен<br><b>${arr.reduce((a,x)=>a+x.shifts,0)}</b></div><div class="report-card">К выплате<br><b>${salesMoney(total)}</b></div></div><table class="customer-table" style="margin-top:14px"><thead><tr><th>Сотрудник</th><th>Смены</th><th>Ставки за смены</th><th>Ретушь</th><th>Ретушь ₽</th><th>Итого</th></tr></thead><tbody>${arr.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${x.shifts}${x.freeShifts?` <span class="status" style="display:inline;margin:0" title="Смены с галочкой «Не учитывать смену»: ставка не начислена, ретушь посчитана">+ ${x.freeShifts} без учета</span>`:''}</td><td>${salesMoney(x.shiftPay)}</td><td>${x.retouches}</td><td>${salesMoney(x.retouchPay)}</td><td><b>${salesMoney(x.shiftPay+x.retouchPay)}</b></td></tr>`).join('')||'<tr><td colspan="6">Нет смен за период.</td></tr>'}</tbody></table><div class="sales-ok">Расчёт готов. Зарплатная неделя — с пятницы по четверг.</div>`}
 $('payrollBtn').onclick=async()=>{const w=payrollWeekDates();$('payrollFrom').value=salesTodayISO(w.from);$('payrollTo').value=salesTodayISO(w.to);open('payrollModal');await buildPayroll()};$('buildPayrollBtn').onclick=buildPayroll;$('closePayroll').onclick=()=>close('payrollModal');
 
 const V4_PAY_LABELS={cash:'Наличные',card:'Карта',qr:'QR-код',link:'Ссылка',bank_account:'Расчётный счёт',transfer:'Перевод'};
@@ -2773,6 +2774,7 @@ async function refreshWorkspaceBranch() {
     $('salesAdditionalWrap').style.display=hasSecond?'block':'none';
     updateLeadEmployeeOptions();
     $('startShiftBtn').textContent=shift?'Подключиться / сохранить состав':'Начать смену';
+    $('salesNoPayWrap').style.display=shift?'none':'flex'; if(shift) $('salesNoPay').checked=false;
     $('salesWorkspaceStatus').textContent=shift?'Открытая смена №'+shift.id+'. Первый сотрудник выбран автоматически; при необходимости добавьте второго.':'Сначала выберите филиал и сотрудника.';
     $('startShiftBtn').disabled=false;
   } catch(e) {
@@ -2784,7 +2786,7 @@ async function openSalesWorkspace() {
     await loadSalesSetup();
     if(!salesBranches.length) {alert('Сначала администратору нужно настроить филиалы.');return;}
     renderSalesWorkspaceOptions();
-    $('salesAddEmployee').checked=false;
+    $('salesAddEmployee').checked=false; $('salesNoPay').checked=false;
     $('salesAdditionalWrap').style.display='none';
     $('salesLeadWrap').style.display='none';
     $('adminBranchViewBtn').style.display=isAdmin?'inline-block':'none';
@@ -2793,7 +2795,7 @@ async function openSalesWorkspace() {
 }
 function updateSalesSessionUI() {
   const active=!!salesSession?.shiftId;
-  $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}`:'Филиал и кассир ещё не выбраны.';
+  $('salesSessionStatus').textContent=active?`${salesSession.branchName} · Кассир: ${salesSession.employeeName} · Общая смена №${salesSession.shiftId} с ${new Date(salesSession.startedAt).toLocaleString('ru-RU')}${salesSession.noPay?' · не учитывается в зарплату':''}`:'Филиал и кассир ещё не выбраны.';
   $('salesBtn').disabled=false; $('shiftReportBtn').disabled=!active; $('closeShiftBtn').disabled=!active;
   $('salesSelectBtn').textContent=active?'Состав смены / рабочее место':'Выбрать филиал и сотрудника';
   if(typeof refreshTaskBanner==='function') refreshTaskBanner();
@@ -2846,13 +2848,15 @@ $('startShiftBtn').onclick=async()=>{
   if(ids.length>1 && !leadId) { $('salesWorkspaceStatus').textContent='Выберите главного по ретуши.';return; }
   $('startShiftBtn').disabled=true; $('salesBranchSelect').disabled=true; $('salesWorkspaceStatus').textContent='Сохраняю состав смены…';
   try {
+    const noPay=!workspaceShift&&$('salesNoPay').checked;
     const r=await db.rpc('sales_open_team_shift',{p_branch_id:branchId,p_person_ids:ids,p_lead_person_id:leadId,p_expected_shift_id:workspaceShift?.id||null});
     if(r.error) throw r.error;
     const c=r.data;
+    if(noPay){const np=await db.rpc('sales_shift_set_no_pay',{p_shift_id:c.shiftId,p_no_pay:true});if(np.error) alert('Смена открыта, но отметка «Не учитывать смену» не сохранилась: '+np.error.message);}
     const primaryPersonId=Number($('salesEmployeeSelect').value||0);
     const cashier=c.participants.find(p=>p.personId===primaryPersonId && p.isActive) || c.participants.find(p=>p.isActive);
     if(!cashier) throw new Error('Выбранный сотрудник недоступен. Обновите состав смены.');
-    salesSession={shiftId:c.shiftId,branchId:c.branchId,branchName:c.branchName,employeeId:cashier.employeeId,personId:cashier.personId,employeeName:cashier.name,startedAt:c.startedAt,participants:c.participants};
+    salesSession={shiftId:c.shiftId,branchId:c.branchId,branchName:c.branchName,employeeId:cashier.employeeId,personId:cashier.personId,employeeName:cashier.name,startedAt:c.startedAt,participants:c.participants,noPay:noPay||(salesSession?.shiftId===c.shiftId&&!!salesSession.noPay)};
     persistSalesSession(); updateSalesSessionUI(); close('salesWorkspaceModal');
     await showShiftTasks(c.branchId,c.shiftId,cashier.employeeId);
   } catch(e) { $('salesWorkspaceStatus').textContent='Ошибка: '+e.message; }
@@ -3265,7 +3269,7 @@ $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventD
 
 
 // Более подробные отчёты: раздельная оплата показывается по каждому способу.
-async function buildShiftReport(shiftId){const sr=await db.from('sales_shifts').select('*,sales_branches(name)').eq('id',shiftId).single();if(sr.error){$('shiftReportContent').innerHTML='<div class="status">Не удалось загрузить отчёт: '+esc(sr.error.message)+'</div>';open('shiftReportModal');return}const sh=sr.data;const sales=(await db.from('sales').select('*,sales_employees(name)').eq('shift_id',shiftId).order('created_at')).data||[];const ids=sales.map(x=>x.id);const items=ids.length?(await db.from('sale_items').select('*').in('sale_id',ids)).data||[]:[];const pays=ids.length?(await db.from('sale_payments').select('*').in('sale_id',ids)).data||[]:[];const returns=(await db.from('sales_returns').select('*').eq('shift_id',shiftId)).data||[];const valid=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid');const retTotal=returns.reduce((a,x)=>a+Number(x.amount||0),0),retOld=returns.filter(x=>!sales.some(s=>Number(s.id)===Number(x.sale_id))).reduce((a,x)=>a+Number(x.amount||0),0),gross=valid.reduce((a,x)=>a+Number(x.total||0),0);const byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);pays.filter(p=>valid.some(s=>s.id===p.sale_id)).forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const serviceMap={};items.filter(i=>valid.some(s=>s.id===i.sale_id)&&i.item_type==='service').forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity||0));const participants=(await db.from('sales_shift_employees').select('employee_id,is_lead,sales_employees(name)').eq('shift_id',shiftId)).data||[];$('shiftReportContent').innerHTML=`<div class="status">${esc(sh.sales_branches?.name||'')} · ${new Date(sh.started_at).toLocaleString('ru-RU')} — ${sh.ended_at?new Date(sh.ended_at).toLocaleString('ru-RU'):'сейчас'}</div><div class="info-note" style="margin-top:8px">Кассиры смены: ${participants.map(p=>esc(p.sales_employees?.name||'')).join(', ')||'—'}${participants.some(p=>p.is_lead)?' · главный по ретуши: '+participants.filter(p=>p.is_lead).map(p=>esc(p.sales_employees?.name||'')).join(', '):''}</div><div class="report-grid" style="margin-top:12px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retOld)}</b></div><div class="report-card">Продаж<br><b>${valid.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>Оплата</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td><b>${salesMoney(byPay[k])}</b></td></tr>`).join('')}<tr><td><b>Итого</b></td><td><b>${salesMoney(gross)}</b></td></tr></tbody></table><h3>По кассирам</h3><table class="customer-table"><thead><tr><th>Кассир</th><th>Продаж</th><th>Сумма продаж</th></tr></thead><tbody>${participants.map(p=>{const mine=valid.filter(s=>Number(s.employee_id)===Number(p.employee_id));return `<tr><td>${esc(p.sales_employees?.name||String(p.employee_id))}</td><td>${mine.length}</td><td>${salesMoney(mine.reduce((a,s)=>a+Number(s.total||0),0))}</td></tr>`}).join('')}</tbody></table><h3>Услуги</h3>${Object.keys(serviceMap).length?'<table class="customer-table"><tbody>'+Object.entries(serviceMap).map(([n,q])=>`<tr><td>${esc(n)}</td><td>${q}</td></tr>`).join('')+'</tbody></table>':'<div class="status">Услуг не продано.</div>'}`;open('shiftReportModal')}
+async function buildShiftReport(shiftId){const sr=await db.from('sales_shifts').select('*,sales_branches(name)').eq('id',shiftId).single();if(sr.error){$('shiftReportContent').innerHTML='<div class="status">Не удалось загрузить отчёт: '+esc(sr.error.message)+'</div>';open('shiftReportModal');return}const sh=sr.data;const sales=(await db.from('sales').select('*,sales_employees(name)').eq('shift_id',shiftId).order('created_at')).data||[];const ids=sales.map(x=>x.id);const items=ids.length?(await db.from('sale_items').select('*').in('sale_id',ids)).data||[]:[];const pays=ids.length?(await db.from('sale_payments').select('*').in('sale_id',ids)).data||[]:[];const returns=(await db.from('sales_returns').select('*').eq('shift_id',shiftId)).data||[];const valid=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid');const retTotal=returns.reduce((a,x)=>a+Number(x.amount||0),0),retOld=returns.filter(x=>!sales.some(s=>Number(s.id)===Number(x.sale_id))).reduce((a,x)=>a+Number(x.amount||0),0),gross=valid.reduce((a,x)=>a+Number(x.total||0),0);const byPay={};Object.keys(V4_PAY_LABELS).forEach(k=>byPay[k]=0);pays.filter(p=>valid.some(s=>s.id===p.sale_id)).forEach(p=>byPay[p.payment_method]=(byPay[p.payment_method]||0)+Number(p.amount||0));const serviceMap={};items.filter(i=>valid.some(s=>s.id===i.sale_id)&&i.item_type==='service').forEach(i=>serviceMap[i.item_name]=(serviceMap[i.item_name]||0)+Number(i.quantity||0));const participants=(await db.from('sales_shift_employees').select('employee_id,is_lead,sales_employees(name)').eq('shift_id',shiftId)).data||[];$('shiftReportContent').innerHTML=`<div class="status">${esc(sh.sales_branches?.name||'')} · ${new Date(sh.started_at).toLocaleString('ru-RU')} — ${sh.ended_at?new Date(sh.ended_at).toLocaleString('ru-RU'):'сейчас'}</div>${sh.no_pay?'<div class="sales-warning" style="margin-top:8px">Смена отмечена «Не учитывать смену»: в зарплату ставка за неё не начисляется.</div>':''}<div class="info-note" style="margin-top:8px">Кассиры смены: ${participants.map(p=>esc(p.sales_employees?.name||'')).join(', ')||'—'}${participants.some(p=>p.is_lead)?' · главный по ретуши: '+participants.filter(p=>p.is_lead).map(p=>esc(p.sales_employees?.name||'')).join(', '):''}</div><div class="report-grid" style="margin-top:12px"><div class="report-card">Выручка<br><b>${salesMoney(gross-retOld)}</b></div><div class="report-card">Продаж<br><b>${valid.length}</b></div><div class="report-card">Возвраты<br><b>${salesMoney(retTotal)}</b></div></div><h3>Оплата</h3><table class="customer-table"><tbody>${Object.entries(V4_PAY_LABELS).map(([k,v])=>`<tr><td>${v}</td><td><b>${salesMoney(byPay[k])}</b></td></tr>`).join('')}<tr><td><b>Итого</b></td><td><b>${salesMoney(gross)}</b></td></tr></tbody></table><h3>По кассирам</h3><table class="customer-table"><thead><tr><th>Кассир</th><th>Продаж</th><th>Сумма продаж</th></tr></thead><tbody>${participants.map(p=>{const mine=valid.filter(s=>Number(s.employee_id)===Number(p.employee_id));return `<tr><td>${esc(p.sales_employees?.name||String(p.employee_id))}</td><td>${mine.length}</td><td>${salesMoney(mine.reduce((a,s)=>a+Number(s.total||0),0))}</td></tr>`}).join('')}</tbody></table><h3>Услуги</h3>${Object.keys(serviceMap).length?'<table class="customer-table"><tbody>'+Object.entries(serviceMap).map(([n,q])=>`<tr><td>${esc(n)}</td><td>${q}</td></tr>`).join('')+'</tbody></table>':'<div class="status">Услуг не продано.</div>'}`;open('shiftReportModal')}
 async function buildAdminReport(){await loadSalesSetup();const from=$('reportFrom').value,to=$('reportTo').value;if(!from||!to)return;const start=new Date(from+'T00:00:00'),end=new Date(to+'T00:00:00');end.setDate(end.getDate()+1);try{const branchId=$('reportBranch')?.value||'';
 const{sales,items}=await loadSalesForRange(
   start,
@@ -6020,7 +6024,12 @@ async function openBigReport(){
   let sid=salesSession?.shiftId||null;
   if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&st.id)sid=st.id}catch(e){}}
   if(!sid){if(shared.length){grOpenStaff(null,null,shared);return}alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
-  const r=await db.rpc('report_staff_view',{p_shift_id:sid});
+  let r=await db.rpc('report_staff_view',{p_shift_id:sid});
+  // Смена открыта: сразу подтягиваем цифры кассы в строку дня, чтобы белые клетки можно было заполнять в любой момент.
+  if(!r.error&&salesSession?.shiftId===sid&&r.data?.mode!=='manual'){
+    const f=await db.rpc('report_fill_shift',{p_shift_id:sid,p_mode:'auto'});
+    if(!f.error&&f.data)r=f;
+  }
   if(r.error){
     if(!salesSession?.shiftId){if(shared.length){grOpenStaff(null,null,shared);return}alert('Не удалось открыть отчет: '+r.error.message);return}
     const o=await db.rpc('report_branch_month',{p_shift_id:sid});
@@ -6351,6 +6360,133 @@ renderSummary=function(d,rg){
   const ref=$('reportsHomeBtn');
   ref.insertAdjacentHTML('afterend','<button id="bigReportBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M3.5 14.5h17M9 3.5v17"/></svg><span class="tile-name">Общий отчет</span></button>');
   $('bigReportBtn').onclick=openBigReport;
+})();
+</script>
+<!-- Чеки филиалов (2026-10-18): свободная таблица, свои строки у каждого филиала, админ видит все -->
+<div class="modal" id="checksModal"><div class="dialog" style="max-width:min(1400px,100%)">
+  <h2 style="margin-top:0">Чеки</h2>
+  <div class="ck-top">
+    <div class="field"><label>Филиал</label><select id="ckBranch"></select></div>
+    <div class="field ck-search"><label>Поиск</label><input id="ckSearch" type="search" placeholder="Товар, контакт, оплата…"></div>
+    <button id="ckAdd" class="primary" type="button">+ Добавить строку</button>
+    <button id="ckSave" class="secondary" type="button">Сохранить</button>
+    <span id="ckMsg" class="ck-msg" aria-live="polite"></span>
+  </div>
+  <div class="ck-wrap"><table class="ck-table"><thead id="ckHead"></thead><tbody id="ckBody"></tbody></table></div>
+  <div class="actions"><button id="closeChecks">Закрыть</button></div>
+</div></div>
+<style>
+.ck-top{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+.ck-top .field{margin:0;min-width:180px}.ck-top .ck-search{flex:1;min-width:180px}
+.ck-top button{min-height:0}
+.ck-msg{font-size:13px;color:var(--muted);min-width:110px}.ck-msg.bad{color:var(--bad-ink)}
+.ck-wrap{overflow:auto;max-height:68vh;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.ck-table{width:100%;border-collapse:collapse;min-width:980px;font-size:14px}
+.ck-table th{position:sticky;top:0;z-index:1;background:var(--sunk);text-align:left;font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ck-table td{padding:3px;border-bottom:1px solid var(--line);vertical-align:top}
+.ck-table input,.ck-table textarea,.ck-table select{width:100%;min-height:0;padding:6px 8px;font-size:14px;border:1px solid transparent;border-radius:6px;background:transparent;font-family:inherit;color:inherit}
+.ck-table textarea{resize:vertical;min-height:34px;height:34px;line-height:1.35}
+.ck-table input:hover,.ck-table textarea:hover,.ck-table select:hover{border-color:var(--line)}
+.ck-table input:focus,.ck-table textarea:focus,.ck-table select:focus{border-color:var(--accent,#2b6cb0);background:#fff;outline:none}
+.ck-table tr.dirty td:first-child{box-shadow:inset 3px 0 0 #E5A100}
+.ck-table select.r-work{background:var(--warn-bg);color:var(--warn-ink);font-weight:600}
+.ck-table select.r-ready{background:var(--ok-bg);color:var(--ok-ink);font-weight:600}
+.ck-table select.r-done{background:var(--sunk);color:var(--muted)}
+.ck-table .ck-del{min-height:0;padding:4px 8px;font-size:13px;border:0;background:transparent;color:var(--muted)}
+.ck-table .ck-del:hover{color:var(--bad-ink)}
+.ck-branch{padding:8px;white-space:nowrap;color:var(--muted)}
+.ck-empty{padding:18px;color:var(--muted);text-align:center}
+</style>
+<script>
+// ===== Чеки филиалов =====
+const CK_READY=['В работе','Готово','Выдано'],CK_CLS={'В работе':'r-work','Готово':'r-ready','Выдано':'r-done'};
+const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['readiness','Готовность','ready',130]];
+const ck={rows:[],dirty:new Set(),timer:null,saving:false,branch:null};
+function ckMsg(t,bad){const m=$('ckMsg');m.textContent=t||'';m.classList.toggle('bad',!!bad)}
+async function openChecks(){
+  await loadSalesSetup();
+  const shiftBranch=salesSession?.shiftId?Number(salesSession.branchId):null;
+  const br=salesBranches.filter(b=>isAdmin||Number(b.id)===shiftBranch||(b.is_active!==false&&!b.is_test));
+  let last=null;try{last=Number(localStorage.getItem('ckBranch'))||null}catch(e){}
+  $('ckBranch').innerHTML=(isAdmin?'<option value="all">Все филиалы</option>':'')+br.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  $('ckBranch').value=String(shiftBranch||(isAdmin?'all':(last&&br.some(b=>Number(b.id)===last)?last:br[0]?.id||'')));
+  // Сотрудник на смене работает только с чеками своего филиала.
+  $('ckBranch').disabled=!isAdmin&&!!shiftBranch;
+  $('ckSearch').value='';
+  open('checksModal');await ckLoad();
+}
+async function ckLoad(){
+  await ckFlush();
+  const v=$('ckBranch').value;ck.branch=v==='all'?'all':Number(v);
+  if(ck.branch!=='all')try{localStorage.setItem('ckBranch',String(ck.branch))}catch(e){}
+  $('ckAdd').disabled=ck.branch==='all';$('ckAdd').title=ck.branch==='all'?'Чтобы добавить строку, выберите филиал':'';
+  $('ckBody').innerHTML='<tr><td colspan="8" class="ck-empty">Загружаю…</td></tr>';ckMsg('');
+  const r=await dbAllRows(()=>{let q=db.from('branch_checks').select('*').order('check_date',{ascending:false}).order('id',{ascending:false});if(ck.branch!=='all')q=q.eq('branch_id',ck.branch);return q});
+  if(r.error){$('ckBody').innerHTML=`<tr><td colspan="8" class="ck-empty">Не удалось загрузить: ${esc(r.error.message)}</td></tr>`;return}
+  ck.rows=r.data;ck.dirty.clear();ckDraw();
+}
+function ckDraw(){
+  const all=ck.branch==='all',q=$('ckSearch').value.trim().toLowerCase();
+  $('ckHead').innerHTML='<tr>'+(all?'<th>Филиал</th>':'')+CK_FIELDS.map(f=>`<th style="width:${f[3]}px">${f[1]}</th>`).join('')+'<th style="width:40px"></th></tr>';
+  const rows=q?ck.rows.filter(x=>CK_FIELDS.some(f=>String(x[f[0]]||'').toLowerCase().includes(q))||(all&&ckBn(x.branch_id).toLowerCase().includes(q))):ck.rows;
+  if(!rows.length){$('ckBody').innerHTML=`<tr><td colspan="8" class="ck-empty">${ck.rows.length?'Ничего не найдено.':'Чеков пока нет. Нажмите «+ Добавить строку».'}</td></tr>`;return}
+  $('ckBody').innerHTML=rows.map(x=>`<tr data-id="${x.id}"${ck.dirty.has(x.id)?' class="dirty"':''}>${all?`<td class="ck-branch">${esc(ckBn(x.branch_id))}</td>`:''}${CK_FIELDS.map(f=>{
+    const v=x[f[0]]??'';
+    if(f[2]==='date')return `<td><input type="date" data-f="${f[0]}" value="${esc(v)}"></td>`;
+    if(f[2]==='ready')return `<td><select data-f="${f[0]}" class="${CK_CLS[v]||''}">${[...new Set([...CK_READY,v].filter(Boolean))].map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`;
+    return `<td><textarea data-f="${f[0]}" rows="1" maxlength="1000">${esc(v)}</textarea></td>`;
+  }).join('')}<td><button type="button" class="ck-del" title="Удалить строку" aria-label="Удалить строку">✕</button></td></tr>`).join('');
+}
+function ckBn(id){return salesBranches.find(b=>Number(b.id)===Number(id))?.name||('Филиал #'+id)}
+$('ckBody').addEventListener('input',e=>{
+  const el=e.target.closest('[data-f]'),tr=e.target.closest('tr[data-id]');if(!el||!tr)return;
+  const row=ck.rows.find(x=>String(x.id)===tr.dataset.id);if(!row)return;
+  row[el.dataset.f]=el.value;if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';
+  ck.dirty.add(row.id);tr.classList.add('dirty');ckMsg('Есть несохранённые изменения');
+  clearTimeout(ck.timer);ck.timer=setTimeout(ckFlush,1000);
+});
+$('ckBody').addEventListener('click',async e=>{
+  const b=e.target.closest('.ck-del');if(!b)return;
+  const tr=b.closest('tr[data-id]'),id=Number(tr.dataset.id),row=ck.rows.find(x=>x.id===id);
+  if(!confirm('Удалить строку'+(row?.product?' «'+row.product+'»':'')+'?'))return;
+  const r=await db.from('branch_checks').delete().eq('id',id);
+  if(r.error){ckMsg('Не удалилось: '+r.error.message,true);return}
+  ck.rows=ck.rows.filter(x=>x.id!==id);ck.dirty.delete(id);ckDraw();ckMsg('Строка удалена');
+});
+async function ckFlush(){
+  clearTimeout(ck.timer);
+  if(ck.saving){ck.timer=setTimeout(ckFlush,300);return}
+  if(!ck.dirty.size)return;
+  ck.saving=true;ckMsg('Сохраняю…');let err=null;
+  for(const id of [...ck.dirty]){
+    const row=ck.rows.find(x=>x.id===id);if(!row){ck.dirty.delete(id);continue}
+    const patch={updated_at:new Date().toISOString()};CK_FIELDS.forEach(f=>patch[f[0]]=f[0]==='check_date'?(row.check_date||salesTodayISO()):(row[f[0]]??''));
+    const r=await db.from('branch_checks').update(patch).eq('id',id);
+    if(r.error){err=r.error.message;break}
+    ck.dirty.delete(id);document.querySelector(`#ckBody tr[data-id="${id}"]`)?.classList.remove('dirty');
+  }
+  ck.saving=false;
+  if(err){ckMsg('Не сохранилось: '+err+'. Нажмите «Сохранить» ещё раз.',true);return}
+  ckMsg(ck.dirty.size?'Сохраняю…':'Сохранено ✓');if(ck.dirty.size)ck.timer=setTimeout(ckFlush,300);
+}
+$('ckAdd').onclick=async()=>{
+  if(ck.branch==='all')return;
+  $('ckAdd').disabled=true;
+  const r=await db.from('branch_checks').insert({branch_id:ck.branch,check_date:salesTodayISO()}).select().single();
+  $('ckAdd').disabled=false;
+  if(r.error){ckMsg('Не удалось добавить: '+r.error.message,true);return}
+  $('ckSearch').value='';ck.rows.unshift(r.data);ckDraw();
+  setTimeout(()=>document.querySelector(`#ckBody tr[data-id="${r.data.id}"] [data-f="product"]`)?.focus(),0);
+};
+$('ckSave').onclick=async()=>{if(!ck.dirty.size){ckMsg('Сохранено ✓');return}await ckFlush()};
+$('ckBranch').onchange=ckLoad;
+$('ckSearch').oninput=ckDraw;
+$('closeChecks').onclick=async()=>{await ckFlush();if(ck.dirty.size&&!confirm('Не все изменения сохранились. Закрыть всё равно?'))return;close('checksModal')};
+window.addEventListener('beforeunload',e=>{if(ck.dirty.size){ckFlush();e.preventDefault();e.returnValue=''}});
+(()=>{
+  const ref=$('bigReportBtn');
+  ref.insertAdjacentHTML('afterend','<button id="checksBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/></svg><span class="tile-name">Чеки</span></button>');
+  $('checksBtn').onclick=openChecks;
 })();
 </script>
 <!-- Аудит 2026-10-12: правки вёрстки и мелкие исправления -->
