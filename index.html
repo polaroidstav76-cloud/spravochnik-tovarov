@@ -6367,7 +6367,7 @@ renderSummary=function(d,rg){
   <h2 style="margin-top:0">Чеки</h2>
   <div class="ck-top">
     <div class="field"><label>Филиал</label><select id="ckBranch"></select></div>
-    <div class="field ck-search"><label>Поиск</label><input id="ckSearch" type="search" placeholder="Товар, контакт, оплата…"></div>
+    <div class="field ck-search"><label>Поиск</label><input id="ckSearch" type="search" placeholder="Товар, контакт, номер заказа…"></div>
     <button id="ckAdd" class="primary" type="button">+ Добавить строку</button>
     <button id="ckSave" class="secondary" type="button">Сохранить</button>
     <span id="ckMsg" class="ck-msg" aria-live="polite"></span>
@@ -6404,7 +6404,7 @@ renderSummary=function(d,rg){
 </style>
 <script>
 // ===== Чеки филиалов =====
-const CK_READY=['В работе','Готово','Отправил на перезаказ','Выдано'],CK_CLS={'В работе':'r-work','Готово':'r-ready','Отправил на перезаказ':'r-redo','Выдано':'r-done'};
+const CK_READY=['В работе','Готово','Отправил на перезаказ'],CK_CLS={'В работе':'r-work','Готово':'r-ready','Отправил на перезаказ':'r-redo'};
 // Срок изготовления: «1-2 дня», «3 дня», «1-2 часа», «5 ч». Берём верхнюю границу и считаем от создания строки.
 function ckDue(x){
   const m=String(x.deadline||'').toLowerCase().replace(',','.').match(/(\d+(?:\.\d+)?)(?:\s*[-–—]\s*(\d+(?:\.\d+)?))?\s*(д|сут|ч)/);
@@ -6416,12 +6416,11 @@ function ckDue(x){
 // Красная строка: срок поджимает (за 1 день для дней, за 2 часа для часов) или прошёл. Зелёная: «Готово».
 function ckRowCls(x){
   if(x.readiness==='Готово')return 'ck-ok';
-  if(x.readiness==='Выдано')return '';
   const d=ckDue(x);return d&&Date.now()>=d.warn?'ck-late':'';
 }
 function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;tr.classList.remove('ck-ok','ck-late');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
 setInterval(()=>{if($('checksModal').classList.contains('show'))ckPaint()},60000);
-const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['readiness','Готовность','ready',200]];
+const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['order_no','Номер заказа','area',130],['readiness','Готовность','ready',200]];
 const ck={rows:[],dirty:new Set(),timer:null,saving:false,branch:null};
 function ckMsg(t,bad){const m=$('ckMsg');m.textContent=t||'';m.classList.toggle('bad',!!bad)}
 async function openChecks(){
@@ -6441,16 +6440,16 @@ async function ckLoad(){
   const v=$('ckBranch').value;ck.branch=v==='all'?'all':Number(v);
   if(ck.branch!=='all')try{localStorage.setItem('ckBranch',String(ck.branch))}catch(e){}
   $('ckAdd').disabled=ck.branch==='all';$('ckAdd').title=ck.branch==='all'?'Чтобы добавить строку, выберите филиал':'';
-  $('ckBody').innerHTML='<tr><td colspan="8" class="ck-empty">Загружаю…</td></tr>';ckMsg('');
+  $('ckBody').innerHTML='<tr><td colspan="9" class="ck-empty">Загружаю…</td></tr>';ckMsg('');
   const r=await dbAllRows(()=>{let q=db.from('branch_checks').select('*').order('check_date',{ascending:false}).order('id',{ascending:false});if(ck.branch!=='all')q=q.eq('branch_id',ck.branch);return q});
-  if(r.error){$('ckBody').innerHTML=`<tr><td colspan="8" class="ck-empty">Не удалось загрузить: ${esc(r.error.message)}</td></tr>`;return}
+  if(r.error){$('ckBody').innerHTML=`<tr><td colspan="9" class="ck-empty">Не удалось загрузить: ${esc(r.error.message)}</td></tr>`;return}
   ck.rows=r.data;ck.dirty.clear();ckDraw();
 }
 function ckDraw(){
   const all=ck.branch==='all',q=$('ckSearch').value.trim().toLowerCase();
   $('ckHead').innerHTML='<tr>'+(all?'<th>Филиал</th>':'')+CK_FIELDS.map(f=>`<th style="width:${f[3]}px">${f[1]}</th>`).join('')+'<th style="width:40px"></th></tr>';
   const rows=q?ck.rows.filter(x=>CK_FIELDS.some(f=>String(x[f[0]]||'').toLowerCase().includes(q))||(all&&ckBn(x.branch_id).toLowerCase().includes(q))):ck.rows;
-  if(!rows.length){$('ckBody').innerHTML=`<tr><td colspan="8" class="ck-empty">${ck.rows.length?'Ничего не найдено.':'Чеков пока нет. Нажмите «+ Добавить строку».'}</td></tr>`;return}
+  if(!rows.length){$('ckBody').innerHTML=`<tr><td colspan="9" class="ck-empty">${ck.rows.length?'Ничего не найдено.':'Чеков пока нет. Нажмите «+ Добавить строку».'}</td></tr>`;return}
   $('ckBody').innerHTML=rows.map(x=>`<tr data-id="${x.id}"${ck.dirty.has(x.id)?' class="dirty"':''}>${all?`<td class="ck-branch">${esc(ckBn(x.branch_id))}</td>`:''}${CK_FIELDS.map(f=>{
     const v=x[f[0]]??'';
     if(f[2]==='date')return `<td><input type="date" data-f="${f[0]}" value="${esc(v)}"></td>`;
