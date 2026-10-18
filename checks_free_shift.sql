@@ -35,3 +35,7 @@ create policy branch_checks_insert on public.branch_checks for insert to authent
 create policy branch_checks_update on public.branch_checks for update to authenticated using (public.is_staff()) with check (public.is_staff());
 create policy branch_checks_delete on public.branch_checks for delete to authenticated using (public.is_staff());
 grant select, insert, update, delete on public.branch_checks to authenticated;
+
+-- 2026-10-18: номер заказа после контактов; «Выдано» убрано из готовности.
+alter table public.branch_checks add column if not exists order_no text not null default '';
+update public.branch_checks set readiness='Готово' where readiness='Выдано';
