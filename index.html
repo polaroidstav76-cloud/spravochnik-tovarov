@@ -6518,6 +6518,56 @@ $('ckBranch').onchange=ckLoad;
 $('ckSearch').oninput=ckDraw;
 $('closeChecks').onclick=async()=>{await ckFlush();if(ck.dirty.size&&!confirm('Не все изменения сохранились. Закрыть всё равно?'))return;close('checksModal')};
 window.addEventListener('beforeunload',e=>{if(ck.dirty.size){ckFlush();e.preventDefault();e.returnValue=''}});
+// «Добавить в чеки» в окне продажи: после оформления создаём строку в «Чеках» филиала смены.
+(()=>{
+  $('saleComment').closest('.field').insertAdjacentHTML('afterend',`<div class="sale-ck-box" id="saleCkBox"><label class="sale-ck-toggle"><input type="checkbox" id="saleCkOn"> <b>Добавить в чеки</b></label><div id="saleCkFields" class="row" style="display:none;margin-top:8px"><div class="field"><label>Срок изготовления *</label><input id="saleCkDeadline" maxlength="200" placeholder="Например: 1-2 дня или 3 часа"></div><div class="field"><label>Контакт клиента *</label><input id="saleCkContact" maxlength="500" placeholder="Telegram, Max или телефон"></div></div></div>`);
+  document.head.insertAdjacentHTML('beforeend','<style>.sale-ck-box{margin-top:10px;padding:10px 12px;border:1px solid var(--line,#ddd);border-radius:10px}.sale-ck-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0}.sale-ck-toggle input{width:18px;height:18px;margin:0}</style>');
+  const sync=()=>{$('saleCkFields').style.display=$('saleCkOn').checked?'':'none'};
+  $('saleCkOn').onchange=()=>{sync();if($('saleCkOn').checked){if(!$('saleCkContact').value.trim()&&$('salePickupContact')?.value.trim())$('saleCkContact').value=$('salePickupContact').value.trim();$('saleCkDeadline').focus()}};
+  const reset=()=>{$('saleCkOn').checked=false;$('saleCkDeadline').value='';$('saleCkContact').value='';sync()};
+  const contact=()=>$('saleCkContact').value.trim()||($('salePayment').value==='on_pickup'?$('salePickupContact')?.value.trim()||'':'');
+  // Без срока и контакта продажу не оформляем, пока стоит галочка.
+  const baseSave=$('saveSale').onclick;
+  $('saveSale').onclick=async function(){
+    if($('saveSale').disabled)return;
+    if($('saleCkOn').checked){
+      if(!$('saleCkDeadline').value.trim()){$('saleStatus').textContent='Для «Добавить в чеки» укажите срок изготовления.';$('saleCkDeadline').focus();return}
+      if(!contact()){$('saleStatus').textContent='Для «Добавить в чеки» укажите контакт клиента.';$('saleCkContact').focus();return}
+    }
+    return baseSave.apply(this,arguments);
+  };
+  const PEND='ckPendingRows';
+  const pendRead=()=>{try{return JSON.parse(localStorage.getItem(PEND)||'[]')}catch(e){return []}};
+  const pendWrite=q=>{try{q.length?localStorage.setItem(PEND,JSON.stringify(q)):localStorage.removeItem(PEND)}catch(e){}};
+  async function put(row){const r=await db.from('branch_checks').insert(row);return !r.error}
+  // Без связи строка ждёт в браузере и уходит в «Чеки», когда связь вернётся.
+  async function flush(){
+    const q=pendRead();if(!q.length)return;const left=[];
+    for(const row of q){let ok=false;try{ok=await put(row)}catch(e){}if(!ok)left.push(row)}
+    pendWrite(left);
+  }
+  window.ckFlushPendingSales=flush;
+  setInterval(flush,60000);setTimeout(flush,5000);
+  const inner=db.rpc;
+  db.rpc=(fn,args,opts)=>{
+    if(fn!=='sales_create_sale'||!$('saleCkOn').checked)return inner(fn,args,opts);
+    const ctx=saleContext||salesSession||{},pay=args?.p_payment_method;
+    const product=saleDraft.map(x=>{const c=salesCatalog.find(y=>Number(y.id)===Number(x.catalogId)),v=x.variantId&&c?.variants?.find(y=>Number(y.id)===Number(x.variantId))?.label;return (c?.name||'Товар')+(v?' — '+v:'')+' × '+x.quantity}).join(', ');
+    const label=m=>m==='on_pickup'?'При получении':(V4_PAY_LABELS[m]||m);
+    const payment=pay==='split'?(args.p_payments||[]).map(p=>label(p.method)+' '+salesMoney(p.amount)).join(' + '):label(pay)+(pay==='on_pickup'?'':' · '+$('saleTotal').textContent);
+    const base={branch_id:Number(ctx.branchId),check_date:salesTodayISO(),product,payment,deadline:$('saleCkDeadline').value.trim(),contacts:contact(),readiness:'В работе',created_at:new Date().toISOString()};
+    return Promise.resolve(inner(fn,args,opts)).then(r=>{
+      if(!r?.error&&base.branch_id){
+        const row={...base,order_no:r.data!=null?String(r.data):''};reset();
+        put(row).then(ok=>{if(!ok)pendWrite([...pendRead(),row]);else flush()}).catch(()=>pendWrite([...pendRead(),row]));
+        if(typeof v5Toast==='function')setTimeout(()=>v5Toast('Заказ'+(row.order_no?' №'+row.order_no:'')+' добавлен в «Чеки».'),300);
+      }
+      return r;
+    });
+  };
+  const baseOpen=openSaleV4;
+  openSaleV4=async function(){reset();return baseOpen.apply(this,arguments)};
+})();
 (()=>{
   const ref=$('bigReportBtn');
   ref.insertAdjacentHTML('afterend','<button id="checksBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/></svg><span class="tile-name">Чеки</span></button>');
