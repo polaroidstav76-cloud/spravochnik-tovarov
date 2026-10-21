@@ -73,6 +73,7 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 .sale-save-bar{padding:14px 0 0}.sale-save-bar .primary{min-width:220px}
 
 .debt-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.debt-summary div{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:8px 12px;font-weight:700}.debt-customer{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc;margin-top:12px}.debt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.debt-name{font-weight:800;font-size:17px}.debt-total{font-weight:800;color:#c2410c}.debt-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-top:1px solid #e2e8f0}.debt-row.paid{opacity:.65}.debt-row .debt-sum{font-weight:700;white-space:nowrap}.debt-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.wa-red,button.wa-red{background:#D92D20;color:#fff;border-color:#D92D20;font-weight:700}.wa-red:hover,button.wa-red:hover{background:#B42318;border-color:#B42318;color:#fff}.wa-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}.wa-table{width:100%;border-collapse:collapse;font-size:14px}.wa-table th{position:sticky;top:0;background:var(--sunk,#f1f5f9);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}.wa-table td{border-bottom:1px solid var(--line);padding:4px 6px;vertical-align:top}.wa-table tr:last-child td{border-bottom:0}.wa-no{width:38px;text-align:center!important;color:#64748b}.wa-name{width:32%}.wa-table td.wa-no{padding-top:12px}.wa-table input,.wa-table textarea{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:7px 8px;font:inherit;border-radius:8px;resize:none;min-height:0}.wa-table input:focus,.wa-table textarea:focus{border-color:var(--line);background:#fff;outline:none}.wa-table tr.wa-dirty td{background:#FFFBEB}.wa-ro{padding:7px 8px;white-space:pre-wrap;line-height:1.45}
 .tpl-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}.tpl-item{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}.tpl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.tpl-title{font-weight:800;font-size:16px}.tpl-text{white-space:pre-wrap;line-height:1.5;font-size:14px;margin-top:8px}.tpl-actions{display:flex;gap:6px;flex-wrap:wrap}.tpl-actions button{padding:8px 12px}.tpl-form{border:1px solid #dbe4ef;border-radius:14px;padding:12px;background:#fff;margin-bottom:12px}.tpl-form textarea{min-height:140px}.tpl-search{display:grid;grid-template-columns:1fr 200px;gap:8px}
 @media(max-width:700px){.tpl-search{grid-template-columns:1fr}}
 .tpl-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.tpl-bar-btns{display:flex;gap:6px}
@@ -1026,10 +1027,11 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div id="salesAdminStatus" class="status"></div><div class="actions"><button id="closeSalesAdmin">Закрыть</button></div></div></div>
 
 <div class="modal" id="templatesModal"><div class="dialog" style="max-width:820px"><h2 style="margin-top:0">Шаблоны сообщений</h2><div class="status" style="margin-bottom:12px">Готовые ответы для переписки с клиентами. Нажмите «Копировать» и вставьте текст в мессенджер.</div>
-<div id="tplAdminBox" style="display:none"><div class="actions" style="justify-content:flex-start;margin:0 0 12px"><button id="tplNewBtn" class="primary">＋ Новый шаблон</button></div>
+<div class="actions" style="justify-content:flex-start;margin:0 0 12px"><button id="tplNewBtn" class="primary" style="display:none">＋ Новый шаблон</button><button id="waListBtn" class="wa-red">Список шаблонов для WhatsApp</button></div><div id="tplAdminBox" style="display:none">
 <div id="tplForm" class="tpl-form" style="display:none"><input id="tplEditId" type="hidden"><h3 id="tplFormTitle" style="margin-top:0">Новый шаблон</h3><div class="row"><div class="field"><label for="tplTitle">Название *</label><input id="tplTitle" placeholder="Например: Приветствие"></div><div class="field"><label for="tplCategory">Категория</label><input id="tplCategory" list="tplCategoryList" placeholder="Например: Доставка"><datalist id="tplCategoryList"></datalist></div></div><div class="field"><label for="tplBody">Текст шаблона *</label><textarea id="tplBody" placeholder="Здравствуйте! …"></textarea></div><div id="tplFormStatus" class="status"></div><div class="actions" style="justify-content:flex-start;padding-right:0"><button id="tplSaveBtn" class="primary">Сохранить</button><button id="tplCancelBtn">Отмена</button></div></div></div>
 <div class="tpl-search"><input id="tplSearch" placeholder="Поиск по названию и тексту шаблона…"><select id="tplCategoryFilter"><option value="">Все категории</option></select></div>
 <div class="tpl-bar"><div id="tplCount" class="count"></div><div class="tpl-bar-btns"><button id="tplExpandAll" class="small">Развернуть все</button><button id="tplCollapseAll" class="small">Свернуть все</button></div></div><div id="tplOrderHint" class="status" style="display:none;margin-top:6px"></div><div id="tplList" class="tpl-list"></div><div class="actions"><button id="closeTemplates">Закрыть</button></div></div></div>
+<div class="modal" id="waTemplatesModal"><div class="dialog" style="max-width:980px"><h2 style="margin-top:0">Список шаблонов для WhatsApp</h2><div id="waHint" class="status" style="margin-bottom:12px"></div><div class="wa-wrap"><table class="wa-table"><thead><tr><th class="wa-no">№</th><th class="wa-name">Наименование шаблона</th><th>Описание шаблона</th></tr></thead><tbody id="waRows"></tbody></table></div><div id="waStatus" class="status" style="margin-top:8px"></div><div class="actions"><button id="waSaveBtn" class="primary" style="display:none">Сохранить</button><button id="closeWaTemplates">Закрыть</button></div></div></div>
 
 <div class="modal" id="debtsModal"><div class="dialog" style="max-width:950px"><h2 style="margin-top:0">Долги клиентов</h2><div class="status">Сюда попадают продажи с оплатой «Расчётный счёт» по клубной карте. В отчётах они считаются оплаченными. Когда клиент оплатит, отметьте продажи галочками и нажмите «Отметить оплаченными».</div>
 <div class="tpl-search" style="margin-top:12px"><input id="debtSearch" placeholder="Поиск по имени или телефону клиента…"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="debtShowPaid" type="checkbox" style="width:auto"> Показать оплаченные</label></div>
@@ -3463,6 +3465,7 @@ function renderTemplateCategories(){
 }
 function renderTemplates(){
   $('tplAdminBox').style.display=isAdmin?'block':'none';
+  $('tplNewBtn').style.display=isAdmin?'':'none';
   if(!isAdmin)$('tplForm').style.display='none';
   const words=$('tplSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), cat=$('tplCategoryFilter').value, filtered=!!(words.length||cat);
   const match=t=>{
@@ -3608,6 +3611,41 @@ $('tplCategoryFilter').onchange=renderTemplates;
 $('tplNewBtn').onclick=()=>showTemplateForm(null);
 $('tplCancelBtn').onclick=()=>{$('tplForm').style.display='none'};
 $('tplSaveBtn').onclick=saveTemplate;
+// Список шаблонов для WhatsApp: 50 строк «наименование / описание», заполняет администратор, сотрудники смотрят.
+const WA_ROWS=50;let waRows=[];
+function waAutoGrow(el){el.style.height='auto';el.style.height=el.scrollHeight+'px'}
+function renderWaRows(){
+  $('waSaveBtn').style.display=isAdmin?'':'none';
+  $('waHint').textContent=isAdmin?'Впишите наименование и описание прямо в таблицу и нажмите «Сохранить». Изменённые строки подсвечены.':'Список шаблонов для WhatsApp. Заполняет администратор.';
+  const rows=isAdmin?waRows:waRows.filter(r=>(r.title||'').trim()||(r.description||'').trim());
+  if(!rows.length){$('waRows').innerHTML='<tr><td colspan="3"><div class="status" style="padding:8px">Список пока пуст.</div></td></tr>';return}
+  $('waRows').innerHTML=rows.map(r=>isAdmin
+    ?`<tr data-no="${r.row_no}"><td class="wa-no">${r.row_no}</td><td><textarea rows="1" data-f="title" placeholder="Наименование">${esc(r.title||'')}</textarea></td><td><textarea rows="1" data-f="description" placeholder="Описание">${esc(r.description||'')}</textarea></td></tr>`
+    :`<tr><td class="wa-no">${r.row_no}</td><td><div class="wa-ro" style="font-weight:700">${esc(r.title||'')}</div></td><td><div class="wa-ro">${esc(r.description||'')}</div></td></tr>`).join('');
+  $('waRows').querySelectorAll('textarea').forEach(waAutoGrow);
+}
+$('waRows').addEventListener('input',e=>{const t=e.target;if(t.tagName!=='TEXTAREA')return;waAutoGrow(t);const tr=t.closest('tr'),r=waRows.find(x=>x.row_no==tr.dataset.no);tr.classList.toggle('wa-dirty',[...tr.querySelectorAll('textarea')].some(a=>a.value!==(r[a.dataset.f]||'')));$('waStatus').textContent=''});
+async function openWaTemplates(){
+  open('waTemplatesModal');$('waStatus').textContent='';$('waRows').innerHTML='<tr><td colspan="3"><div class="status" style="padding:8px">Загрузка…</div></td></tr>';
+  const r=await db.from('whatsapp_templates').select('*').order('row_no');
+  if(r.error){$('waRows').innerHTML=`<tr><td colspan="3"><div class="status" style="padding:8px">Не удалось загрузить: ${esc(r.error.message)}</div></td></tr>`;$('waSaveBtn').style.display='none';return}
+  const byNo=new Map((r.data||[]).map(x=>[x.row_no,x]));
+  waRows=Array.from({length:WA_ROWS},(_,i)=>byNo.get(i+1)||{row_no:i+1,title:'',description:''});
+  renderWaRows();
+}
+async function saveWaTemplates(){
+  const changed=[...$('waRows').querySelectorAll('tr.wa-dirty')].map(tr=>{const v={};tr.querySelectorAll('textarea').forEach(a=>v[a.dataset.f]=a.value.trim()||null);return{row_no:+tr.dataset.no,title:v.title,description:v.description,updated_at:new Date().toISOString()}});
+  if(!changed.length){$('waStatus').textContent='Изменений нет.';return}
+  $('waSaveBtn').disabled=true;$('waStatus').textContent='Сохраняю…';
+  const r=await db.from('whatsapp_templates').upsert(changed,{onConflict:'row_no'});
+  $('waSaveBtn').disabled=false;
+  if(r.error){$('waStatus').textContent='Не удалось сохранить: '+r.error.message;return}
+  changed.forEach(c=>{const x=waRows.find(w=>w.row_no===c.row_no);x.title=c.title||'';x.description=c.description||''});
+  renderWaRows();$('waStatus').textContent='Сохранено ✓';
+}
+$('waListBtn').onclick=openWaTemplates;
+$('waSaveBtn').onclick=saveWaTemplates;
+$('closeWaTemplates').onclick=()=>{if($('waRows').querySelector('tr.wa-dirty')&&!confirm('Есть несохранённые изменения. Закрыть без сохранения?'))return;close('waTemplatesModal')};
 $('tplExpandAll').onclick=()=>setAllTplGroups(true);
 $('tplCollapseAll').onclick=()=>setAllTplGroups(false);
 </script>
