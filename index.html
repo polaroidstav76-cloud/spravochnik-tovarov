@@ -2062,9 +2062,10 @@ function renderLoyaltyCustomer(c){
     ${Number(c.pending_points)>0?`<div class="loyalty-pending" style="margin-top:8px">Ожидают начисления: ${loyaltyMoney(c.pending_points)} (начислятся через 24 часа).</div>`:''}
     ${c.customer_comment?`<div style="margin-top:10px"><b>Комментарий:</b> ${esc(c.customer_comment)}</div>`:''}
     <div class="loyalty-actions">
-      <button class="secondary small" onclick="showRedeemForm('${c.customer_id}',${Number(c.balance)})">💳 Списать баллы</button><button class="secondary small" onclick="showLoyaltyHistory('${c.customer_id}')">📜 История</button>
+      <button class="secondary small" onclick="showRedeemForm('${c.customer_id}',${Number(c.balance)})">💳 Списать баллы</button><button class="secondary small" onclick="showLoyaltyHistory('${c.customer_id}')">📜 История</button><button class="secondary small" onclick="showAdjustForm('${c.customer_id}')">✏️ Начислить / списать вручную</button>
     </div>
     <div id="redeem_${c.customer_id}" style="display:none"></div>
+    <div id="adjust_${c.customer_id}" style="display:none"></div>
   </div>`;
 }
 window.showRedeemForm=(id,balance)=>{
@@ -2085,6 +2086,21 @@ window.redeemPoints=async(id)=>{
   if(r.error){st.textContent='Ошибка: '+r.error.message;return}
   st.textContent='Списано. Новый баланс: '+loyaltyMoney(r.data);
   await lookupLoyalty();
+}
+window.showAdjustForm=id=>{
+  const el=$('adjust_'+id); if(!el)return;
+  el.style.display='block';
+  el.innerHTML=`<div class="block" style="margin-top:10px"><div class="row"><div class="field"><label>Баллов</label><input id="adjustPoints_${id}" type="number" min="0" step="0.01" placeholder="100"></div><div class="field"><label>Причина</label><input id="adjustComment_${id}" placeholder="Например: бонус за отзыв"></div></div><div id="adjustStatus_${id}" class="status"></div><div class="actions" style="justify-content:flex-start"><button class="primary small" onclick="adjustPointsStaff('${id}',1)">➕ Начислить</button><button class="secondary small" onclick="adjustPointsStaff('${id}',-1)">➖ Списать</button></div></div>`;
+}
+window.adjustPointsStaff=async(id,sign)=>{
+  const st=$('adjustStatus_'+id), points=Number($('adjustPoints_'+id).value), comment=$('adjustComment_'+id).value.trim();
+  if(!(points>0)){st.textContent='Введите количество баллов.';return}
+  if(!confirm((sign>0?'Начислить ':'Списать ')+loyaltyMoney(points)+' баллов?'))return;
+  st.textContent='Сохраняю…';
+  const r=await db.rpc('loyalty_staff_adjust_points',{p_customer_id:id,p_points:sign*points,p_comment:comment||null});
+  if(r.error){st.textContent='Ошибка: '+r.error.message;return}
+  st.textContent=(sign>0?'Начислено':'Списано')+'. Новый баланс: '+loyaltyMoney(r.data);
+  setTimeout(lookupLoyalty,800);
 }
 async function lookupLoyalty(){
   const q=normalizePhone($('clubLookup').value); const box=$('clubCustomerResults');
