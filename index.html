@@ -6160,7 +6160,7 @@ function grShowStaff(v){
   gr.staff={...v,sheet:{title:v.title,data:v.data}};
   const hint=!v.cols?.length?'':(v.mode==='manual'
     ?'Заполните строку сегодняшнего дня (выделена жёлтым): нажмите на клетку и пишите. Enter — сохранить и дальше.'
-    :'Данные из кассы уже в строке дня. Допишите наличные, остаток наличных, перезаказы, расходы, комментарий, остаток в кассе и конверт (белые клетки).');
+    :'Данные из кассы уже в строке дня. Допишите наличные, остаток наличных, перезаказы, расходы, комментарий, остаток в кассе и конверт. Цифры кассы тоже можно исправить, но администратор увидит в сводке, что их меняли.');
   $('grBody').innerHTML=`<div class="gr-head"><b>${esc(v.title)}</b>${v.shared?'<span class="gr-note">только просмотр</span>':`<span class="gr-note">${esc(grMonthLabel(v.month))}</span>`}${v.mode==='manual'?'<span class="gr-tag">заполняется вручную</span>':''}</div>
   ${hint?`<div class="gr-hint">${hint}</div>`:''}
   ${v.past?.length?'<div class="gr-hint">Прошлые дни месяца тоже можно заполнить или исправить: нажмите на белую клетку в строке нужного дня.</div>':''}
@@ -6424,6 +6424,8 @@ $('closeBigReport').onclick=()=>{grCloseEd(true);if(gr.queue.size){clearTimeout(
 window.addEventListener('beforeunload',e=>{if(gr.queue.size||gr.saving){e.preventDefault();e.returnValue=''}});
 
 // Итог смены: кнопки «Перенести в общий отчет» и «Заполнить отчет вручную».
+// Ручное заполнение временно скрыто (Рустам, 2026-10-21): остаётся только автоперенос с правкой. Вернуть — true.
+const GR_MANUAL_BTN=false;
 const grBaseShiftReport=buildShiftReport;
 buildShiftReport=async function(shiftId){
   await grBaseShiftReport(shiftId);
@@ -6436,24 +6438,32 @@ buildShiftReport=async function(shiftId){
     $('shiftReportContent').insertAdjacentHTML('beforeend',`<div class="v5-box gr-fill" style="margin-top:16px"><b>📋 Общий отчет</b>
       <div class="pp-sub">Перенесите данные смены в общий отчет и допишите наличные, остаток наличных, расходы и перезаказы.</div>
       ${state?`<div class="pp-sub"><b>${esc(state)}</b></div>`:''}
-      <div class="gr-fill-btns"><button type="button" class="primary" id="grFillAuto">Перенести в общий отчет</button><button type="button" class="secondary" id="grFillManual">Заполнить отчет вручную</button></div></div>`);
+      <div class="gr-fill-btns"><button type="button" class="primary" id="grFillAuto">Перенести в общий отчет</button>${GR_MANUAL_BTN?'<button type="button" class="secondary" id="grFillManual">Заполнить отчет вручную</button>':''}</div></div>`);
     $('grFillAuto').onclick=()=>grFillFromShift(shiftId,'auto');
-    $('grFillManual').onclick=()=>grFillFromShift(shiftId,'manual');
+    if(GR_MANUAL_BTN)$('grFillManual').onclick=()=>grFillFromShift(shiftId,'manual');
   }catch(e){console.warn(e)}
 };
 
-// Сводка: где отчет заполнили вручную.
+// Сводка: где отчет заполнили вручную и где сотрудник исправил данные кассы после автопереноса.
+const GR_EDIT_LABELS={C:'смена',D:'выручка',G:'карта',H:'QR',I:'ссылка',J:'перевод',K:'р/с',L:'чеки',M:'возвраты',Q:'ретушь'};
 const grBaseRenderSummary=renderSummary;
 renderSummary=function(d,rg){
   grBaseRenderSummary(d,rg);
   (async()=>{
     const ymd=t=>{const x=new Date(t);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
-    let q=db.from('report_fills').select('day,branch_id,shift_id,updated_at').eq('mode','manual').gte('day',ymd(rg.from)).lt('day',ymd(rg.to)).order('day');
+    let q=db.from('report_fills').select('day,branch_id,shift_id,mode,edited_cols,updated_at').gte('day',ymd(rg.from)).lt('day',ymd(rg.to)).order('day');
     if(sumState.branch)q=q.eq('branch_id',Number(sumState.branch));
     const r=await q;if(r.error||!r.data?.length||sumData?.d!==d)return;
     const bn=id=>salesBranches.find(b=>Number(b.id)===Number(id))?.name||('Филиал #'+id);
     const dd=s=>s.slice(8,10)+'.'+s.slice(5,7);
-    $('sumBody').insertAdjacentHTML('afterbegin',`<div class="v5-box warn" style="margin-bottom:12px"><b>✍️ Общий отчет заполнен вручную</b><div class="pp-sub">${r.data.map(x=>esc(bn(x.branch_id))+' — '+dd(x.day)).join(' · ')}</div></div>`);
+    const man=new Map(),ed=new Map();
+    for(const x of r.data){const k=x.branch_id+'|'+x.day;
+      if(x.mode==='manual')man.set(k,esc(bn(x.branch_id))+' — '+dd(x.day));
+      if(x.edited_cols?.length){const e=ed.get(k)||{t:esc(bn(x.branch_id))+' — '+dd(x.day),c:new Set()};x.edited_cols.forEach(c=>e.c.add(c));ed.set(k,e)}}
+    let h='';
+    if(man.size)h+=`<div class="v5-box warn" style="margin-bottom:12px"><b>✍️ Общий отчет заполнен вручную</b><div class="pp-sub">${[...man.values()].join(' · ')}</div></div>`;
+    if(ed.size)h+=`<div class="v5-box warn" style="margin-bottom:12px"><b>✏️ В общем отчете исправили данные кассы</b><div class="pp-sub">${[...ed.values()].map(e=>e.t+' ('+[...e.c].map(c=>esc(GR_EDIT_LABELS[c]||c)).join(', ')+')').join(' · ')}</div></div>`;
+    if(h)$('sumBody').insertAdjacentHTML('afterbegin',h);
   })();
 };
 
