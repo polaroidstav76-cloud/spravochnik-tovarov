@@ -85,7 +85,7 @@
   button.primary:hover { background: var(--ink-2); }
   button.ok { background: var(--s-green); border-color: var(--s-green); color: #fff; }
   button.small { padding: 7px 10px; font-size: 13px; white-space: nowrap; }
-  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
   .presets button { padding: 8px 2px; font-size: 13px; }
   .presets button.on { border-color: var(--ink); background: var(--sunk); box-shadow: inset 0 0 0 1px var(--ink); }
   .grp { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
@@ -173,22 +173,17 @@
         <button data-p="soft" type="button">Мягко</button>
         <button data-p="std" type="button" class="on">Стандарт</button>
         <button data-p="strong" type="button">Сильно</button>
-        <button data-p="doc" type="button">Документы</button>
       </div>
 
       <div class="grp">Кожа</div>
-      <label class="ctl"><span class="row">Гладкость кожи <b id="v_smooth"></b></span><input type="range" id="smooth" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Сглаживание кожи <b id="v_smooth"></b></span><input type="range" id="smooth" min="0" max="100"></label>
       <label class="ctl"><span class="row">Убрать прыщи и дефекты <b id="v_blemish"></b></span><input type="range" id="blemish" min="0" max="100"></label>
       <label class="ctl"><span class="row">Выровнять тон <b id="v_tone"></b></span><input type="range" id="tone" min="0" max="100"></label>
       <label class="ctl"><span class="row">Свежесть <b id="v_fresh"></b></span><input type="range" id="fresh" min="0" max="100"></label>
-      <label class="ctl"><span class="row">Сохранить текстуру <b id="v_texture"></b></span><input type="range" id="texture" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Текстура кожи <b id="v_texture"></b></span><input type="range" id="texture" min="0" max="100"></label>
       <div class="grp">Лицо и волосы</div>
       <label class="ctl"><span class="row">Мешки и круги под глазами <b id="v_eyes"></b></span><input type="range" id="eyes" min="0" max="100"></label>
-      <label class="ctl"><span class="row">Выразительность <b id="v_clarity"></b></span><input type="range" id="clarity" min="0" max="100"></label>
       <label class="ctl"><span class="row">Объём волос <b id="v_hair"></b></span><input type="range" id="hair" min="0" max="100"></label>
-      <div class="grp">Фото</div>
-      <label class="ctl"><span class="row">Чёткость, без шума <b id="v_quality"></b></span><input type="range" id="quality" min="0" max="100"></label>
-      <label class="ctl"><span class="row">Белый фон и свет <b id="v_bg"></b></span><input type="range" id="bg" min="0" max="100"></label>
 
       <div class="btns">
         <button class="primary wide" id="apply" type="button" disabled>Применить</button>
@@ -199,14 +194,13 @@
         <span>Размер обработки</span>
         <select id="maxSide">
           <option value="1600">1600 px (быстро)</option>
-          <option value="2400">2400 px</option>
-          <option value="3200" selected>3200 px (качество)</option>
-          <option value="4000">4000 px (дольше)</option>
+          <option value="2400" selected>2400 px</option>
+          <option value="3200">3200 px (дольше)</option>
         </select>
       </div>
     </div>
   </div>
-  <p class="foot">Черты лица не меняются: ретушь работает только с кожей, светом и фоном. Объём волос работает на светлом однотонном фоне. Если что-то не убралось автоматически, включите «Кисть».</p>
+  <p class="foot">Черты лица не меняются: ретушь работает только с кожей. Объём волос работает на светлом однотонном фоне. Если что-то не убралось автоматически, включите «Кисть».</p>
 </div>
 
 <script src="retouch/core.js"></script>
@@ -215,10 +209,9 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const PRESETS = {
-    soft:   { smooth: 35, blemish: 55, tone: 40, fresh: 20, texture: 70, eyes: 45, clarity: 25, hair: 15, quality: 30, bg: 60 },
-    std:    { smooth: 55, blemish: 70, tone: 60, fresh: 30, texture: 50, eyes: 60, clarity: 35, hair: 25, quality: 40, bg: 60 },
-    strong: { smooth: 75, blemish: 90, tone: 80, fresh: 45, texture: 30, eyes: 80, clarity: 45, hair: 40, quality: 50, bg: 70 },
-    doc:    { smooth: 45, blemish: 85, tone: 55, fresh: 25, texture: 60, eyes: 65, clarity: 30, hair: 20, quality: 45, bg: 85 }
+    soft:   { smooth: 35, blemish: 50, tone: 40, fresh: 20, texture: 70, eyes: 35, hair: 15 },
+    std:    { smooth: 55, blemish: 70, tone: 60, fresh: 30, texture: 50, eyes: 50, hair: 25 },
+    strong: { smooth: 75, blemish: 90, tone: 80, fresh: 45, texture: 30, eyes: 70, hair: 40 }
   };
   const KEYS = Object.keys(PRESETS.std);
 
@@ -371,7 +364,7 @@
         rebuild(); renderShown(); updateButtons(); renderStrip();
         cacheRaw(it, rawRes);
         const notes = [];
-        if (m.info.error) notes.push('Лицо не найдено: исправлены только свет и фон. Прыщи можно убрать кистью.');
+        if (m.info.error) notes.push('Лицо не найдено, автоматическая ретушь не применена. Прыщи можно убрать кистью.');
         if (m.info.bgNote) notes.push(m.info.bgNote + '.');
         if (m.info.hairNote && opts.hair > 0) notes.push(m.info.hairNote + '.');
         if (!m.info.error && opts.eyes > 0 && !m.info.eyes) notes.push('Глаза не определены — мешки под глазами не обрабатывались.');
