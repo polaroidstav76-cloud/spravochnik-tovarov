@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="favicon.png">
+<title>Ретушь фото</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600;700;800&display=swap">
+<style>
+  :root {
+    --paper:#ECEEF1; --surface:#FFFFFF; --sunk:#F5F6F8; --ink:#17191E; --ink-2:#2A2E36; --muted:#5D6472;
+    --line:#DADEE5; --line-2:#C9CED7; --focus:#2F6FDB;
+    --s-red:#E5412D; --s-orange:#F08A24; --s-yellow:#F4C01E; --s-green:#3AA25A; --s-blue:#2F6FDB;
+    --ok-bg:#E9F6EE; --ok-ink:#1D6B3A; --warn-bg:#FFF5E3; --warn-ink:#8A5300;
+    --f-display:"Unbounded","Onest",system-ui,sans-serif;
+    --f-body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --r-lg:18px; --r-md:12px; --r-sm:9px;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.45 var(--f-body); -webkit-font-smoothing: antialiased; }
+  [hidden] { display: none !important; }
+  header { background: var(--surface); border-bottom: 1px solid var(--line); }
+  header .top { max-width: 1280px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+  .brand h1 { font-family: var(--f-display); font-size: 18px; margin: 0; letter-spacing: .02em; }
+  .brand-stripe { display: flex; flex-direction: column; width: 28px; height: 28px; border-radius: 7px; overflow: hidden; background: var(--ink); padding: 5px 0; justify-content: flex-end; }
+  .brand-stripe i { display: block; height: 3px; }
+  .brand-stripe i:nth-child(1){background:var(--s-red)}.brand-stripe i:nth-child(2){background:var(--s-orange)}.brand-stripe i:nth-child(3){background:var(--s-yellow)}.brand-stripe i:nth-child(4){background:var(--s-green)}.brand-stripe i:nth-child(5){background:var(--s-blue)}
+  .grow { flex: 1; }
+  .back { color: var(--ink); text-decoration: none; font-weight: 600; border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 8px 12px; background: var(--surface); }
+  .back:hover { border-color: var(--ink); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+  .kicker { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  h2 { font-family: var(--f-display); font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 960px) {
+    .grid { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+    #panel { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+  }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px; }
+  .stage { position: relative; }
+  .drop { width: 100%; padding: 64px 16px; text-align: center; border: 2px dashed var(--line-2); border-radius: var(--r-md); color: var(--muted); cursor: pointer; display: block; }
+  .drop.over { border-color: var(--ink); background: var(--sunk); }
+  .drop strong { color: var(--ink); display: block; font-size: 17px; margin-bottom: 4px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r-sm); overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 8px 12px; }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button.on { background: var(--ink); color: #fff; }
+  .zoom { display: inline-flex; align-items: center; gap: 4px; }
+  .zoom b { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; }
+  .brushctl { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .brushctl input { width: 110px; }
+  .viewport { position: relative; overflow: auto; max-height: 76vh; border-radius: var(--r-md); background: repeating-conic-gradient(#e9ebef 0 25%, #f4f5f7 0 50%) 0 0/16px 16px; display: flex; }
+  #compare { position: relative; margin: auto; touch-action: none; user-select: none; -webkit-user-select: none; line-height: 0; flex: none; }
+  #compare canvas { display: block; width: 100%; height: auto; }
+  #cmpOrig { position: absolute; inset: 0; height: 100% !important; clip-path: inset(0 50% 0 0); }
+  #divider { position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); cursor: ew-resize; }
+  #divider::after { content: "↔"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 36px; height: 36px; border-radius: 50%; background: #fff; color: #17191E; font-size: 18px; line-height: 36px; text-align: center; box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+  .tag { position: absolute; top: 8px; padding: 3px 9px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 1.4; pointer-events: none; }
+  #tagL { left: 8px; } #tagR { right: 8px; }
+  #compare.heal { cursor: none; }
+  #compare.heal #cmpOrig, #compare.heal #divider, #compare.heal .tag { display: none; }
+  #brush { position: absolute; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events: none; display: none; transform: translate(-50%, -50%); }
+  #compare.heal:hover #brush { display: block; }
+  .busy { position: absolute; inset: 0; background: rgba(23,25,30,.5); color: #fff; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; font-weight: 600; z-index: 3; border-radius: var(--r-lg); text-align: center; padding: 16px; }
+  .spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; animation: sp .9s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .strip { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 2px; }
+  .thumb { position: relative; flex: none; width: 72px; height: 90px; border-radius: var(--r-sm); border: 2px solid transparent; padding: 0; overflow: hidden; background: var(--sunk); cursor: pointer; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.on { border-color: var(--ink); }
+  .thumb .st { position: absolute; right: 3px; bottom: 3px; font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 99px; background: rgba(0,0,0,.6); color: #fff; }
+  .thumb .st.ok { background: var(--s-green); }
+  .thumb.add { display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--muted); border: 2px dashed var(--line-2); }
+  button { font: 600 14px/1.2 var(--f-body); border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); padding: 10px 14px; cursor: pointer; }
+  button:hover { border-color: var(--ink); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--line-2); }
+  button.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+  button.primary:hover { background: var(--ink-2); }
+  button.ok { background: var(--s-green); border-color: var(--s-green); color: #fff; }
+  button.small { padding: 7px 10px; font-size: 13px; white-space: nowrap; }
+  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+  .presets button { padding: 8px 2px; font-size: 13px; }
+  .presets button.on { border-color: var(--ink); background: var(--sunk); box-shadow: inset 0 0 0 1px var(--ink); }
+  .grp { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+  .ctl { display: block; margin: 0 0 6px; }
+  .ctl .row { display: flex; justify-content: space-between; font-size: 14px; }
+  .ctl .row b { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--ink); margin: 6px 0 0; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .btns > button { flex: 1 1 auto; }
+  .btns > button.wide { flex: 1 1 100%; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+  select { font: inherit; padding: 7px 8px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); }
+  .line { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; }
+  #status { margin-top: 8px; font-size: 14px; color: var(--muted); min-height: 1.3em; }
+  #status.warn { color: var(--warn-ink); background: var(--warn-bg); padding: 8px 10px; border-radius: var(--r-sm); }
+  #status.good { color: var(--ok-ink); background: var(--ok-bg); padding: 8px 10px; border-radius: var(--r-sm); }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .foot { color: var(--muted); font-size: 13px; margin-top: 16px; }
+  @media (max-width: 700px) { h2 { font-size: 22px; } .brushctl input { width: 80px; } }
+</style>
+</head>
+<body>
+<header><div class="top">
+  <a class="brand" href="./"><span class="brand-stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><h1>ПОЛАРОИД</h1></a>
+  <div class="grow"></div>
+  <a class="back" href="./">← На главную</a>
+</div></header>
+
+<div class="wrap">
+  <span class="kicker">Фото на документы и портреты</span>
+  <h2>Ретушь фото</h2>
+  <p class="sub">Загрузите одно или несколько фото, покажите клиенту «до/после» и скачайте результат. Фото обрабатывается прямо на этом компьютере и никуда не отправляется.</p>
+
+  <div class="grid">
+    <div class="card stage" id="stage">
+      <label class="drop" id="drop" for="file">
+        <strong>Выберите или перетащите фото</strong>
+        Можно сразу несколько. Портрет, лицо крупно, белый фон
+      </label>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+
+      <div id="work" hidden>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Режим">
+            <button id="modeCmp" class="on" type="button">До / после</button>
+            <button id="modeHeal" type="button">Кисть: убрать прыщи</button>
+          </div>
+          <span class="brushctl" id="brushCtl" hidden>Кисть <input type="range" id="brushSize" min="2" max="40" value="8"> <button id="undo" class="small" type="button" disabled title="Ctrl+Z">↶ Отменить</button></span>
+          <div class="grow"></div>
+          <div class="zoom">
+            <button class="small" id="zoomOut" type="button" title="Уменьшить">−</button>
+            <b id="zoomVal">100%</b>
+            <button class="small" id="zoomIn" type="button" title="Увеличить">+</button>
+            <button class="small" id="zoomFit" type="button">Вписать</button>
+          </div>
+        </div>
+        <div class="viewport" id="viewport">
+          <div id="compare">
+            <canvas id="cmpRes"></canvas>
+            <canvas id="cmpOrig"></canvas>
+            <div class="tag" id="tagL">До</div><div class="tag" id="tagR">После</div>
+            <div id="divider"></div>
+            <div id="brush"></div>
+          </div>
+        </div>
+        <div class="strip" id="strip"></div>
+        <div class="hint" id="healHint" hidden>Кликните по прыщу или проведите кистью по пятну, которое не убралось само. Увеличьте фото кнопкой «+», чтобы попасть точнее. Отмена: Ctrl+Z.</div>
+      </div>
+      <div class="busy" id="busy"><div class="spin"></div><div id="busyTxt">Обработка…</div></div>
+    </div>
+
+    <div class="card" id="panel">
+      <div class="btns" style="margin-top:0">
+        <button class="ok wide" id="approve" type="button" disabled>✓ Клиент согласен — скачать</button>
+        <button id="download" type="button" disabled>Скачать JPEG</button>
+        <button id="addPhoto" type="button">Добавить фото</button>
+      </div>
+      <div class="btns" id="batchBtns" hidden>
+        <button id="runAll" type="button">Обработать все</button>
+        <button id="zipAll" type="button">Скачать все (ZIP)</button>
+      </div>
+      <div id="status"></div>
+      <hr>
+      <div class="presets" id="presets">
+        <button data-p="soft" type="button">Мягко</button>
+        <button data-p="std" type="button" class="on">Стандарт</button>
+        <button data-p="strong" type="button">Сильно</button>
+        <button data-p="doc" type="button">Документы</button>
+      </div>
+
+      <div class="grp">Кожа</div>
+      <label class="ctl"><span class="row">Гладкость кожи <b id="v_smooth"></b></span><input type="range" id="smooth" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Убрать прыщи и дефекты <b id="v_blemish"></b></span><input type="range" id="blemish" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Выровнять тон <b id="v_tone"></b></span><input type="range" id="tone" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Свежесть <b id="v_fresh"></b></span><input type="range" id="fresh" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Сохранить текстуру <b id="v_texture"></b></span><input type="range" id="texture" min="0" max="100"></label>
+      <div class="grp">Лицо и волосы</div>
+      <label class="ctl"><span class="row">Мешки и круги под глазами <b id="v_eyes"></b></span><input type="range" id="eyes" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Выразительность <b id="v_clarity"></b></span><input type="range" id="clarity" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Объём волос <b id="v_hair"></b></span><input type="range" id="hair" min="0" max="100"></label>
+      <div class="grp">Фото</div>
+      <label class="ctl"><span class="row">Чёткость, без шума <b id="v_quality"></b></span><input type="range" id="quality" min="0" max="100"></label>
+      <label class="ctl"><span class="row">Белый фон и свет <b id="v_bg"></b></span><input type="range" id="bg" min="0" max="100"></label>
+
+      <div class="btns">
+        <button class="primary wide" id="apply" type="button" disabled>Применить</button>
+      </div>
+      <hr>
+      <label class="ctl"><span class="row">Сила эффекта (сразу) <b id="v_strength"></b></span><input type="range" id="strength" min="0" max="100" value="100"></label>
+      <div class="line">
+        <span>Размер обработки</span>
+        <select id="maxSide">
+          <option value="1600">1600 px (быстро)</option>
+          <option value="2400">2400 px</option>
+          <option value="3200" selected>3200 px (качество)</option>
+          <option value="4000">4000 px (дольше)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <p class="foot">Черты лица не меняются: ретушь работает только с кожей, светом и фоном. Объём волос работает на светлом однотонном фоне. Если что-то не убралось автоматически, включите «Кисть».</p>
+</div>
+
+<script src="retouch/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const PRESETS = {
+    soft:   { smooth: 35, blemish: 55, tone: 40, fresh: 20, texture: 70, eyes: 45, clarity: 25, hair: 15, quality: 30, bg: 60 },
+    std:    { smooth: 55, blemish: 70, tone: 60, fresh: 30, texture: 50, eyes: 60, clarity: 35, hair: 25, quality: 40, bg: 60 },
+    strong: { smooth: 75, blemish: 90, tone: 80, fresh: 45, texture: 30, eyes: 80, clarity: 45, hair: 40, quality: 50, bg: 70 },
+    doc:    { smooth: 45, blemish: 85, tone: 55, fresh: 25, texture: 60, eyes: 65, clarity: 30, hair: 20, quality: 45, bg: 85 }
+  };
+  const KEYS = Object.keys(PRESETS.std);
+
+  const drop = $('drop'), file = $('file'), work = $('work'), compare = $('compare'), viewport = $('viewport');
+  const cRes = $('cmpRes'), cOrig = $('cmpOrig'), divider = $('divider'), brush = $('brush');
+  const busy = $('busy'), busyTxt = $('busyTxt'), statusEl = $('status');
+  const applyBtn = $('apply'), dlBtn = $('download'), approveBtn = $('approve'), undoBtn = $('undo');
+
+  // Фото в работе: items[], активное — items[cur].
+  // У каждого: файл, настройки последней обработки, ручные правки кистью (в долях ширины),
+  // кэш результата автоматики (PNG) и готовый JPEG.
+  let items = [], cur = -1, seq = 0;
+  // Данные активного фото в рабочем размере
+  let W = 0, H = 0, origData = null, rawRes = null, baseData = null, resData = null;
+  const baseCanvas = document.createElement('canvas'), resCanvas = document.createElement('canvas');
+  let running = null, worker = null, mode = 'cmp', zoom = 1, strokeId = 0;
+
+  // ----- ползунки и пресеты -----
+  function bindSlider(k) {
+    const el = $(k), out = $('v_' + k);
+    const upd = () => { out.textContent = el.value; };
+    el.addEventListener('input', () => {
+      upd();
+      if (k === 'strength') { const it = items[cur]; if (it) { it.strength = +el.value; it.outBlob = null; } renderShown(); }
+      else markDirty();
+    });
+    upd();
+  }
+  KEYS.concat(['strength']).forEach(bindSlider);
+  function setSliders(p) { KEYS.forEach(k => { if (p[k] != null) { $(k).value = p[k]; $('v_' + k).textContent = p[k]; } }); syncPresetButtons(); }
+  function readSliders() { const o = {}; KEYS.forEach(k => o[k] = +$(k).value); return o; }
+  function syncPresetButtons() {
+    document.querySelectorAll('#presets button').forEach(b => b.classList.toggle('on', KEYS.every(k => +$(k).value === PRESETS[b.dataset.p][k])));
+  }
+  document.querySelectorAll('#presets button').forEach(b => b.addEventListener('click', () => { setSliders(PRESETS[b.dataset.p]); markDirty(); }));
+  setSliders(PRESETS.std);
+
+  function markDirty() {
+    syncPresetButtons();
+    const it = items[cur];
+    if (it && !running) { applyBtn.disabled = false; if (rawRes) setStatus('Настройки изменены — нажмите «Применить».'); }
+  }
+  function setStatus(t, kind) { statusEl.textContent = t || ''; statusEl.className = kind || ''; }
+
+  // ----- загрузка -----
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); });
+  viewport.addEventListener('dragover', e => e.preventDefault());
+  viewport.addEventListener('drop', e => { e.preventDefault(); addFiles(e.dataTransfer.files); });
+  file.addEventListener('change', () => { addFiles(file.files); file.value = ''; });
+  $('addPhoto').addEventListener('click', () => file.click());
+  $('maxSide').addEventListener('change', () => { items.forEach(it => { it.rawBlob = null; }); if (cur >= 0) selectItem(cur, true); });
+
+  function addFiles(list) {
+    const fresh = Array.from(list || []).filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|bmp)$/i.test(f.name));
+    if (!fresh.length) return;
+    const first = items.length;
+    fresh.forEach(f => items.push({ id: ++seq, file: f, name: (f.name || 'photo').replace(/\.[^.]+$/, ''), thumb: URL.createObjectURL(f), opts: null, ops: [], strength: 100, approved: false, rawBlob: null, outBlob: null, done: false, failed: false }));
+    drop.hidden = true; work.hidden = false;
+    renderStrip();
+    if (cur < 0 || !running) selectItem(first);
+  }
+
+  async function decode(f) {
+    try { return await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (e) {
+      return await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(f); });
+    }
+  }
+
+  // ----- переключение фото -----
+  let switching = false;
+  async function selectItem(idx, force) {
+    if (switching || running) return;
+    if (idx === cur && !force) return;
+    switching = true;
+    try {
+      await stashCurrent();
+      cur = idx;
+      const it = items[idx];
+      renderStrip();
+      setStatus('Загрузка фото…');
+      let bmp;
+      try { bmp = await decode(it.file); }
+      catch (e) { it.failed = true; renderStrip(); setStatus('Не удалось открыть «' + it.name + '». Попробуйте JPG или PNG.', 'warn'); origData = null; return; }
+      const maxS = +$('maxSide').value, k = Math.min(1, maxS / Math.max(bmp.width, bmp.height));
+      W = Math.round(bmp.width * k); H = Math.round(bmp.height * k);
+      const oc = document.createElement('canvas'); oc.width = W; oc.height = H;
+      const octx = oc.getContext('2d', { willReadFrequently: true });
+      octx.imageSmoothingQuality = 'high';
+      octx.drawImage(bmp, 0, 0, W, H);
+      origData = octx.getImageData(0, 0, W, H);
+      [cRes, cOrig, baseCanvas, resCanvas].forEach(c => { c.width = W; c.height = H; });
+      cOrig.getContext('2d').putImageData(origData, 0, 0);
+      rawRes = null; baseData = null; resData = null;
+      cRes.getContext('2d').putImageData(origData, 0, 0);
+      $('strength').value = it.strength; $('v_strength').textContent = it.strength;
+      if (it.opts) setSliders(it.opts);
+      setDivider(0.5); fitZoom();
+      updateButtons();
+      if (it.rawBlob && it.rawW === W) {
+        const b = await decode(it.rawBlob);
+        const tc = document.createElement('canvas'); tc.width = W; tc.height = H;
+        const tctx = tc.getContext('2d', { willReadFrequently: true }); tctx.drawImage(b, 0, 0);
+        rawRes = tctx.getImageData(0, 0, W, H);
+        rebuild(); renderShown(); updateButtons();
+        setStatus(it.approved ? 'Клиент согласовал это фото.' : 'Готово. Двигайте разделитель, чтобы сравнить.', it.approved ? 'good' : '');
+      } else {
+        switching = false;
+        await run();
+      }
+    } finally { switching = false; }
+  }
+
+  // Перед уходом с фото сохраняем готовый JPEG, чтобы «Скачать все» не пересчитывало
+  async function stashCurrent() {
+    const it = items[cur];
+    if (!it || !rawRes) return;
+    if (!it.outBlob) it.outBlob = await composeBlob();
+  }
+
+  // ----- обработка в фоне -----
+  function getWorker() {
+    if (worker) return worker;
+    worker = new Worker('retouch/worker.js');
+    return worker;
+  }
+
+  function run() {
+    const it = items[cur];
+    if (!it || !origData) return Promise.resolve();
+    const opts = readSliders();
+    const buf = new Uint8ClampedArray(origData.data).buffer;
+    const id = ++seq;
+    busy.style.display = 'flex';
+    busyTxt.textContent = 'Обработка… ' + (W * H > 4e6 ? 'большое фото, займёт 10–20 секунд' : '');
+    applyBtn.disabled = true; updateButtons(true); setStatus('');
+    return new Promise(resolve => {
+      const wk = getWorker();
+      running = { id, resolve };
+      wk.onmessage = ev => {
+        const m = ev.data;
+        if (!running || m.id !== running.id) return;
+        running = null;
+        busy.style.display = 'none';
+        if (m.fail) { setStatus('Ошибка обработки: ' + m.fail, 'warn'); applyBtn.disabled = false; updateButtons(); resolve(); return; }
+        rawRes = new ImageData(new Uint8ClampedArray(m.buf), W, H);
+        it.opts = opts; it.done = true; it.outBlob = null; it.rawBlob = null; it.rawW = W;
+        rebuild(); renderShown(); updateButtons(); renderStrip();
+        cacheRaw(it, rawRes);
+        const notes = [];
+        if (m.info.error) notes.push('Лицо не найдено: исправлены только свет и фон. Прыщи можно убрать кистью.');
+        if (m.info.bgNote) notes.push(m.info.bgNote + '.');
+        if (m.info.hairNote && opts.hair > 0) notes.push(m.info.hairNote + '.');
+        if (!m.info.error && opts.eyes > 0 && !m.info.eyes) notes.push('Глаза не определены — мешки под глазами не обрабатывались.');
+        setStatus(notes.join(' ') || 'Готово. Двигайте разделитель, чтобы сравнить. Что не убралось — уберите кистью.', notes.length ? 'warn' : '');
+        resolve();
+      };
+      wk.onerror = err => {
+        running = null; busy.style.display = 'none'; applyBtn.disabled = false; updateButtons();
+        setStatus('Не хватило памяти или произошла ошибка. Выберите размер обработки поменьше.', 'warn');
+        worker.terminate(); worker = null; resolve();
+      };
+      wk.postMessage({ id, buf, w: W, h: H, opts }, [buf]);
+    });
+  }
+  applyBtn.addEventListener('click', () => { run(); });
+
+  function cacheRaw(it, data) {
+    const c = document.createElement('canvas'); c.width = data.width; c.height = data.height;
+    c.getContext('2d').putImageData(data, 0, 0);
+    c.toBlob(b => { if (it.rawW === data.width) it.rawBlob = b; }, 'image/png');
+  }
+
+  // база = исходник + правки кистью, результат = автоматика + правки кистью
+  function rebuild() {
+    const it = items[cur];
+    baseData = new ImageData(new Uint8ClampedArray(origData.data), W, H);
+    resData = new ImageData(new Uint8ClampedArray(rawRes.data), W, H);
+    for (const op of it.ops) applyOp(op);
+    baseCanvas.getContext('2d').putImageData(baseData, 0, 0);
+    resCanvas.getContext('2d').putImageData(resData, 0, 0);
+    undoBtn.disabled = !it.ops.length;
+  }
+  function applyOp(op) {
+    const x = op.x * W, y = op.y * W, r = op.r * W;
+    Retouch.heal(baseData.data, W, H, x, y, r);
+    return Retouch.heal(resData.data, W, H, x, y, r);
+  }
+
+  // ----- показ -----
+  function renderShown() {
+    const ctx = cRes.getContext('2d');
+    if (!rawRes) { ctx.putImageData(origData, 0, 0); return; }
+    const s = +$('strength').value / 100;
+    ctx.globalAlpha = 1; ctx.drawImage(baseCanvas, 0, 0);
+    ctx.globalAlpha = s; ctx.drawImage(resCanvas, 0, 0); ctx.globalAlpha = 1;
+  }
+  function setDivider(p) {
+    p = Math.max(0.02, Math.min(0.98, p));
+    divider.style.left = (p * 100) + '%';
+    cOrig.style.clipPath = 'inset(0 ' + ((1 - p) * 100) + '% 0 0)';
+  }
+  function updateButtons(lock) {
+    const has = !!rawRes && !lock;
+    dlBtn.disabled = !has; approveBtn.disabled = !has;
+    const it = items[cur];
+    approveBtn.textContent = it && it.approved ? '✓ Согласовано — скачать ещё раз' : '✓ Клиент согласен — скачать';
+    $('batchBtns').hidden = items.length < 2;
+    $('runAll').disabled = !!lock; $('zipAll').disabled = !!lock;
+  }
+
+  function renderStrip() {
+    const st = $('strip');
+    st.innerHTML = '';
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'thumb' + (i === cur ? ' on' : '');
+      b.title = it.name;
+      const img = document.createElement('img'); img.src = it.thumb; img.alt = it.name; b.appendChild(img);
+      const s = document.createElement('span');
+      s.className = 'st' + (it.approved ? ' ok' : '');
+      s.textContent = it.failed ? '!' : it.approved ? '✓' : it.done ? 'готово' : (i + 1);
+      b.appendChild(s);
+      b.addEventListener('click', () => selectItem(i));
+      st.appendChild(b);
+    });
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'thumb add'; add.textContent = '+'; add.title = 'Добавить фото';
+    add.addEventListener('click', () => file.click());
+    st.appendChild(add);
+  }
+
+  // ----- масштаб -----
+  const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8];
+  function fitWidth() {
+    const vw = viewport.clientWidth, vh = Math.max(240, window.innerHeight * 0.72);
+    return Math.max(100, Math.min(vw, vh * W / H));
+  }
+  function setZoom(z, cx, cy) {
+    const old = compare.getBoundingClientRect(), vr = viewport.getBoundingClientRect();
+    if (cx == null) { cx = vr.left + vr.width / 2; cy = vr.top + vr.height / 2; }
+    const fx = (cx - old.left) / old.width, fy = (cy - old.top) / old.height;
+    zoom = z;
+    compare.style.width = Math.round(fitWidth() * zoom) + 'px';
+    $('zoomVal').textContent = Math.round(zoom * 100) + '%';
+    const nr = compare.getBoundingClientRect();
+    viewport.scrollLeft += (nr.left + fx * nr.width) - cx;
+    viewport.scrollTop += (nr.top + fy * nr.height) - cy;
+    sizeBrush();
+  }
+  function fitZoom() { setZoom(1); viewport.scrollLeft = 0; viewport.scrollTop = 0; }
+  function stepZoom(dir, cx, cy) {
+    let i = ZOOMS.findIndex(z => z >= zoom - 1e-6);
+    if (i < 0) i = ZOOMS.length - 1;
+    i = Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS[i] === zoom ? i + dir : (dir > 0 ? i : i - 1)));
+    setZoom(ZOOMS[i], cx, cy);
+  }
+  $('zoomIn').addEventListener('click', () => stepZoom(1));
+  $('zoomOut').addEventListener('click', () => stepZoom(-1));
+  $('zoomFit').addEventListener('click', fitZoom);
+  viewport.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); stepZoom(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY); }, { passive: false });
+  window.addEventListener('resize', () => { if (W) setZoom(zoom); });
+
+  // ----- режимы -----
+  function setMode(m) {
+    mode = m;
+    $('modeCmp').classList.toggle('on', m === 'cmp');
+    $('modeHeal').classList.toggle('on', m === 'heal');
+    compare.classList.toggle('heal', m === 'heal');
+    $('brushCtl').hidden = m !== 'heal';
+    $('healHint').hidden = m !== 'heal';
+    if (m === 'heal' && zoom < 2 && W > 1200) setZoom(2);
+  }
+  $('modeCmp').addEventListener('click', () => setMode('cmp'));
+  $('modeHeal').addEventListener('click', () => setMode('heal'));
+
+  function brushR() { return +$('brushSize').value / 1000; }   // радиус в долях ширины фото
+  function sizeBrush() {
+    const d = brushR() * 2 * compare.getBoundingClientRect().width;
+    brush.style.width = brush.style.height = Math.max(6, d) + 'px';
+  }
+  $('brushSize').addEventListener('input', sizeBrush);
+
+  // ----- указатель: разделитель или кисть -----
+  let dragging = false, lastPt = null;
+  function toImg(e) { const r = compare.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.width, r }; }
+  function moveBrush(e) { const r = compare.getBoundingClientRect(); brush.style.left = (e.clientX - r.left) + 'px'; brush.style.top = (e.clientY - r.top) + 'px'; }
+  function healAt(p) {
+    const it = items[cur];
+    const op = { x: p.x, y: p.y, r: brushR(), s: strokeId };
+    it.ops.push(op); it.outBlob = null;
+    const box = applyOp(op);
+    if (box) {
+      baseCanvas.getContext('2d').putImageData(baseData, 0, 0, box.x0, box.y0, box.w, box.h);
+      resCanvas.getContext('2d').putImageData(resData, 0, 0, box.x0, box.y0, box.w, box.h);
+    }
+    undoBtn.disabled = false;
+  }
+  compare.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    dragging = true; compare.setPointerCapture(e.pointerId);
+    if (mode === 'heal') {
+      if (!rawRes || running) { dragging = false; return; }
+      strokeId++;
+      const p = toImg(e); lastPt = p; healAt(p); renderShown();
+    } else {
+      const r = compare.getBoundingClientRect(); setDivider((e.clientX - r.left) / r.width);
+    }
+  });
+  compare.addEventListener('pointermove', e => {
+    if (mode === 'heal') moveBrush(e);
+    if (!dragging) return;
+    if (mode === 'heal') {
+      const p = toImg(e), step = brushR() * 0.7;
+      const d = Math.hypot(p.x - lastPt.x, p.y - lastPt.y);
+      if (d < step) return;
+      const nSteps = Math.floor(d / step);
+      for (let k = 1; k <= nSteps; k++) {
+        const t = (k * step) / d;
+        healAt({ x: lastPt.x + (p.x - lastPt.x) * t, y: lastPt.y + (p.y - lastPt.y) * t });
+      }
+      lastPt = { x: lastPt.x + (p.x - lastPt.x) * (nSteps * step / d), y: lastPt.y + (p.y - lastPt.y) * (nSteps * step / d) };
+      renderShown();
+    } else {
+      const r = compare.getBoundingClientRect(); setDivider((e.clientX - r.left) / r.width);
+    }
+  });
+  const endDrag = () => { dragging = false; lastPt = null; };
+  compare.addEventListener('pointerup', endDrag);
+  compare.addEventListener('pointercancel', endDrag);
+
+  function undo() {
+    const it = items[cur];
+    if (!it || !it.ops.length || !rawRes) return;
+    const s = it.ops[it.ops.length - 1].s;
+    while (it.ops.length && it.ops[it.ops.length - 1].s === s) it.ops.pop();
+    it.outBlob = null;
+    rebuild(); renderShown();
+  }
+  undoBtn.addEventListener('click', undo);
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'я') && !e.shiftKey) { e.preventDefault(); undo(); }
+    if (mode === 'heal' && (e.key === '[' || e.key === ']')) {
+      const el = $('brushSize'); el.value = +el.value + (e.key === ']' ? 1 : -1); sizeBrush();
+    }
+  });
+
+  // ----- сохранение -----
+  function composeBlob() {
+    return new Promise(resolve => {
+      const s = +$('strength').value / 100;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(baseCanvas, 0, 0); ctx.globalAlpha = s; ctx.drawImage(resCanvas, 0, 0);
+      c.toBlob(resolve, 'image/jpeg', 0.95);
+    });
+  }
+  function saveBlob(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  async function downloadCurrent() {
+    const it = items[cur];
+    if (!it || !rawRes) return;
+    if (!it.outBlob) it.outBlob = await composeBlob();
+    saveBlob(it.outBlob, it.name + '_retouch.jpg');
+  }
+  dlBtn.addEventListener('click', downloadCurrent);
+  approveBtn.addEventListener('click', async () => {
+    const it = items[cur];
+    if (!it || !rawRes) return;
+    it.approved = true;
+    await downloadCurrent();
+    renderStrip(); updateButtons();
+    const next = items.findIndex((x, i) => i > cur && !x.approved && !x.failed);
+    if (next >= 0) { setStatus('Согласовано и скачано. Открываю следующее фото.', 'good'); selectItem(next); }
+    else setStatus('Согласовано и скачано.' + (items.length > 1 ? ' Все фото можно скачать одним архивом.' : ''), 'good');
+  });
+
+  $('runAll').addEventListener('click', async () => {
+    const start = cur;
+    const todo = items.map((it, i) => i).filter(i => !items[i].done && !items[i].failed);
+    for (let k = 0; k < todo.length; k++) {
+      setStatus('Обрабатываю все: ' + (k + 1) + ' из ' + todo.length + '…');
+      await selectItem(todo[k], true);
+    }
+    if (todo.length && start >= 0 && start !== cur) await selectItem(start);
+    setStatus(todo.length ? 'Все фото обработаны. Проверьте каждое и уберите остатки кистью.' : 'Все фото уже обработаны.', 'good');
+  });
+
+  $('zipAll').addEventListener('click', async () => {
+    await stashCurrent();
+    const ready = items.filter(it => it.outBlob);
+    const missing = items.filter(it => !it.outBlob && !it.failed).length;
+    if (!ready.length) { setStatus('Пока нечего скачивать: сначала обработайте фото.', 'warn'); return; }
+    const used = {};
+    const files = ready.map(it => {
+      let n = it.name + '_retouch'; if (used[n]) n += '_' + (++used[n]); else used[n] = 1;
+      return { name: n + '.jpg', blob: it.outBlob };
+    });
+    saveBlob(await makeZip(files), 'retouch_' + new Date().toISOString().slice(0, 10) + '.zip');
+    setStatus('Скачан архив: ' + ready.length + ' фото.' + (missing ? ' Не обработаны ещё ' + missing + ' — нажмите «Обработать все».' : ''), missing ? 'warn' : 'good');
+  });
+
+  // ZIP без сжатия (JPEG и так сжат)
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  async function makeZip(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    let off = 0;
+    const d = new Date();
+    const dosT = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosD = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    for (const f of files) {
+      const data = new Uint8Array(await f.blob.arrayBuffer()), name = enc.encode(f.name), crc = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+      lh.setUint16(10, dosT, true); lh.setUint16(12, dosD, true); lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, name, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+      ch.setUint16(12, dosT, true); ch.setUint16(14, dosD, true); ch.setUint32(16, crc, true);
+      ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+      ch.setUint32(42, off, true);
+      central.push(ch.buffer, name);
+      off += 30 + name.length + data.length;
+    }
+    const cSize = central.reduce((s, p) => s + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cSize, true); end.setUint32(16, off, true);
+    return new Blob(parts.concat(central, [end.buffer]), { type: 'application/zip' });
+  }
+
+  window.addEventListener('beforeunload', e => {
+    if (items.some(it => it.done && !it.approved)) { e.preventDefault(); e.returnValue = ''; }
+  });
+})();
+</script>
+</body>
+</html>
