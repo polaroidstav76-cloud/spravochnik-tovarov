@@ -383,9 +383,15 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 .pickup-debt-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #F2D29B;background:var(--warn-bg);border-radius:var(--r-sm);padding:10px 12px;margin-top:8px;color:var(--ink)}
 .pickup-debt-row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pickup-debt-row .acts button{min-height:0}
+.pickup-debt-row.remind{border-color:#F3B3AE;background:#FFF1F0}
+.pickup-debt-row.wont{border-color:var(--line,#ddd);background:#F4F4F5;color:#555}
+.pr-text{width:100%;min-height:96px;margin-top:8px;font:inherit;font-size:14px;border:1px solid #E6C7C3;border-radius:8px;padding:8px;background:#fff;color:#222;resize:vertical}
+.pr-step{display:inline-block;font-size:12px;font-weight:700;color:#B42318;background:#FEE4E2;border-radius:999px;padding:2px 8px;margin-left:6px}
+.pp-remind{width:100%;margin-top:10px;background:#FEE4E2;color:#B42318;border-color:#F3B3AE;justify-content:center;min-height:0;white-space:normal;text-align:left;font-weight:700}
+.prepay-alert{margin-top:8px;padding:12px;border-radius:10px;background:#FEE4E2;color:#912018;border:2px solid #F04438}
 .v5-toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(calc(-100% - 30px));visibility:hidden;z-index:70;background:var(--ink);color:#fff;padding:12px 18px;border-radius:var(--r-md);box-shadow:var(--shadow);font-weight:600;transition:transform .25s,visibility .25s;max-width:calc(100vw - 32px)}
 .v5-toast.show{transform:translateX(-50%) translateY(0);visibility:visible}
-#cashOpenModal,#cashCloseModal,#annModal,#pickupRemindModal{z-index:12}
+#cashOpenModal,#cashCloseModal,#annModal,#pickupRemindModal,#payRemindModal{z-index:12}
 #guideTestModal,#guideQModal{z-index:11}
 .cash-expected{font-size:15px;line-height:1.45}
 .cash-expected b{display:block;font-family:var(--f-display);font-size:30px;margin:6px 0 2px;font-variant-numeric:tabular-nums}
@@ -1046,6 +1052,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="modal" id="cashCloseModal"><div class="dialog" style="max-width:560px"><h2 style="margin-top:0">Завершение смены</h2><div id="cashCloseContent"></div><div id="cashCloseStatus" class="status"></div><div class="actions"><button id="cashCloseCancel" class="secondary">Отмена</button><button id="cashCloseOk" class="danger">Завершить смену</button></div></div></div>
 <div class="modal" id="annModal"><div class="dialog" style="max-width:600px"><div id="annContent"></div></div></div>
 <div class="modal" id="pickupRemindModal"><div class="dialog" style="max-width:660px"><h2 style="margin-top:0">⚠ Клиенты не забрали заказы</h2><div id="pickupRemindContent"></div><div class="actions"><button id="pickupRemindOk" class="primary">Понятно</button></div></div></div>
+<div class="modal" id="payRemindModal"><div class="dialog" style="max-width:700px"><h2 style="margin-top:0">📨 Напомнить клиентам об оплате</h2><div id="payRemindContent"></div><div class="actions"><button id="payRemindOk" class="primary">Закрыть</button></div></div></div>
 <div class="modal" id="annAdminModal"><div class="dialog" style="max-width:860px"><h2 style="margin-top:0">Объявления для сотрудников</h2><div class="status">Объявление покажется при открытии смены. Каждый сотрудник увидит его один раз и нажмёт «Прочитал(а)». Те, кто на выходном, увидят его в свою ближайшую смену.</div>
 <div id="annDraft"></div>
 <div class="v5-box"><div class="field"><label for="annTitle">Заголовок *</label><input id="annTitle" placeholder="Например: Новая позиция в прайсе"></div><div class="field"><label for="annBody">Текст</label><textarea id="annBody" rows="4" placeholder="Что изменилось и что нужно знать сотрудникам"></textarea></div><div class="field"><label>Скриншоты</label><div id="annImgDrop" class="ann-drop" tabindex="0">📎 Вставьте скриншот: Ctrl+V (можно прямо в поле текста), перетащите сюда или нажмите, чтобы выбрать файл</div><input type="file" id="annImgFile" accept="image/*" multiple hidden><div id="annImgPrev" class="ann-imgs edit"></div></div><div class="actions" style="justify-content:flex-start"><button id="annPublish" class="primary">Опубликовать</button><span id="annStatus" class="status"></span></div></div>
@@ -3748,10 +3755,37 @@ function pickupClientOnly(o){return o.customer_name?`💳 ${o.customer_name}${o.
 function pickupItemsText(o){return (o.items||[]).map(i=>`${i.name} × ${Number(i.quantity)}`).join(', ')}
 function pickupIsOverdue(o){return Date.now()-new Date(o.created_at).getTime()>=PICKUP_OVERDUE_MS}
 function pickupDays(o){return Math.floor((Date.now()-new Date(o.created_at).getTime())/86400000)}
+// Напоминания об оплате: 7 дней после оформления → 1-е сообщение, +2 дня → 2-е, ещё +2 дня → карта «Только предоплата» или «Не заберут».
+const PAY_REMIND_FIRST_MS=7*86400000,PAY_REMIND_NEXT_MS=2*86400000;
+const PAY_REMIND_TEXTS=['',
+  'Здравствуйте! Ваш заказ готов уже больше недели, но до сих пор не оплачен. Просим вас оплатить заказ в ближайшее время, так как он уже изготовлен по вашему запросу. Забрать его вы сможете позже. Сейчас отправим вам ссылку для оплаты. Спасибо за понимание!',
+  'Здравствуйте! Напоминаем, что ваш заказ до сих пор не оплачен, хотя он был изготовлен более недели назад. Просим вас произвести оплату в ближайшее время. Заказ выполнен по вашему запросу, поэтому обязательство по оплате сохраняется. Отправляю новую ссылку на оплату.'];
+function pickupAgo(v){return v?Date.now()-new Date(v).getTime():-1}
+function pickupRemindStep(o){
+  if(o.status!=='pending')return 0;
+  if(!o.remind1_at)return pickupAgo(o.created_at)>=PAY_REMIND_FIRST_MS?1:0;
+  if(!o.remind2_at)return pickupAgo(o.remind1_at)>=PAY_REMIND_NEXT_MS?2:0;
+  return 0;
+}
+function pickupFinal(o){return o.status==='pending'&&!!o.remind2_at&&pickupAgo(o.remind2_at)>=PAY_REMIND_NEXT_MS}
+function pickupWontTake(o){return pickupFinal(o)&&!o.customer_id}
+function pickupRemindLine(o){
+  const a=[];
+  if(o.remind1_at)a.push(`📨 1-е напоминание ${v5Date(o.remind1_at)}${o.remind1_by?' ('+esc(o.remind1_by)+')':''}`);
+  if(o.remind2_at)a.push(`📨 2-е напоминание ${v5Date(o.remind2_at)}${o.remind2_by?' ('+esc(o.remind2_by)+')':''}`);
+  if(pickupFinal(o))a.push(o.customer_id?'⛔ Клубная карта: только предоплата':'🚫 Не заберут');
+  return a.length?`<div class="status">${a.join(' · ')}</div>`:'';
+}
+function pickupRemindBlock(o){
+  const st=pickupRemindStep(o);if(!st)return '';
+  return `<div style="margin-top:8px"><b>Отправьте клиенту ${st===1?'первое':'второе'} напоминание и ссылку на оплату:</b><textarea class="pr-text" readonly>${esc(PAY_REMIND_TEXTS[st])}</textarea><div class="acts" style="justify-content:flex-start;margin-top:6px"><button class="primary small" onclick="copyPayRemind(${st},this)">📋 Скопировать текст</button><button class="secondary small" onclick="markPayReminded(${o.id},${st})">✅ Отправил клиенту</button></div></div>`;
+}
+function branchPayReminders(){return branchPickups().filter(o=>pickupRemindStep(o))}
 function pickupMatches(o,words){const hay=[o.order_number,o.client_order_ref,o.customer_name,o.customer_phone,o.client_name,o.client_phone,o.comment,o.branch_name,pickupItemsText(o)].join(' ').toLowerCase();return words.every(w=>hay.includes(w))}
 function branchPickups(){const b=salesSession?.branchId;return pickupOrders.filter(o=>o.status==='pending'&&(!b||Number(o.branch_id)===Number(b)))}
 async function loadPickups(){
-  const r=await db.rpc('pickup_list_v2',{p_branch_id:null,p_include_closed:false});
+  let r=await db.rpc('pickup_list_v3',{p_branch_id:null,p_include_closed:false});
+  if(r.error)r=await db.rpc('pickup_list_v2',{p_branch_id:null,p_include_closed:false});
   if(r.error){console.warn('pickup_list',r.error);return false}
   pickupOrders=r.data||[];drawPickupPanel();drawPickupBadge();return true;
 }
@@ -3773,6 +3807,7 @@ function drawPickupPanel(){
   <div class="pp-sub">Эти продажи пробиты «при получении» и ещё не попали в отчёт. Клиент пришёл — нажмите «Оплатить».</div>
   ${fresh.length>3?`<input id="pickupSearch" placeholder="Имя, телефон или №" value="${esc(pickupQuery)}" oninput="pickupQuery=this.value;drawPickupList()">`:''}
   <div id="pickupList" class="pp-list"></div>
+  ${all.some(pickupRemindStep)?`<button class="pp-remind" onclick="openPayReminders()">📨 Напомнить об оплате: ${all.filter(pickupRemindStep).length} →</button>`:''}
   ${over.length?`<button class="pp-debts" onclick="openPickupDebts()">⚠ Не забрали больше 2 дней: ${over.length}. Они в «Долгах клиентов» →</button>`:''}</div>`;
   p.classList.add('show');p.classList.toggle('open',pickupPanelOpen);drawPickupList();
 }
@@ -3795,7 +3830,7 @@ window.openPickupDebts=()=>{$('debtsBtn').click()};
   const prevChange=sel.onchange;
   sel.onchange=()=>{prevChange?.();syncPickupHoldBox()};
   const prevClub=$('saleClubEnabled').onchange;
-  $('saleClubEnabled').onchange=()=>{prevClub?.();syncPickupHoldBox()};
+  $('saleClubEnabled').onchange=()=>{prevClub?.();if(!$('saleClubEnabled').checked&&!salePickup)setPickupOptionAvailable(true);syncPickupHoldBox()};
 })();
 function syncPickupHoldBox(){
   const on=$('salePayment').value==='on_pickup';
@@ -3824,6 +3859,7 @@ $('saveSale').onclick=async()=>{
   pickupLastResult=null;
   if(pay==='on_pickup'){
     if(salePickup){$('saleStatus').textContent='Этот заказ уже ждёт оплаты. Выберите, как клиент платит сейчас.';return}
+    if(club&&saleLoyaltyCustomerId&&pickupOrders.some(o=>String(o.customer_id)===String(saleLoyaltyCustomerId)&&pickupFinal(o))){$('saleStatus').textContent='⛔ У этого клиента только предоплата: он не оплатил прошлый заказ. Выберите способ оплаты сейчас.';return}
     if(salePointsUsed()>0){$('saleStatus').textContent='При оплате «при получении» баллы списать нельзя. Спишите их, когда клиент будет оплачивать.';return}
     const contact=$('salePickupContact').value.trim(),ref=$('salePickupRef').value.trim(),isPhone=/^[+\d\s()\-]{10,}$/.test(contact)&&v5Digits(contact).length>=10;
     if(!contact&&!(club&&saleLoyaltyCustomerId)){$('saleStatus').textContent='Укажите контакт клиента: Telegram, Max или телефон.';$('salePickupContact').focus();return}
@@ -3871,8 +3907,12 @@ const v5BaseSelectLoyalty=selectSaleLoyaltyCustomer;
 selectSaleLoyaltyCustomer=function(c){
   v5BaseSelectLoyalty(c);
   if(salePickup)return;
+  setPickupOptionAvailable(true);
   const ph=v5Digits(c.customer_phone);
   const pend=pickupOrders.filter(o=>o.status==='pending'&&(String(o.customer_id)===String(c.customer_id)||(ph&&v5Digits(o.client_phone)===ph)));
+  const prepay=pend.filter(pickupFinal);
+  if(prepay.length){setPickupOptionAvailable(false);if($('salePayment').value==='on_pickup'){$('salePayment').value='';$('salePayment').onchange()}
+    $('saleClubResults').insertAdjacentHTML('beforeend',`<div class="prepay-alert"><b>⛔ Только предоплата.</b> Клиент не оплатил заказ после двух напоминаний: ${prepay.map(o=>`№${esc(o.order_number)} на ${salesMoney(o.total)}`).join(', ')}. Сначала попросите оплатить этот заказ. Без предоплаты новые заказы не оформлять, «При получении» для этой карты недоступно.</div>`)}
   if(pend.length)$('saleClubResults').insertAdjacentHTML('beforeend',`<div class="sales-warning" style="margin-top:8px;padding:10px;border-radius:10px">⚠ У клиента есть неоплаченный заказ «при получении»:${pend.map(o=>`<div style="margin-top:6px">№${esc(o.order_number)} на ${salesMoney(o.total)} от ${v5Date(o.created_at)}${o.branch_name?' · '+esc(o.branch_name):''} <button class="primary small" onclick="startPickupPayment(${o.id})">Пробить его</button></div>`).join('')}</div>`);
 };
 
@@ -3884,11 +3924,13 @@ renderDebts=function(){v5BaseRenderDebts();renderPickupDebts()};
 function renderPickupDebts(){
   const box=$('pickupDebts');if(!box)return;
   const words=$('debtSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const all=pickupOrders.filter(o=>o.status==='pending'&&pickupIsOverdue(o)&&debtPickupVisible(o)),list=all.filter(o=>pickupMatches(o,words));
-  if(!all.length){box.innerHTML='';return}
+  const vis=pickupOrders.filter(o=>o.status==='pending'&&pickupIsOverdue(o)&&debtPickupVisible(o));
+  const all=vis.filter(o=>!pickupWontTake(o)),list=all.filter(o=>pickupMatches(o,words)),wont=vis.filter(pickupWontTake),wontList=wont.filter(o=>pickupMatches(o,words));
+  const wontHtml=wont.length?`<h3 style="margin-top:16px">🚫 Не заберут: ${wont.length} на ${salesMoney(wont.reduce((a,o)=>a+Number(o.total||0),0))}</h3><div class="status">Клиент без клубной карты не оплатил после двух напоминаний. Если всё же придёт — «Клиент пришёл — пробить».</div>${wontList.map(o=>`<div class="pickup-debt-row wont"><div><b>Заказ №${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))}</div><div class="status">${v5Date(o.created_at)} (${pickupDays(o)} дн. назад) · ${esc(o.branch_name||'')}</div>${pickupRemindLine(o)}</div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button><button class="secondary small" onclick="cancelPickup(${o.id})">Отменить заказ</button></div></div>`).join('')}`:'';
+  if(!all.length){box.innerHTML=wontHtml;return}
   const sum=all.reduce((a,o)=>a+Number(o.total||0),0);
   box.innerHTML=`<h3>🕓 Не забрали заказ «при получении» (больше 2 дней): ${all.length} на ${salesMoney(sum)}</h3><div class="status">Эти продажи не в отчёте. Когда клиент придёт за заказом, нажмите «Клиент пришёл — пробить», выберите способ оплаты и клубную карту. Если клиент отказался — «Отменить заказ».</div>
-  ${list.length?list.map(o=>`<div class="pickup-debt-row"><div><b>Заказ №${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))}</div><div class="status">${v5Date(o.created_at)} (${pickupDays(o)} дн. назад) · ${esc(o.branch_name||'')}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div></div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button><button class="secondary small" onclick="cancelPickup(${o.id})">Отменить заказ</button></div></div>`).join(''):'<div class="status">По поиску ничего не найдено.</div>'}`;
+  ${list.length?list.map(o=>`<div class="pickup-debt-row${pickupRemindStep(o)?' remind':''}"><div><b>Заказ №${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))}</div><div class="status">${v5Date(o.created_at)} (${pickupDays(o)} дн. назад) · ${esc(o.branch_name||'')}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div>${pickupRemindLine(o)}${pickupRemindBlock(o)}</div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button><button class="secondary small" onclick="cancelPickup(${o.id})">Отменить заказ</button></div></div>`).join(''):'<div class="status">По поиску ничего не найдено.</div>'}${wontHtml}`;
 }
 window.cancelPickup=async id=>{
   const o=pickupOrders.find(x=>Number(x.id)===Number(id));if(!o)return;
@@ -3913,6 +3955,29 @@ function showOverduePickupReminder(){
     $('pickupRemindContent').innerHTML=`<div class="status">Эти клиенты не забрали заказы «при получении» больше 2 дней. Если клиент придёт — не пробивайте заказ заново, а найдите его здесь или в «Долгах клиентов» и нажмите «Клиент пришёл — пробить».</div>${over.map(o=>`<div class="pickup-debt-row"><div><b>№${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<div class="status">${esc(pickupItemsText(o))} · ${pickupDays(o)} дн. назад</div></div><div class="acts"><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — пробить</button></div></div>`).join('')}`;
     $('pickupRemindOk').onclick=()=>{close('pickupRemindModal');resolve()};
     open('pickupRemindModal');
+  });
+}
+
+// Окно «Напомнить клиентам об оплате»: заказы своего филиала, которым пора отправить сообщение.
+function renderPayReminders(){
+  const list=branchPayReminders();
+  $('payRemindContent').innerHTML=list.length?`<div class="status">Эти заказы не оплачены. Скопируйте текст, отправьте его клиенту вместе со ссылкой на оплату и нажмите «Отправил клиенту».</div>${list.map(o=>{const st=pickupRemindStep(o);return `<div class="pickup-debt-row remind"><div><b>№${esc(o.order_number)}</b> · ${salesMoney(o.total)} · ${esc(pickupClient(o))}<span class="pr-step">${st}-е напоминание</span><div class="status">${esc(pickupItemsText(o))} · оформлен ${v5Date(o.created_at)} (${pickupDays(o)} дн. назад)</div>${pickupRemindLine(o)}${pickupRemindBlock(o)}</div><div class="acts"><button class="secondary small" onclick="startPickupPayment(${o.id})">Клиент оплатил — пробить</button></div></div>`}).join('')}`:'<div class="status">Всем клиентам напоминания отправлены. Спасибо!</div>';
+}
+window.openPayReminders=()=>{renderPayReminders();$('payRemindOk').onclick=()=>close('payRemindModal');open('payRemindModal')};
+window.copyPayRemind=async(st,btn)=>{const ok=await copyText(PAY_REMIND_TEXTS[st]);const l=btn.textContent;btn.textContent=ok?'✅ Скопировано':'Не удалось скопировать';setTimeout(()=>{btn.textContent=l},1500)};
+window.markPayReminded=async(id,st)=>{
+  const o=pickupOrders.find(x=>Number(x.id)===Number(id));if(!o)return;
+  const r=await db.rpc('pickup_mark_reminded',{p_pickup_id:o.id,p_step:st,p_employee_id:salesSession?.employeeId||null});
+  if(r.error){alert('Не удалось отметить: '+r.error.message);await loadPickups();}
+  else{v5Toast(`Заказ №${o.order_number}: ${st}-е напоминание отмечено. ${st===1?'Если не оплатит, через 2 дня будет второе.':'Если не оплатит за 2 дня, '+(o.customer_id?'карта клиента станет «Только предоплата».':'заказ уйдёт в «Не заберут».')}`);await loadPickups()}
+  if($('payRemindModal').classList.contains('show'))renderPayReminders();
+  if($('debtsModal').classList.contains('show'))renderPickupDebts();
+};
+function showPayRemindersOnShiftOpen(){
+  return new Promise(resolve=>{
+    const sid=salesSession?.shiftId;if(!sid||!branchPayReminders().length){resolve();return}
+    const key='payRemind_'+sid;try{if(localStorage.getItem(key)){resolve();return}localStorage.setItem(key,'1')}catch(e){}
+    renderPayReminders();$('payRemindOk').onclick=()=>{close('payRemindModal');resolve()};open('payRemindModal');
   });
 }
 
@@ -4157,6 +4222,7 @@ async function runShiftOpenChecks(){
     await loadPickups();
     await showAnnouncements();
     await showOverduePickupReminder();
+    await showPayRemindersOnShiftOpen();
   }catch(e){console.error(e)}
   finally{shiftChecksRunning=false}
 }
