@@ -74,6 +74,10 @@ button{transition:transform .12s,box-shadow .12s,background .12s}button:hover{tr
 
 .debt-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.debt-summary div{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:8px 12px;font-weight:700}.debt-customer{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc;margin-top:12px}.debt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.debt-name{font-weight:800;font-size:17px}.debt-total{font-weight:800;color:#c2410c}.debt-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-top:1px solid #e2e8f0}.debt-row.paid{opacity:.65}.debt-row .debt-sum{font-weight:700;white-space:nowrap}.debt-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .wa-red,button.wa-red{background:#D92D20;color:#fff;border-color:#D92D20;font-weight:700}.wa-red:hover,button.wa-red:hover{background:#B42318;border-color:#B42318;color:#fff}.wa-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}.wa-table{width:100%;border-collapse:collapse;font-size:14px}.wa-table th{position:sticky;top:0;background:var(--sunk,#f1f5f9);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}.wa-table td{border-bottom:1px solid var(--line);padding:4px 6px;vertical-align:top}.wa-table tr:last-child td{border-bottom:0}.wa-no{width:38px;text-align:center!important;color:#64748b}.wa-name{width:32%}.wa-table td.wa-no{padding-top:12px}.wa-table input,.wa-table textarea{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:7px 8px;font:inherit;border-radius:8px;resize:none;min-height:0}.wa-table input:focus,.wa-table textarea:focus{border-color:var(--line);background:#fff;outline:none}.wa-table tr.wa-dirty td{background:#FFFBEB}.wa-ro{padding:7px 8px;white-space:pre-wrap;line-height:1.45}
+.sp-table .sp-price{width:110px;white-space:nowrap}.sp-table .sp-note{width:30%}.sp-table .sp-del{width:40px;text-align:center}.sp-table td.sp-price .wa-ro{font-weight:700;text-align:right}.sp-table th.sp-price{text-align:right}.sp-table input.sp-in-price{text-align:right}.sp-table .sp-x{padding:6px 9px;min-height:0;background:transparent;border:1px solid transparent;color:#98A2B3}.sp-table .sp-x:hover{color:#D92D20;border-color:#FDA29B}.sp-table tr.sp-new td{background:#ECFDF3}.sp-table .sp-note .wa-ro{color:#475467;font-size:13px}.sp-sub{display:none;color:#475467;font-size:12.5px;margin-top:3px}
+.desk-row-main:has(#staffPriceBtn){grid-template-columns:1.6fr repeat(4,minmax(0,1fr))}
+@media(max-width:1000px){.desk-row-main:has(#staffPriceBtn){grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.desk-row-main:has(#staffPriceBtn){grid-template-columns:1fr 1fr}.sp-table:not(.sp-admin) .sp-note{display:none}.sp-table:not(.sp-admin) .sp-sub{display:block}.sp-table .sp-price{width:84px}.sp-table .sp-note{width:auto}}
 .tpl-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}.tpl-item{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}.tpl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.tpl-title{font-weight:800;font-size:16px}.tpl-text{white-space:pre-wrap;line-height:1.5;font-size:14px;margin-top:8px}.tpl-actions{display:flex;gap:6px;flex-wrap:wrap}.tpl-actions button{padding:8px 12px}.tpl-form{border:1px solid #dbe4ef;border-radius:14px;padding:12px;background:#fff;margin-bottom:12px}.tpl-form textarea{min-height:140px}.tpl-search{display:grid;grid-template-columns:1fr 200px;gap:8px}
 @media(max-width:700px){.tpl-search{grid-template-columns:1fr}}
 .tpl-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.tpl-bar-btns{display:flex;gap:6px}
@@ -487,6 +491,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
     <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></symbol>
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></symbol>
+    <symbol id="i-price" viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
     <symbol id="i-bars" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/></symbol>
@@ -533,6 +538,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
       <button id="clubBtn" class="secondary tile"><svg class="ic" aria-hidden="true"><use href="#i-card"/></svg><span class="tile-name">Клубная карта</span><span class="tile-hint">+5% баллами на следующие сутки, списание до 30% заказа</span></button>
       <button id="salesCatalogPriceBtn" class="secondary tile"><svg class="ic" aria-hidden="true"><use href="#i-tag"/></svg><span class="tile-name">Товары и услуги</span><span class="tile-hint">Цены, опт и описание позиций</span></button>
       <button id="templatesBtn" class="secondary tile"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg><span class="tile-name">Шаблоны</span><span class="tile-hint">Готовые ответы клиентам</span></button>
+      <button id="staffPriceBtn" class="secondary tile"><svg class="ic" aria-hidden="true"><use href="#i-price"/></svg><span class="tile-name">Прайс для сотрудников</span><span class="tile-hint">Все товары и услуги с ценами</span></button>
     </div>
   </div>
 
@@ -1038,6 +1044,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="tpl-search"><input id="tplSearch" placeholder="Поиск по названию и тексту шаблона…"><select id="tplCategoryFilter"><option value="">Все категории</option></select></div>
 <div class="tpl-bar"><div id="tplCount" class="count"></div><div class="tpl-bar-btns"><button id="tplExpandAll" class="small">Развернуть все</button><button id="tplCollapseAll" class="small">Свернуть все</button></div></div><div id="tplOrderHint" class="status" style="display:none;margin-top:6px"></div><div id="tplList" class="tpl-list"></div><div class="actions"><button id="closeTemplates">Закрыть</button></div></div></div>
 <div class="modal" id="waTemplatesModal"><div class="dialog" style="max-width:980px"><h2 style="margin-top:0">Список шаблонов для WhatsApp</h2><div id="waHint" class="status" style="margin-bottom:12px"></div><div class="wa-wrap"><table class="wa-table"><thead><tr><th class="wa-no">№</th><th class="wa-name">Наименование шаблона</th><th>Описание шаблона</th></tr></thead><tbody id="waRows"></tbody></table></div><div id="waStatus" class="status" style="margin-top:8px"></div><div class="actions"><button id="waSaveBtn" class="primary" style="display:none">Сохранить</button><button id="closeWaTemplates">Закрыть</button></div></div></div>
+<div class="modal" id="staffPriceModal"><div class="dialog" style="max-width:980px"><h2 style="margin-top:0">Прайс для сотрудников</h2><div id="spHint" class="status" style="margin-bottom:10px"></div><div class="actions" style="justify-content:flex-start;margin:0 0 10px;flex-wrap:wrap"><input id="spSearch" type="search" placeholder="Поиск по названию…" style="flex:1 1 240px;min-width:0"><button id="spAddBtn" class="primary" style="display:none">＋ Добавить позицию</button></div><div class="wa-wrap"><table class="wa-table sp-table"><thead><tr><th>Наименование</th><th class="sp-price">Цена</th><th class="sp-note">Примечание</th><th class="sp-del" id="spDelHead" style="display:none"></th></tr></thead><tbody id="spRows"></tbody></table></div><div id="spStatus" class="status" style="margin-top:8px"></div><div class="actions"><button id="spSaveBtn" class="primary" style="display:none">Сохранить</button><button id="closeStaffPrice">Закрыть</button></div></div></div>
 
 <div class="modal" id="debtsModal"><div class="dialog" style="max-width:950px"><h2 style="margin-top:0">Долги клиентов</h2><div class="status">Сюда попадают продажи с оплатой «Расчётный счёт» по клубной карте. В отчётах они считаются оплаченными. Когда клиент оплатит, отметьте продажи галочками и нажмите «Отметить оплаченными».</div>
 <div class="tpl-search" style="margin-top:12px"><input id="debtSearch" placeholder="Поиск по имени или телефону клиента…"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="debtShowPaid" type="checkbox" style="width:auto"> Показать оплаченные</label></div>
@@ -3669,6 +3676,75 @@ async function saveWaTemplates(){
 $('waListBtn').onclick=openWaTemplates;
 $('waSaveBtn').onclick=saveWaTemplates;
 $('closeWaTemplates').onclick=()=>{if($('waRows').querySelector('tr.wa-dirty')&&!confirm('Есть несохранённые изменения. Закрыть без сохранения?'))return;close('waTemplatesModal')};
+// Прайс для сотрудников: товары и цены (таблица staff_prices). Сотрудники смотрят, администратор добавляет, правит и удаляет.
+let spRows=[],spNewSeq=0;
+const spFields=['name','price','note'];
+function spPrice(v){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(v||0))+' ₽'}
+function spNum(v){const n=Number(String(v??'').replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)?n:NaN}
+function spIsDirty(r){return r._new||spFields.some(f=>String(r[f]??'')!==String(r._orig[f]??''))}
+function spRowHtml(r){
+  const key=r._new?r._key:'id'+r.id;
+  if(!isAdmin)return`<tr data-k="${key}"><td><div class="wa-ro">${esc(r.name||'')}${r.note?`<div class="sp-sub">${esc(r.note)}</div>`:''}</div></td><td class="sp-price"><div class="wa-ro">${spPrice(r.price)}</div></td><td class="sp-note"><div class="wa-ro">${esc(r.note||'')}</div></td></tr>`;
+  return`<tr data-k="${key}" class="${r._new?'sp-new':''}${spIsDirty(r)&&!r._new?' wa-dirty':''}"><td><textarea rows="1" data-f="name" placeholder="Наименование">${esc(r.name||'')}</textarea></td><td class="sp-price"><input class="sp-in-price" data-f="price" inputmode="decimal" placeholder="0" value="${esc(String(r.price??''))}"></td><td class="sp-note"><textarea rows="1" data-f="note" placeholder="—">${esc(r.note||'')}</textarea></td><td class="sp-del"><button type="button" class="sp-x" title="Удалить позицию" data-del="${key}">✕</button></td></tr>`;
+}
+function spRowByKey(k){return spRows.find(r=>(r._new?r._key:'id'+r.id)===k)}
+function spApplySearch(){
+  const q=$('spSearch').value.trim().toLowerCase();let shown=0;
+  $('spRows').querySelectorAll('tr[data-k]').forEach(tr=>{const r=spRowByKey(tr.dataset.k);const ok=!q||r._new||[r.name,r.note].some(x=>String(x||'').toLowerCase().includes(q));tr.style.display=ok?'':'none';if(ok)shown++});
+  const empty=$('spEmpty');if(empty)empty.remove();
+  if(!shown)$('spRows').insertAdjacentHTML('beforeend',`<tr id="spEmpty"><td colspan="4"><div class="status" style="padding:8px">${spRows.length?'Ничего не найдено.':'Прайс пока пуст.'}</div></td></tr>`);
+}
+function renderStaffPrice(){
+  $('spAddBtn').style.display=isAdmin?'':'none';$('spSaveBtn').style.display=isAdmin?'':'none';$('spDelHead').style.display=isAdmin?'':'none';document.querySelector('.sp-table').classList.toggle('sp-admin',!!isAdmin);
+  $('spHint').textContent=isAdmin?'Правьте название, цену и примечание прямо в таблице и нажмите «Сохранить». Изменённые строки подсвечены.':'Цены на товары и услуги. Прайс ведёт администратор.';
+  const coll=new Intl.Collator('ru',{numeric:true,sensitivity:'base'});
+  spRows.sort((a,b)=>(b._new?1:0)-(a._new?1:0)||(a._new&&b._new?b._seq-a._seq:coll.compare(a._orig.name||'',b._orig.name||'')));
+  $('spRows').innerHTML=spRows.map(spRowHtml).join('');
+  $('spRows').querySelectorAll('textarea').forEach(waAutoGrow);
+  spApplySearch();
+}
+$('spRows').addEventListener('input',e=>{const t=e.target;if(!t.dataset.f)return;if(t.tagName==='TEXTAREA')waAutoGrow(t);const tr=t.closest('tr'),r=spRowByKey(tr.dataset.k);r[t.dataset.f]=t.value;if(!r._new)tr.classList.toggle('wa-dirty',spIsDirty(r));$('spStatus').textContent=''});
+$('spRows').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-del]');if(!b)return;const r=spRowByKey(b.dataset.del);
+  if(r._new){spRows=spRows.filter(x=>x!==r);b.closest('tr').remove();spApplySearch();return}
+  if(!confirm(`Удалить из прайса «${r._orig.name}»?`))return;
+  b.disabled=true;const res=await db.from('staff_prices').delete().eq('id',r.id);
+  if(res.error){b.disabled=false;$('spStatus').textContent='Не удалось удалить: '+res.error.message;return}
+  spRows=spRows.filter(x=>x!==r);b.closest('tr').remove();spApplySearch();$('spStatus').textContent='Позиция удалена ✓';
+});
+async function openStaffPrice(){
+  open('staffPriceModal');$('spStatus').textContent='';$('spSearch').value='';
+  $('spRows').innerHTML='<tr><td colspan="4"><div class="status" style="padding:8px">Загрузка…</div></td></tr>';
+  const r=await db.from('staff_prices').select('id,name,price,note').order('name');
+  if(r.error){$('spRows').innerHTML=`<tr><td colspan="4"><div class="status" style="padding:8px">Не удалось загрузить: ${esc(r.error.message)}</div></td></tr>`;$('spSaveBtn').style.display='none';$('spAddBtn').style.display='none';return}
+  spRows=(r.data||[]).map(x=>({id:x.id,name:x.name||'',price:Number(x.price),note:x.note||'',_orig:{name:x.name||'',price:Number(x.price),note:x.note||''}}));
+  renderStaffPrice();if(innerWidth>700)setTimeout(()=>$('spSearch').focus(),50);
+}
+function addStaffPriceRow(){
+  const row={_new:true,_key:'n'+(++spNewSeq),_seq:spNewSeq,name:'',price:'',note:'',_orig:{}};spRows.unshift(row);
+  $('spRows').insertAdjacentHTML('afterbegin',spRowHtml(row));const empty=$('spEmpty');if(empty)empty.remove();
+  $('spRows').querySelector(`tr[data-k="${row._key}"] textarea`).focus();
+}
+async function saveStaffPrice(){
+  const changed=spRows.filter(spIsDirty);
+  if(!changed.length){$('spStatus').textContent='Изменений нет.';return}
+  for(const r of changed){
+    if(!String(r.name||'').trim()){$('spStatus').textContent='У каждой позиции должно быть наименование.';return}
+    const n=spNum(r.price);if(String(r.price??'').trim()===''||!(n>=0)){$('spStatus').textContent=`Проверьте цену у «${String(r.name).trim()}»: нужно число, например 150 или 4,45.`;return}
+  }
+  const now=new Date().toISOString(),row=r=>({name:String(r.name).trim(),price:spNum(r.price),note:String(r.note||'').trim()||null,updated_at:now});
+  const upd=changed.filter(r=>!r._new),ins=changed.filter(r=>r._new);
+  $('spSaveBtn').disabled=true;$('spStatus').textContent='Сохраняю…';
+  if(upd.length){const res=await db.from('staff_prices').upsert(upd.map(r=>({id:r.id,...row(r)})),{onConflict:'id'});if(res.error){$('spSaveBtn').disabled=false;$('spStatus').textContent='Не удалось сохранить: '+res.error.message;return}upd.forEach(r=>{const v=row(r);Object.assign(r,{name:v.name,price:v.price,note:v.note||''});r._orig={name:r.name,price:r.price,note:r.note}})}
+  if(ins.length){const res=await db.from('staff_prices').insert(ins.map(row)).select('id,name,price,note');if(res.error){$('spSaveBtn').disabled=false;$('spStatus').textContent='Не удалось добавить новые позиции: '+res.error.message;return}
+    spRows=spRows.filter(r=>!r._new).concat((res.data||[]).map(x=>({id:x.id,name:x.name,price:Number(x.price),note:x.note||'',_orig:{name:x.name,price:Number(x.price),note:x.note||''}})))}
+  $('spSaveBtn').disabled=false;renderStaffPrice();$('spStatus').textContent='Сохранено ✓';
+}
+$('staffPriceBtn').onclick=openStaffPrice;
+$('spSearch').oninput=spApplySearch;
+$('spAddBtn').onclick=addStaffPriceRow;
+$('spSaveBtn').onclick=saveStaffPrice;
+$('closeStaffPrice').onclick=()=>{if(isAdmin&&spRows.some(spIsDirty)&&!confirm('Есть несохранённые изменения. Закрыть без сохранения?'))return;close('staffPriceModal')};
 $('tplExpandAll').onclick=()=>setAllTplGroups(true);
 $('tplCollapseAll').onclick=()=>setAllTplGroups(false);
 </script>
