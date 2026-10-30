@@ -6581,6 +6581,11 @@ renderSummary=function(d,rg){
 .ck-table .ck-del:hover{color:var(--bad-ink)}
 .ck-branch{padding:8px;white-space:nowrap;color:var(--muted)}
 .ck-empty{padding:18px;color:var(--muted);text-align:center}
+.ck-pay:empty{display:none}.ck-pay{padding:2px 4px 4px}
+.ck-pay-btn{min-height:0;width:100%;padding:6px 8px;font-size:13px;font-weight:700;border:0;border-radius:6px;background:#D93025;color:#fff;cursor:pointer}
+.ck-pay-btn:hover{background:#B3261E}
+.ck-paid{display:block;width:100%;text-align:left;min-height:0;padding:5px 8px;font-size:12px;font-weight:600;border:0;border-radius:6px;background:#E3F4E8;color:#1E6B34;cursor:default}
+.ck-paid.can-undo{cursor:pointer}
 </style>
 <script>
 // ===== Чеки филиалов =====
@@ -6603,7 +6608,16 @@ function ckRowCls(x){
   if(x.readiness==='Отметить заказ')return 'ck-mark';
   const d=ckDue(x);return d&&Date.now()>=d.warn?'ck-late':'';
 }
-function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;tr.classList.remove('ck-ok','ck-late','ck-mark');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
+// Визитки печатает партнёр (Мастерфото): сотрудник отмечает, что перевёл оплату. Без отметки «Готово» не ставится.
+function ckIsVizitki(x){return /визитк/i.test(x.product||'')}
+function ckNeedPay(x){return ckIsVizitki(x)&&!x.partner_paid_at}
+function ckPayHtml(x){
+  if(!ckIsVizitki(x))return '';
+  if(!x.partner_paid_at)return '<button type="button" class="ck-pay-btn">💳 Оплатить визитки Мастерфото</button>';
+  const t=new Date(x.partner_paid_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return `<button type="button" class="ck-paid${isAdmin?' can-undo':''}"${isAdmin?' title="Снять отметку об оплате"':''}>✅ Визитки оплачены · ${esc(x.partner_paid_by||'')} ${t}</button>`;
+}
+function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;const pay=tr.querySelector('.ck-pay'),ph=ckPayHtml(x);if(pay&&pay.dataset.h!==ph){pay.innerHTML=ph;pay.dataset.h=ph}tr.classList.remove('ck-ok','ck-late','ck-mark');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
 setInterval(()=>{if($('checksModal').classList.contains('show'))ckPaint()},60000);
 const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['order_no','Номер заказа','area',130],['readiness','Готовность','ready',200]];
 const ck={rows:[],dirty:new Set(),timer:null,saving:false,branch:null};
@@ -6639,7 +6653,7 @@ function ckDraw(){
     const v=x[f[0]]??'';
     if(f[2]==='date')return `<td><input type="date" data-f="${f[0]}" value="${esc(v)}"></td>`;
     if(f[2]==='ready')return `<td><select data-f="${f[0]}" class="${CK_CLS[v]||''}">${[...new Set([...CK_READY,v].filter(Boolean))].map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`;
-    return `<td><textarea data-f="${f[0]}" rows="1" maxlength="20000">${esc(v)}</textarea></td>`;
+    return `<td><textarea data-f="${f[0]}" rows="1" maxlength="20000">${esc(v)}</textarea>${f[0]==='product'?'<div class="ck-pay"></div>':''}</td>`;
   }).join('')}<td><button type="button" class="ck-del" title="Удалить строку" aria-label="Удалить строку">✕</button></td></tr>`).join('');
   ckPaint();ckFitAll();
 }
@@ -6647,11 +6661,31 @@ function ckBn(id){return salesBranches.find(b=>Number(b.id)===Number(id))?.name|
 $('ckBody').addEventListener('input',e=>{
   const el=e.target.closest('[data-f]'),tr=e.target.closest('tr[data-id]');if(!el||!tr)return;
   const row=ck.rows.find(x=>String(x.id)===tr.dataset.id);if(!row)return;
+  if(el.dataset.f==='readiness'&&el.value==='Готово'&&ckNeedPay(row)){el.value=row.readiness||'В работе';alert('Сначала оплатите визитки Мастерфото и нажмите красную кнопку «Оплатить визитки Мастерфото».');return}
   row[el.dataset.f]=el.value;ckFit(el);if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';ckPaint();
   ck.dirty.add(row.id);tr.classList.add('dirty');ckMsg('Есть несохранённые изменения');
   clearTimeout(ck.timer);ck.timer=setTimeout(ckFlush,1000);
 });
 $('ckBody').addEventListener('click',async e=>{
+  const pb=e.target.closest('.ck-pay-btn,.ck-paid.can-undo');
+  if(pb){
+    const id=Number(pb.closest('tr[data-id]').dataset.id),row=ck.rows.find(x=>x.id===id);if(!row)return;
+    let patch;
+    if(pb.classList.contains('ck-pay-btn')){
+      if(!confirm('Вы перевели оплату за визитки в Мастерфото?'))return;
+      let who=salesSession?.employeeName||(isAdmin?'Админ':'');
+      if(!who){who=(prompt('Кто оплатил визитки? Напишите своё имя.')||'').trim();if(!who)return}
+      patch={partner_paid_at:new Date().toISOString(),partner_paid_by:who};
+    }else{
+      if(!confirm('Снять отметку «Визитки оплачены»?'))return;
+      patch={partner_paid_at:null,partner_paid_by:null};
+    }
+    pb.disabled=true;
+    const r=await db.from('branch_checks').update(patch).eq('id',id);
+    pb.disabled=false;
+    if(r.error){ckMsg('Не сохранилось: '+r.error.message,true);return}
+    Object.assign(row,patch);ckPaint();ckMsg(patch.partner_paid_at?'Оплата визиток отмечена ✓':'Отметка снята');return;
+  }
   const b=e.target.closest('.ck-del');if(!b)return;
   const tr=b.closest('tr[data-id]'),id=Number(tr.dataset.id),row=ck.rows.find(x=>x.id===id);
   if(!confirm('Удалить строку'+(row?.product?' «'+row.product+'»':'')+'?'))return;
