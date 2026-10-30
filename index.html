@@ -6662,6 +6662,9 @@ renderSummary=function(d,rg){
 .ck-pay-btn:hover{background:#B3261E}
 .ck-paid{display:block;width:100%;text-align:left;min-height:0;padding:5px 8px;font-size:12px;font-weight:600;border:0;border-radius:6px;background:#E3F4E8;color:#1E6B34;cursor:default}
 .ck-paid.can-undo{cursor:pointer}
+.ck-table textarea.ck-note{margin-top:4px;font-size:13px;border:1px dashed var(--line)}
+.ck-table textarea.ck-note.has{background:#FFF4D6;border:1px solid #E5A100;color:#5A3D00}
+.ck-note-by{padding:2px 8px 0;font-size:11px;color:var(--muted)}.ck-note-by:empty{display:none}
 </style>
 <script>
 // ===== Чеки филиалов =====
@@ -6693,9 +6696,15 @@ function ckPayHtml(x){
   const t=new Date(x.partner_paid_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   return `<button type="button" class="ck-paid${isAdmin?' can-undo':''}"${isAdmin?' title="Снять отметку об оплате"':''}>✅ Визитки оплачены · ${esc(x.partner_paid_by||'')} ${t}</button>`;
 }
-function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;const pay=tr.querySelector('.ck-pay'),ph=ckPayHtml(x);if(pay&&pay.dataset.h!==ph){pay.innerHTML=ph;pay.dataset.h=ph}tr.classList.remove('ck-ok','ck-late','ck-mark');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
+// «Комментарий сотрудника» под готовностью: пишет сотрудник по заказу, сменщик видит на следующий день, кто и когда написал.
+function ckNoteBy(x){
+  if(!String(x.staff_comment||'').trim()||!x.staff_comment_at)return '';
+  const t=new Date(x.staff_comment_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return '— '+esc(x.staff_comment_by||'')+(x.staff_comment_by?', ':'')+t;
+}
+function ckPaint(){document.querySelectorAll('#ckBody tr[data-id]').forEach(tr=>{const x=ck.rows.find(r=>String(r.id)===tr.dataset.id);if(!x)return;const nb=tr.querySelector('.ck-note-by'),nh=ckNoteBy(x);if(nb&&nb.innerHTML!==nh)nb.innerHTML=nh;tr.querySelector('.ck-note')?.classList.toggle('has',!!String(x.staff_comment||'').trim());const pay=tr.querySelector('.ck-pay'),ph=ckPayHtml(x);if(pay&&pay.dataset.h!==ph){pay.innerHTML=ph;pay.dataset.h=ph}tr.classList.remove('ck-ok','ck-late','ck-mark');const c=ckRowCls(x);if(c)tr.classList.add(c);const d=ckDue(x);tr.title=d?'Срок до '+new Date(d.end).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''})}
 setInterval(()=>{if($('checksModal').classList.contains('show'))ckPaint()},60000);
-const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['order_no','Номер заказа','area',130],['readiness','Готовность','ready',200]];
+const CK_FIELDS=[['check_date','Дата','date',130],['product','Наименование товара','area',260],['payment','Оплата','area',150],['deadline','Срок изготовления','area',150],['contacts','Контакты','area',190],['order_no','Номер заказа','area',130],['readiness','Готовность','ready',240]];
 const ck={rows:[],dirty:new Set(),timer:null,saving:false,branch:null};
 function ckMsg(t,bad){const m=$('ckMsg');m.textContent=t||'';m.classList.toggle('bad',!!bad)}
 async function openChecks(){
@@ -6723,12 +6732,12 @@ async function ckLoad(){
 function ckDraw(){
   const all=ck.branch==='all',q=$('ckSearch').value.trim().toLowerCase();
   $('ckHead').innerHTML='<tr>'+(all?'<th>Филиал</th>':'')+CK_FIELDS.map(f=>`<th style="width:${f[3]}px">${f[1]}</th>`).join('')+'<th style="width:40px"></th></tr>';
-  const rows=q?ck.rows.filter(x=>CK_FIELDS.some(f=>String(x[f[0]]||'').toLowerCase().includes(q))||(all&&ckBn(x.branch_id).toLowerCase().includes(q))):ck.rows;
+  const rows=q?ck.rows.filter(x=>[...CK_FIELDS.map(f=>f[0]),'staff_comment'].some(f=>String(x[f]||'').toLowerCase().includes(q))||(all&&ckBn(x.branch_id).toLowerCase().includes(q))):ck.rows;
   if(!rows.length){$('ckBody').innerHTML=`<tr><td colspan="9" class="ck-empty">${ck.rows.length?'Ничего не найдено.':'Чеков пока нет. Нажмите «+ Добавить строку».'}</td></tr>`;return}
   $('ckBody').innerHTML=rows.map(x=>`<tr data-id="${x.id}"${ck.dirty.has(x.id)?' class="dirty"':''}>${all?`<td class="ck-branch">${esc(ckBn(x.branch_id))}</td>`:''}${CK_FIELDS.map(f=>{
     const v=x[f[0]]??'';
     if(f[2]==='date')return `<td><input type="date" data-f="${f[0]}" value="${esc(v)}"></td>`;
-    if(f[2]==='ready')return `<td><select data-f="${f[0]}" class="${CK_CLS[v]||''}">${[...new Set([...CK_READY,v].filter(Boolean))].map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`;
+    if(f[2]==='ready')return `<td><select data-f="${f[0]}" class="${CK_CLS[v]||''}">${[...new Set([...CK_READY,v].filter(Boolean))].map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select><textarea data-f="staff_comment" class="ck-note" rows="1" maxlength="20000" placeholder="Комментарий сотрудника">${esc(x.staff_comment??'')}</textarea><div class="ck-note-by"></div></td>`;
     return `<td><textarea data-f="${f[0]}" rows="1" maxlength="20000">${esc(v)}</textarea>${f[0]==='product'?'<div class="ck-pay"></div>':''}</td>`;
   }).join('')}<td><button type="button" class="ck-del" title="Удалить строку" aria-label="Удалить строку">✕</button></td></tr>`).join('');
   ckPaint();ckFitAll();
@@ -6738,7 +6747,8 @@ $('ckBody').addEventListener('input',e=>{
   const el=e.target.closest('[data-f]'),tr=e.target.closest('tr[data-id]');if(!el||!tr)return;
   const row=ck.rows.find(x=>String(x.id)===tr.dataset.id);if(!row)return;
   if(el.dataset.f==='readiness'&&el.value==='Готово'&&ckNeedPay(row)){el.value=row.readiness||'В работе';alert('Сначала оплатите визитки Мастерфото и нажмите красную кнопку «Оплатить визитки Мастерфото».');return}
-  row[el.dataset.f]=el.value;ckFit(el);if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';ckPaint();
+  row[el.dataset.f]=el.value;ckFit(el);
+  if(el.dataset.f==='staff_comment'){row.staff_comment_by=salesSession?.employeeName||(isAdmin?'Админ':'');row.staff_comment_at=new Date().toISOString()}if(el.tagName==='SELECT')el.className=CK_CLS[el.value]||'';ckPaint();
   ck.dirty.add(row.id);tr.classList.add('dirty');ckMsg('Есть несохранённые изменения');
   clearTimeout(ck.timer);ck.timer=setTimeout(ckFlush,1000);
 });
@@ -6777,6 +6787,7 @@ async function ckFlush(){
   for(const id of [...ck.dirty]){
     const row=ck.rows.find(x=>x.id===id);if(!row){ck.dirty.delete(id);continue}
     const patch={updated_at:new Date().toISOString()};CK_FIELDS.forEach(f=>patch[f[0]]=f[0]==='check_date'?(row.check_date||salesTodayISO()):(row[f[0]]??''));
+    if('staff_comment_at' in row)Object.assign(patch,{staff_comment:row.staff_comment??'',staff_comment_by:row.staff_comment_by??null,staff_comment_at:row.staff_comment_at??null});
     const r=await db.from('branch_checks').update(patch).eq('id',id);
     if(r.error){err=r.error.message;break}
     ck.dirty.delete(id);document.querySelector(`#ckBody tr[data-id="${id}"]`)?.classList.remove('dirty');
