@@ -6901,6 +6901,95 @@ window.addEventListener('beforeunload',e=>{if(ck.dirty.size){ckFlush();e.prevent
   const baseOpen=openSaleV4;
   openSaleV4=async function(){reset();return baseOpen.apply(this,arguments)};
 })();
+// «Не забудь записать заказ в чеки!»: правила check_reminder_rules (товар / категория / слово + с какого количества).
+// Сработало правило → красная плашка в продаже, и оформить нельзя, пока не нажали «Добавить в чеки» или «Уже записал».
+(()=>{
+  const CACHE='ckRulesCache';
+  let rules=[];try{rules=JSON.parse(localStorage.getItem(CACHE)||'[]')}catch(e){}
+  let ack=false;
+  async function loadRules(){try{const r=await db.from('check_reminder_rules').select('id,kind,value,min_qty,is_active').eq('is_active',true).order('id');if(!r.error){rules=r.data||[];try{localStorage.setItem(CACHE,JSON.stringify(rules))}catch(e){}}}catch(e){}check()}
+  window.ckrLoadRules=loadRules;
+  const low=s=>String(s||'').toLowerCase().replace(/ё/g,'е').trim();
+  function lineMatch(rule,x){
+    const c=salesCatalog.find(y=>Number(y.id)===Number(x.catalogId));if(!c)return false;
+    if(rule.kind==='item')return String(c.id)===String(rule.value);
+    if(rule.kind==='category')return low(c.category)===low(rule.value);
+    const w=low(rule.value);if(!w)return false;
+    const v=x.variantId&&c.variants?.find(y=>Number(y.id)===Number(x.variantId))?.label;
+    return low(c.name).includes(w)||low(v).includes(w);
+  }
+  function ruleLabel(rule){
+    if(rule.kind==='item')return salesCatalog.find(c=>String(c.id)===String(rule.value))?.name||'товар';
+    return rule.value;
+  }
+  function hits(){
+    const out=[];
+    for(const rule of rules){const q=(saleDraft||[]).filter(x=>lineMatch(rule,x)).reduce((a,x)=>a+(Number(x.quantity)||0),0);if(q>0&&q>=Number(rule.min_qty||1))out.push({rule,q})}
+    return out;
+  }
+  $('saleStatus').insertAdjacentHTML('beforebegin','<div id="ckrBox" class="ckr-box" style="display:none"><div class="ckr-title">⚠️ Не забудь записать заказ в чеки!</div><div id="ckrWhy" class="ckr-why"></div><div class="ckr-actions"><button type="button" id="ckrAdd" class="ckr-btn">✓ Добавить в чеки</button><button type="button" id="ckrDone" class="secondary small">Уже записал</button></div></div>');
+  document.head.insertAdjacentHTML('beforeend','<style>.ckr-box{margin:10px 0;padding:12px 14px;border:2px solid #d32f2f;background:#ffebee;color:#b71c1c;border-radius:10px}.ckr-box.ok{border-color:#2e7d32;background:#e8f5e9;color:#1b5e20}.ckr-title{font-weight:800;font-size:17px}.ckr-why{font-size:13px;margin-top:4px}.ckr-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.ckr-btn{background:#d32f2f;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}.ckr-box.ok .ckr-actions{display:none}@media (prefers-color-scheme:dark){.ckr-box{background:#3a1416;color:#ffb4b4}.ckr-box.ok{background:#12301a;color:#a5e0b0}}</style>');
+  function check(){
+    const box=$('ckrBox');if(!box)return false;
+    const h=hits();
+    if(!h.length){box.style.display='none';return false}
+    const done=$('saleCkOn')?.checked||ack;
+    if(done&&/^Не забудь записать/.test($('saleStatus').textContent))$('saleStatus').textContent='';
+    box.style.display='';box.classList.toggle('ok',done);
+    box.querySelector('.ckr-title').textContent=done?($('saleCkOn')?.checked?'✓ Заказ попадёт в «Чеки» после оформления.':'✓ Отмечено: заказ уже записан в чеки.'):'⚠️ Не забудь записать заказ в чеки!';
+    $('ckrWhy').textContent='Причина: '+h.map(x=>ruleLabel(x.rule)+' — '+x.q+' шт'+(Number(x.rule.min_qty)>1?' (от '+x.rule.min_qty+')':'')).join('; ');
+    return !done;
+  }
+  window.ckrCheck=check;
+  $('ckrAdd').onclick=()=>{const cb=$('saleCkOn');if(cb&&!cb.checked){cb.checked=true;cb.dispatchEvent(new Event('change'))}check();$('saleCkBox')?.scrollIntoView({block:'center',behavior:'smooth'})};
+  $('ckrDone').onclick=()=>{ack=true;check()};
+  $('saleCkOn')?.addEventListener('change',check);
+  const mo=new MutationObserver(()=>check());
+  ['saleItems','saleTotal'].forEach(id=>$(id)&&mo.observe($(id),{childList:true,subtree:true,characterData:true}));
+  $('saleItems').addEventListener('input',()=>setTimeout(check,0));
+  const baseSave=$('saveSale').onclick;
+  $('saveSale').onclick=async function(){
+    if($('saveSale').disabled)return;
+    if(check()){$('saleStatus').textContent='Не забудь записать заказ в чеки! Нажмите «Добавить в чеки» или «Уже записал».';$('ckrBox').scrollIntoView({block:'center',behavior:'smooth'});return}
+    return baseSave.apply(this,arguments);
+  };
+  const baseOpen=openSaleV4;
+  openSaleV4=async function(){ack=false;const r=await baseOpen.apply(this,arguments);loadRules();return r};
+  setTimeout(loadRules,3000);
+
+  // Редактор правил в «Настройки» кассы (только администратор).
+  const anchor=$('salesAdminStatus');
+  anchor.insertAdjacentHTML('beforebegin','<hr><h3>Напоминание про чеки</h3><div class="status" style="margin-bottom:8px">Если в продаже есть такой товар (суммарно от указанного количества), касса покажет красное «Не забудь записать заказ в чеки!» и не даст оформить, пока не нажмут «Добавить в чеки» или «Уже записал». «Слово в названии» ищет без учёта регистра, например «Холст» охватит все холсты.</div><div id="ckrAdmin"></div><div class="row" style="align-items:end"><div class="field"><label>Что</label><select id="ckrNewKind"><option value="item">Товар</option><option value="category">Категория</option><option value="word">Слово в названии</option></select></div><div class="field" id="ckrNewValWrap"></div><div class="field"><label>С какого количества</label><input id="ckrNewQty" type="number" min="1" step="1" value="1"></div><div class="field"><button type="button" id="ckrNewAdd" class="primary">＋ Добавить правило</button></div></div><div id="ckrAdminStatus" class="status"></div>');
+  const cats=()=>[...new Set(salesCatalog.map(c=>c.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const opts=(list,sel)=>list.map(([v,t])=>`<option value="${esc(String(v))}"${String(v)===String(sel)?' selected':''}>${esc(t)}</option>`).join('');
+  function valueInput(kind,val,id){
+    if(kind==='item')return `<select id="${id}">${opts([...salesCatalog].sort((a,b)=>String(a.name).localeCompare(String(b.name),'ru')).map(c=>[c.id,c.name]),val)}</select>`;
+    if(kind==='category')return `<select id="${id}">${opts(cats().map(c=>[c,c]),val)}</select>`;
+    return `<input id="${id}" maxlength="200" value="${esc(val||'')}" placeholder="Например: Холст">`;
+  }
+  const kindName={item:'Товар',category:'Категория',word:'Слово в названии'};
+  let adminRules=[];
+  function drawAdmin(){
+    $('ckrNewValWrap').innerHTML='<label>Значение</label>'+valueInput($('ckrNewKind').value,'','ckrNewVal');
+    $('ckrAdmin').innerHTML=adminRules.length?'<table class="customer-table"><thead><tr><th>Что</th><th>Значение</th><th>С количества</th><th></th></tr></thead><tbody>'+adminRules.map(r=>`<tr data-id="${r.id}"><td>${kindName[r.kind]||r.kind}</td><td>${esc(ruleLabel(r))}</td><td><input type="number" min="1" step="1" value="${Number(r.min_qty)||1}" data-qty style="width:90px"></td><td><button type="button" class="secondary small" data-off>Убрать</button></td></tr>`).join('')+'</tbody></table>':'<div class="status">Правил пока нет.</div>';
+    $('ckrAdmin').querySelectorAll('tr[data-id]').forEach(tr=>{
+      const id=Number(tr.dataset.id);
+      tr.querySelector('[data-qty]').onchange=async e=>{const q=Math.max(1,Math.floor(Number(e.target.value)||1));e.target.value=q;const r=await db.from('check_reminder_rules').update({min_qty:q}).eq('id',id);$('ckrAdminStatus').textContent=r.error?'Не удалось сохранить: '+r.error.message:'Сохранено ✓';if(!r.error){adminRules.find(x=>x.id===id).min_qty=q;loadRules()}};
+      tr.querySelector('[data-off]').onclick=async()=>{if(!confirm('Убрать это правило?'))return;const r=await db.from('check_reminder_rules').update({is_active:false}).eq('id',id);if(r.error){$('ckrAdminStatus').textContent='Не удалось убрать: '+r.error.message;return}adminRules=adminRules.filter(x=>x.id!==id);drawAdmin();loadRules();$('ckrAdminStatus').textContent='Правило убрано.'};
+    });
+  }
+  async function loadAdmin(){const r=await db.from('check_reminder_rules').select('id,kind,value,min_qty,is_active').eq('is_active',true).order('id');if(r.error){$('ckrAdminStatus').textContent='Не удалось загрузить правила: '+r.error.message;return}adminRules=r.data||[];drawAdmin()}
+  $('ckrNewKind').onchange=()=>{$('ckrNewValWrap').innerHTML='<label>Значение</label>'+valueInput($('ckrNewKind').value,'','ckrNewVal')};
+  $('ckrNewAdd').onclick=async()=>{
+    const kind=$('ckrNewKind').value,value=String($('ckrNewVal')?.value||'').trim(),q=Math.max(1,Math.floor(Number($('ckrNewQty').value)||1));
+    if(!value){$('ckrAdminStatus').textContent='Укажите значение.';return}
+    $('ckrNewAdd').disabled=true;const r=await db.from('check_reminder_rules').insert({kind,value,min_qty:q});$('ckrNewAdd').disabled=false;
+    if(r.error){$('ckrAdminStatus').textContent='Не удалось добавить: '+r.error.message;return}
+    $('ckrNewQty').value='1';$('ckrAdminStatus').textContent='Правило добавлено ✓';await loadAdmin();loadRules();
+  };
+  const baseAdmin=$('salesAdminBtn').onclick;
+  $('salesAdminBtn').onclick=async function(){const r=await baseAdmin.apply(this,arguments);if(isAdmin)loadAdmin();return r};
+})();
 (()=>{
   const ref=$('bigReportBtn');
   ref.insertAdjacentHTML('afterend','<button id="checksBtn" class="secondary tile tile-sm"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/></svg><span class="tile-name">Чеки</span></button>');
