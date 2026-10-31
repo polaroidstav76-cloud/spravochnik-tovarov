@@ -2503,13 +2503,15 @@ async function loadLinkReceiptsPending(shiftId,branchId){
   if(shiftId){const r=await db.from('sales').select(sel).eq('shift_id',shiftId).order('created_at');if(r.error)throw r.error;sales=r.data||[]}
   if(branchId){const r=await db.from('sales').select(sel).eq('branch_id',branchId).not('receipt_deferred_at','is',null).is('receipt_number',null).order('created_at');if(r.error)throw r.error;(r.data||[]).forEach(x=>{if(!sales.some(s=>s.id===x.id))sales.push(x)})}
   sales=sales.filter(x=>x.status==='completed'&&x.payment_status!=='unpaid'&&!x.receipt_number);
-  const ids=sales.map(x=>x.id),linkAmt={};
+  const ids=sales.map(x=>x.id),linkAmt={},itemsBy={};
   if(ids.length){
     const pr=await db.from('sale_payments').select('sale_id,payment_method,amount').in('sale_id',ids);
     if(pr.error)throw pr.error;
+    const ir=await db.from('sale_items').select('*').in('sale_id',ids).order('id');
+    if(!ir.error)(ir.data||[]).forEach(x=>(itemsBy[x.sale_id]=itemsBy[x.sale_id]||[]).push(x));
     (pr.data||[]).filter(x=>x.payment_method==='link').forEach(x=>linkAmt[x.sale_id]=(linkAmt[x.sale_id]||0)+Number(x.amount||0));
   }
-  return sales.filter(x=>x.payment_method==='link'||linkAmt[x.id]).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(x=>({sale:x,link:linkAmt[x.id]||Number(x.total||0)}));
+  return sales.filter(x=>x.payment_method==='link'||linkAmt[x.id]).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(x=>({sale:x,link:linkAmt[x.id]||Number(x.total||0),items:itemsBy[x.id]||[]}));
 }
 // Окно по одной продаже. Возвращает 'saved', 'deferred' или null (отмена).
 function askLinkReceipt(item,idx,count,mode){
@@ -2519,7 +2521,9 @@ function askLinkReceipt(item,idx,count,mode){
       ${s.receipt_deferred_at?`<div class="v5-box warn">⏳ ${new Date(s.receipt_deferred_at).toLocaleDateString('ru-RU')} терминал не работал. Этот чек нужно пробить сейчас.</div>`:''}
       <p style="font-size:18px;margin:10px 0">Пробейте чек: продажа <b>№${esc(num)}</b>, сумма: <b>${salesMoney(item.link)}</b>${part?` <span class="status">(по ссылке, вся продажа ${salesMoney(s.total)})</span>`:''}</p>
       <div class="status">Продажа от ${new Date(s.created_at).toLocaleString('ru-RU')}</div>
-      <div class="field"><label for="linkReceiptNo">Номер кассового чека *</label><input id="linkReceiptNo" inputmode="numeric" autocomplete="off" placeholder="Например: 125"></div>`;
+      ${(item.items||[]).length?`<div class="v5-box"><b>Позиции в продаже:</b><table class="customer-table" style="margin-top:6px"><tbody>${item.items.map(i=>`<tr><td>${esc(saleItemLabel(i))}</td><td style="white-space:nowrap">× ${i.quantity}</td><td style="white-space:nowrap;text-align:right">${salesMoney(i.line_total)}</td></tr>`).join('')}</tbody></table></div>`:''}
+      <div class="v5-box" style="margin-top:10px">На кассовом чеке строка выглядит так:<div style="font:600 18px/1.4 monospace;margin:6px 0">Продажа № 0004-2486-<span style="background:#fde047;color:#111;padding:1px 4px;border-radius:4px;outline:2px solid #ca8a04">111111</span></div>Запишите <b>только последние 6 цифр</b> (выделены жёлтым).</div>
+      <div class="field"><label for="linkReceiptNo">Номер продажи: последние 6 цифр *</label><input id="linkReceiptNo" inputmode="numeric" autocomplete="off" placeholder="111111" style="font:600 22px monospace;letter-spacing:4px;max-width:200px"></div>`;
     $('linkReceiptStatus').textContent='';
     $('linkReceiptCancel').textContent=mode==='open'?'Позже':'Отмена';
     $('linkReceiptNoTerm').textContent=s.receipt_deferred_at?'Терминал всё ещё не работает':'Терминал не работает';
@@ -2532,7 +2536,9 @@ function askLinkReceipt(item,idx,count,mode){
       if(r.error){$('linkReceiptStatus').textContent='Не удалось сохранить: '+r.error.message;return}
       close('linkReceiptModal');resolve(no?'saved':'deferred');
     };
-    $('linkReceiptOk').onclick=()=>{const no=$('linkReceiptNo').value.trim();if(!no){$('linkReceiptStatus').textContent='Введите номер кассового чека или нажмите «Терминал не работает».';$('linkReceiptNo').focus();return}save(no)};
+    // Оставляем только цифры; если вставили номер целиком, берём последние 6.
+    $('linkReceiptNo').oninput=e=>{const d=e.target.value.replace(/\D/g,'');e.target.value=d.length>6?d.slice(-6):d};
+    $('linkReceiptOk').onclick=()=>{const no=$('linkReceiptNo').value.trim();if(!/^\d{6}$/.test(no)){$('linkReceiptStatus').textContent='Введите последние 6 цифр номера продажи с кассового чека или нажмите «Терминал не работает».';$('linkReceiptNo').focus();return}save(no)};
     $('linkReceiptNoTerm').onclick=()=>{if(confirm('Терминал не работает и чек сейчас не пробить?\n\nЧек нужно будет пробить на следующей смене: сайт спросит о нём при открытии и при закрытии смены.'))save(null)};
     $('linkReceiptCancel').onclick=()=>{close('linkReceiptModal');resolve(null)};
     $('linkReceiptNo').onkeydown=e=>{if(e.key==='Enter')$('linkReceiptOk').click()};
@@ -2553,7 +2559,7 @@ async function remindDeferredLinkReceipts(branchId){
   for(let i=0;i<list.length;i++){if(!(await askLinkReceipt(list[i],i,list.length,'open')))return}
 }
 function linkReceiptBadge(x){
-  if(x.receipt_number)return `<div class="status" title="${esc((x.receipt_by||'')+(x.receipt_at?' · '+new Date(x.receipt_at).toLocaleString('ru-RU'):''))}">🧾 Кассовый чек №${esc(x.receipt_number)}</div>`;
+  if(x.receipt_number)return `<div class="status" title="${esc((x.receipt_by||'')+(x.receipt_at?' · '+new Date(x.receipt_at).toLocaleString('ru-RU'):''))}">🧾 Кассовый чек: продажа №${esc(x.receipt_number)}</div>`;
   if(x.receipt_deferred_at&&x.status==='completed'&&x.payment_status!=='unpaid')return `<div class="status" style="color:#b91c1c;font-weight:700">⏳ Чек не пробит: терминал не работал</div>`;
   return '';
 }
