@@ -3332,21 +3332,54 @@ $('addTaskBtn').onclick=async()=>{const title=$('taskTitle').value.trim();if(!ti
 // Оплата по ссылке: красная строка до оплаты; после оплаты — зелёная. Неоплата закрывает продажу из выручки.
 window.markLinkPaid=async id=>{const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:true});if(r.error)alert(r.error.message);else renderMovement()};window.markLinkUnpaid=async id=>{if(!confirm('Отметить как НЕ оплачено? Продажа будет исключена из выручки.'))return;const r=await db.rpc('sales_mark_link_payment',{p_sale_id:id,p_paid:false});if(r.error)alert(r.error.message);else renderMovement()};
 let _jspdfP=null;function loadJsPdf(){if(window.jspdf?.jsPDF)return Promise.resolve(window.jspdf.jsPDF);if(!_jspdfP)_jspdfP=new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';sc.onload=()=>window.jspdf?.jsPDF?res(window.jspdf.jsPDF):rej(new Error('Модуль PDF не загрузился.'));sc.onerror=()=>{_jspdfP=null;rej(new Error('Не удалось загрузить модуль PDF. Проверьте интернет.'))};document.head.appendChild(sc)});return _jspdfP}
-function drawReceiptCanvas(s,rows,pays){const W=720,P=40,F='Arial,Helvetica,sans-serif',lines=[];let y=P;const wrap=(c,t,size,bold,maxW)=>{c.font=`${bold?'bold ':''}${size}px ${F}`;const out=[];let cur='';String(t).split(' ').forEach(w=>{const n=cur?cur+' '+w:w;if(c.measureText(n).width>maxW&&cur){out.push(cur);cur=w}else cur=n});if(cur)out.push(cur);return out};const m=document.createElement('canvas').getContext('2d');const add=(fn,h)=>{lines.push({y:y,fn});y+=h};
-  const text=(t,x,size,o={})=>c=>{c.font=`${o.bold?'bold ':''}${size}px ${F}`;c.fillStyle=o.color||'#111';c.textAlign=o.align||'left';c.textBaseline='top';c.fillText(t,x,0)};
-  const row=(l,r,size,bold)=>{const lw=wrap(m,l,size,false,W-2*P-200);lw.forEach((t,k)=>add(c=>{text(t,P,size)(c);if(k===0)text(r,W-P,size,{bold,align:'right'})(c)},size+8));y+=6};
-  const hr=(dash,wd)=>{y+=8;add(c=>{c.strokeStyle=dash?'#999':'#111';c.lineWidth=wd;c.setLineDash(dash?[6,5]:[]);c.beginPath();c.moveTo(P,0);c.lineTo(W-P,0);c.stroke();c.setLineDash([])},18)};
-  add(text('ПОЛАРОИД',W/2,40,{bold:true,align:'center'}),60);
-  [`Товарный чек №${s.order_number||s.id}`,new Date(s.created_at).toLocaleString('ru-RU'),s.sales_branches?.name||''].filter(Boolean).forEach(t=>add(text(t,P,24,{color:'#555'}),32));
-  hr(true,2);
-  rows.forEach(x=>row(`${saleItemLabel(x)} × ${x.quantity}`,salesMoney(x.line_total),26,true));
-  if(Number(s.discount_amount||0)>0)row('Скидка','−'+salesMoney(s.discount_amount),26,false);
-  hr(false,4);add(c=>{text('ИТОГО',P,38,{bold:true})(c);text(salesMoney(s.total),W-P,38,{bold:true,align:'right'})(c)},56);
-  hr(true,2);add(text('Оплата',P,26,{bold:true}),40);
-  pays.forEach(x=>row(V4_PAY_LABELS[x.payment_method]||x.payment_method,salesMoney(x.amount),26,false));
-  y+=10;add(text('Кассир: '+(s.sales_employees?.name||''),P,22,{color:'#555'}),30);y+=P;
-  const cv=document.createElement('canvas');cv.width=W;cv.height=Math.ceil(y);const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,cv.height);lines.forEach(l=>{c.save();c.translate(0,l.y);l.fn(c);c.restore()});return cv}
-async function printSaleReceipt(id,btn){const old=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='⏳ PDF…'}try{const [JsPDF,r,ir,pr]=await Promise.all([loadJsPdf(),db.from('sales').select('*,sales_branches(name),sales_employees(name)').eq('id',id).single(),db.from('sale_items').select('*').eq('sale_id',id),db.from('sale_payments').select('*').eq('sale_id',id)]);if(r.error)throw r.error;const s=r.data;const cv=drawReceiptCanvas(s,ir.data||[],pr.data||[]);const pdf=new JsPDF({unit:'mm',format:'a4',orientation:'portrait'});const wmm=90,hmm=cv.height*wmm/cv.width;pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',10,10,wmm,Math.min(hmm,277));pdf.save(`chek-${s.order_number||s.id}.pdf`)}catch(e){alert('Не удалось скачать чек: '+(e.message||e))}finally{if(btn){btn.disabled=false;btn.textContent=old}}}
+// Реквизиты продавца для товарного чека. Пустые строки не печатаются.
+const RECEIPT_ORG={name:'ИП Черкашина Дарья Дмитриевна',inn:'',ogrn:'',address:'',phone:''};
+function rubToWords(sum){const n=Math.floor(Math.abs(Number(sum)||0)),k=Math.round((Math.abs(Number(sum)||0)-n)*100);const u=[['','один','два','три','четыре','пять','шесть','семь','восемь','девять'],['','одна','две','три','четыре','пять','шесть','семь','восемь','девять']],t10=['десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'],d=['','','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'],h=['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];const pl=(x,f)=>{x%=100;if(x>10&&x<20)return f[2];x%=10;return x===1?f[0]:x>=2&&x<=4?f[1]:f[2]};const tri=(x,g)=>{const a=[h[Math.floor(x/100)]],r=x%100;if(r>=10&&r<20)a.push(t10[r-10]);else a.push(d[Math.floor(r/10)],u[g][r%10]);return a.filter(Boolean).join(' ')};const parts=[];const groups=[[1e9,0,['миллиард','миллиарда','миллиардов']],[1e6,0,['миллион','миллиона','миллионов']],[1e3,1,['тысяча','тысячи','тысяч']]];let rest=n;groups.forEach(([v,g,f])=>{const q=Math.floor(rest/v);if(q){parts.push(tri(q,g),pl(q,f));rest%=v}});if(rest||!parts.length)parts.push(rest?tri(rest,0):'ноль');let w=parts.filter(Boolean).join(' ');w=w[0].toUpperCase()+w.slice(1);return `${w} ${pl(n,['рубль','рубля','рублей'])} ${String(k).padStart(2,'0')} ${pl(k,['копейка','копейки','копеек'])}`}
+function drawReceiptCanvas(s,rows,pays,org=RECEIPT_ORG){
+  const W=1240,P=80,F='Arial,Helvetica,sans-serif',INK='#172033',MUTED='#667085',ACC='#2563eb',LINE='#cbd5e1',HEAD='#eef2ff';
+  const mc=document.createElement('canvas').getContext('2d');const ops=[];let y=P;
+  const font=(c,size,bold)=>{c.font=`${bold?'bold ':''}${size}px ${F}`};
+  const wrap=(t,size,bold,maxW)=>{font(mc,size,bold);const out=[];let cur='';String(t).split(/\s+/).forEach(w=>{const n=cur?cur+' '+w:w;if(mc.measureText(n).width>maxW&&cur){out.push(cur);cur=w}else cur=n});if(cur)out.push(cur);return out.length?out:['']};
+  const T=(t,x,yy,size,o={})=>ops.push(c=>{font(c,size,o.bold);c.fillStyle=o.color||INK;c.textAlign=o.align||'left';c.textBaseline='top';c.fillText(t,x,yy)});
+  const R=(x,yy,w,hh,fill,stroke)=>ops.push(c=>{if(fill){c.fillStyle=fill;c.fillRect(x,yy,w,hh)}if(stroke){c.strokeStyle=stroke;c.lineWidth=2;c.strokeRect(x,yy,w,hh)}});
+  const L=(x1,yy,x2,col,wd)=>ops.push(c=>{c.strokeStyle=col;c.lineWidth=wd;c.beginPath();c.moveTo(x1,yy);c.lineTo(x2,yy);c.stroke()});
+  const money=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+  // Шапка: бренд слева, реквизиты справа
+  R(0,0,W,14,ACC);
+  T('ПОЛАРОИД',P,y,56,{bold:true});T('фото · печать · сувениры',P,y+66,22,{color:MUTED});
+  const req=[org.name,org.inn&&'ИНН '+org.inn,org.ogrn&&(String(org.ogrn).length>13?'ОГРНИП ':'ОГРН ')+org.ogrn,org.address,org.phone].filter(Boolean);
+  let ry=y;req.forEach((t,i)=>wrap(t,i?22:24,!i,520).forEach(l=>{T(l,W-P,ry,i?22:24,{align:'right',bold:!i,color:i?MUTED:INK});ry+=i?30:32}));
+  y=Math.max(y+110,ry+10);L(P,y,W-P,LINE,2);y+=40;
+  // Заголовок
+  const dt=new Date(s.created_at);
+  T(`ТОВАРНЫЙ ЧЕК № ${s.order_number||s.id}`,W/2,y,40,{bold:true,align:'center'});y+=54;
+  T(`от ${dt.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}, ${dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`,W/2,y,24,{align:'center',color:MUTED});y+=36;
+  if(s.sales_branches?.name){T('Филиал: '+s.sales_branches.name,W/2,y,24,{align:'center',color:MUTED});y+=36}
+  y+=24;
+  // Таблица
+  const cols=[{t:'№',w:70,a:'center'},{t:'Наименование',w:0,a:'left'},{t:'Кол-во',w:130,a:'center'},{t:'Цена, ₽',w:180,a:'right'},{t:'Сумма, ₽',w:190,a:'right'}];
+  cols[1].w=W-2*P-cols.reduce((a,c)=>a+c.w,0);let cx=P;cols.forEach(c=>{c.x=cx;cx+=c.w});
+  const pad=16,FS=24,LH=32;
+  const cell=(c,t,yy,o={})=>T(t,c.a==='center'?c.x+c.w/2:c.a==='right'?c.x+c.w-pad:c.x+pad,yy,o.size||FS,{align:c.a,bold:o.bold,color:o.color});
+  const vlines=(y1,hh)=>ops.push(c=>{c.strokeStyle=LINE;c.lineWidth=2;cols.slice(1).forEach(k=>{c.beginPath();c.moveTo(k.x,y1);c.lineTo(k.x,y1+hh);c.stroke()})});
+  R(P,y,W-2*P,56,HEAD,LINE);vlines(y,56);cols.forEach(c=>cell(c,c.t,y+16,{bold:true,size:22}));y+=56;
+  rows.forEach((x,i)=>{const q=Number(x.quantity)||0,sum=Number(x.line_total)||0,pr=x.unit_price!=null?Number(x.unit_price):(q?sum/q:sum);const nl=wrap(saleItemLabel(x),FS,false,cols[1].w-2*pad);const hh=Math.max(56,nl.length*LH+24);R(P,y,W-2*P,hh,i%2?'#f8fafc':null,LINE);vlines(y,hh);cell(cols[0],String(i+1),y+14);nl.forEach((l,k)=>cell(cols[1],l,y+14+k*LH));cell(cols[2],String(q),y+14);cell(cols[3],money(pr),y+14);cell(cols[4],money(sum),y+14);y+=hh});
+  y+=20;
+  const tot=(l,v,size,bold,col)=>{T(l,W-P-260,y,size,{align:'right',bold,color:col||INK});T(v,W-P,y,size,{align:'right',bold,color:col||INK});y+=size+18};
+  const sub=rows.reduce((a,x)=>a+Number(x.line_total||0),0);
+  if(Number(s.discount_amount||0)>0){tot('Сумма без скидки:',money(sub)+' ₽',24,false,MUTED);tot('Скидка:','−'+money(s.discount_amount)+' ₽',24,false,MUTED)}
+  if(Number(s.loyalty_points_used||0)>0)tot('Оплачено баллами:','−'+money(s.loyalty_points_used)+' ₽',24,false,MUTED);
+  y+=6;R(W-P-560,y-8,560,64,HEAD);T('ИТОГО:',W-P-260,y+6,32,{align:'right',bold:true});T(money(s.total)+' ₽',W-P-16,y+6,32,{align:'right',bold:true,color:ACC});y+=80;
+  wrap(`Всего наименований ${rows.length}, на сумму ${money(s.total)} ₽`,22,false,W-2*P).forEach(l=>{T(l,P,y,22,{color:MUTED});y+=30});
+  wrap(rubToWords(s.total),24,true,W-2*P).forEach(l=>{T(l,P,y,24,{bold:true});y+=34});
+  y+=20;
+  if(pays.length){T('Оплата:',P,y,24,{bold:true});y+=36;pays.forEach(x=>{T(V4_PAY_LABELS[x.payment_method]||x.payment_method,P+24,y,24);T(money(x.amount)+' ₽',P+520,y,24,{align:'right'});y+=34})}
+  y+=60;
+  // Подпись
+  T('Продавец',P,y,24);L(P+130,y+28,P+470,INK,2);T(s.sales_employees?.name?`/ ${s.sales_employees.name} /`:'',P+490,y,24,{color:MUTED});T('М.П.',W-P,y,24,{align:'right',color:MUTED});y+=90;
+  L(P,y,W-P,LINE,2);y+=24;T('Спасибо, что выбрали нас!',W/2,y,24,{align:'center',color:ACC,bold:true});y+=40+P;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=Math.ceil(y);const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,cv.height);ops.forEach(f=>f(c));return cv}
+async function printSaleReceipt(id,btn){const old=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='⏳ PDF…'}try{const [JsPDF,r,ir,pr]=await Promise.all([loadJsPdf(),db.from('sales').select('*,sales_branches(name),sales_employees(name)').eq('id',id).single(),db.from('sale_items').select('*').eq('sale_id',id),db.from('sale_payments').select('*').eq('sale_id',id)]);if(r.error)throw r.error;const s=r.data;const cv=drawReceiptCanvas(s,ir.data||[],pr.data||[]);const pdf=new JsPDF({unit:'mm',format:'a4',orientation:'portrait'});let w=210,h=cv.height*w/cv.width;if(h>297){h=297;w=cv.width*h/cv.height}pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',(210-w)/2,0,w,h);pdf.save(`chek-${s.order_number||s.id}.pdf`)}catch(e){alert('Не удалось скачать чек: '+(e.message||e))}finally{if(btn){btn.disabled=false;btn.textContent=old}}}
 async function renderMovement(){const d=$('movementDate').value||salesTodayISO();const{start,end}=dateRangeUTC(d);const adminView=!!(isAdmin && salesSession?.branchId && !salesSession?.shiftId);
 
 if(!salesSession?.branchId){
