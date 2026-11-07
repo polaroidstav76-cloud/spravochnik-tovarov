@@ -166,14 +166,6 @@ begin
    where status='pending' and created_at<now()-interval '2 days' and not public.is_test_branch(branch_id);
   if cnt>0 then nprob:=nprob+1; prob:=prob||E'\n⏳ Не оплачены «при получении» больше 2 дней: '||cnt||' на '||rep_money(rev); end if;
 
-  -- Расходники ниже минимума (только где склад уже ведётся: был приход)
-  select string_agg(rep_esc(m.name)||' — '||rep_esc(b.name)||': '||round(q.q,1)||' '||m.unit||' (мин. '||round(m.min_qty,1)||')', E'\n   ' order by b.name, m.name) into line
-  from (select material_id, branch_id, sum(qty) q from public.stock_moves where cancelled_at is null group by 1,2
-        having bool_or(kind<>'sale')) q
-  join public.stock_materials m on m.id=q.material_id join public.sales_branches b on b.id=q.branch_id
-  where m.is_active and m.min_qty>0 and q.q<m.min_qty and not b.is_test;
-  if line is not null then nprob:=nprob+1; prob:=prob||E'\n📦 Заканчивается:\n   '||line; end if;
-
   out:=out||E'\n\n'||case when nprob=0 then '✅ <b>Всё сошлось</b>, замечаний нет.' else '⚠️ <b>Что не сошлось ('||nprob||')</b>'||prob end;
   return out;
 end $fn$;

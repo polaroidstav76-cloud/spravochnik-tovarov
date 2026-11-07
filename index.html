@@ -5304,11 +5304,8 @@ function stkCombo(host,o){
   return inp;
 }
 
-// --- Закупка ---
-// Список считается в базе при каждом открытии (stock_purchase_live, stock_simple.sql): что заканчивается по расходу
-// плюс заявки «Нужно купить». «Куплено» у расчётной строки записывает приход на филиалы, у заявки — закрывает её.
-// «Нет в магазине» прячет строку; вернуть можно из «Скрытых». Еженедельная таблица выключена.
-function stkBuyCount(){const d=stk.buy;return d?(d.rows||[]).length+(d.requests||[]).filter(x=>x.status==='open').length:0}
+// --- Закупка: только ручные заявки ---
+function stkBuyCount(){const d=stk.buy;return d?(d.requests||[]).filter(x=>x.status!=='bought').length:0}
 function stkReqItems(){
   const mats=stkStockMats().map(m=>({id:Number(m.id),name:m.name,sub:'материал склада',kind:'material'}));
   return [...mats,...stkCatalogItems()];
@@ -5318,34 +5315,22 @@ async function stkDrawBuy(){
   const r=await db.rpc('stock_purchase_live');
   if(r.error){$('stockBody').innerHTML=`<div class="v5-box warn">Не удалось загрузить список закупки: ${esc(r.error.message)}</div>`;return}
   stk.buy=r.data;stkDrawBadge();
-  const d=r.data,calc=d.rows||[],reqs=(d.requests||[]).filter(x=>x.status==='open');
-  const hidden=[...(d.hidden||[]).map(x=>({calc:x})),...(d.requests||[]).filter(x=>x.status==='unavailable').map(x=>({req:x}))];
-  const amount=(x,need,packs,html)=>Number(x.pack_qty)>0?(html?`<b>${stkQty(packs)} уп.</b> <span class="stk-sub">(${stkQty(need)} ${esc(x.unit)})</span>`:`${stkQty(packs)} уп. (${stkQty(need)} ${x.unit})`):(html?`<b>${stkQty(need)}</b> ${esc(x.unit)}`:`${stkQty(need)} ${x.unit}`);
-  const reqQty=(q,html)=>q.qty!=null?(html?`<b>${stkQty(q.qty)}</b>${q.unit?' '+esc(q.unit):''}`:`${stkQty(q.qty)}${q.unit?' '+q.unit:''}`):(html?'<span class="stk-sub">не указано</span>':'');
-  // Одна таблица: строки расчёта (по филиалам) и заявки (в колонке своего филиала).
-  const brIds=[...new Set([...calc.flatMap(x=>x.branches.filter(b=>Number(b.need)>0).map(b=>Number(b.b))),...reqs.filter(q=>q.branch_id).map(q=>Number(q.branch_id))])];
-  const br=stkPlaces().filter(b=>brIds.includes(Number(b.id)));
-  brIds.filter(id=>!br.some(b=>Number(b.id)===id)).forEach(id=>br.push({id,name:stkBranchName(id)}));
-  if(reqs.some(q=>!q.branch_id))br.push({id:0,name:'Без филиала'});
-  const bv=(x,b)=>x.branches.find(y=>Number(y.b)===Number(b.id));
-  const total=calc.reduce((a,x)=>a+Number(x.sum||0),0);
-  const code=c=>c?`<span class="stk-code">${esc(c)}</span>`:'<span class="stk-sub">—</span>';
-  const calcRow=x=>`<tr><td><b>${esc(x.name)}</b>${x.urgent?' <span class="stk-urgent">срочно</span>':''}<div class="stk-sub">заканчивается по расходу${Number(x.pack_qty)>0?` · упаковка ${stkQty(x.pack_qty)} ${esc(x.unit)}`:''}</div></td><td>${code(stkBuyCode(x))}</td>${br.map(b=>{const v=bv(x,b),need=v?Number(v.need):0;
-      return `<td class="num ${v?.urgent?'stk-low-cell':''}" title="${v?`Остаток ${stkQty(v.balance)} · расход в неделю ${stkQty(v.week_use)}`:''}">${need>0?amount(x,need,v.packs,true):''}</td>`}).join('')}<td class="num">${amount(x,x.total,x.packs,true)}${Number(x.sum)>0?`<div class="stk-sub">${salesMoney(x.sum)}</div>`:''}</td>${isAdmin?`<td class="stk-act"><button class="primary small" onclick="stkBought('m',${x.material_id})">Куплено</button><button class="secondary small" onclick="stkNoShop('m',${x.material_id})">Нет в магазине</button></td>`:''}</tr>`;
-  const reqRow=q=>`<tr><td><b>${esc(q.name)}</b><div class="stk-sub">заявка${q.person_name?': '+esc(q.person_name):''}, ${v5Date(q.created_at)}${q.comment?' · '+esc(q.comment):''}</div></td><td>${code(q.code)}</td>${br.map(b=>`<td class="num">${Number(b.id)===Number(q.branch_id||0)?reqQty(q,true):''}</td>`).join('')}<td class="num">${reqQty(q,true)}</td>${isAdmin?`<td class="stk-act"><button class="primary small" onclick="stkBought('r',${q.id})">Куплено</button><button class="secondary small" onclick="stkNoShop('r',${q.id})">Нет в магазине</button></td>`:''}</tr>`;
-  const empty=!calc.length&&!reqs.length;
-  $('stockBody').innerHTML=`${stkCanWork()?`<div class="stk-req"><b>Нужно купить</b> <span class="stk-sub">— выберите из прайса или напишите своими словами</span>
+  const reqs=(r.data.requests||[]).slice().sort((a,b)=>Number(a.status==='bought')-Number(b.status==='bought') || Number(!!b.urgent)-Number(!!a.urgent) || String(a.created_at).localeCompare(String(b.created_at)));
+  const pending=reqs.filter(q=>q.status!=='bought');
+  const reqQty=q=>q.qty!=null?`${stkQty(q.qty)} ${q.unit||''}`:'не указано';
+  const reqRow=q=>`<tr style="${q.status==='bought'?'opacity:.55':''}"><td>${isAdmin?`<input type="checkbox" aria-label="Куплено: ${esc(q.name)}" style="width:20px;height:20px" ${q.status==='bought'?'checked':''} onchange="stkRequestToggle(${q.id},this)">`:q.status==='bought'?'✅':'☐'}</td><td><b style="${q.status==='bought'?'text-decoration:line-through':''}">${esc(q.name)}</b><div class="stk-sub">${esc(q.person_name||'')} · ${v5Date(q.created_at)}${q.comment?' · '+esc(q.comment):''}</div></td><td>${esc(q.branch_name||stkBranchName(q.branch_id))}</td><td><span class="stk-code">${esc(stkBuyCode(q)||'—')}</span></td><td>${esc(reqQty(q))}</td><td>${q.status==='bought'?'Куплено':q.urgent?'<span class="stk-urgent">Срочно</span>':'Обычная'}</td></tr>`;
+  const empty=!pending.length;
+  $('stockBody').innerHTML=`${stkCanWork()?`<div class="stk-req"><b>Нужно купить</b> <span class="stk-sub">— выберите материал или напишите своими словами</span>
       <div class="stk-req-row"><div class="field"><label>Что</label><div id="stkReqWhat"></div></div>
       <div class="field"><label for="stkReqQty">Сколько</label><input id="stkReqQty" type="number" min="0" step="any" placeholder="по желанию"></div>
       <div class="field"><label for="stkReqBranch">Куда</label><select id="stkReqBranch">${stkOpts(isAdmin?stkPlaces():stkPlaces().filter(b=>Number(b.id)===stkMyBranch()||b.workshop),stkMyBranch()||stkBranches()[0]?.id)}</select></div>
+      <div class="field"><label for="stkReqUrgent">Срочность</label><select id="stkReqUrgent"><option value="false">Обычная</option><option value="true">Срочно</option></select></div>
       <div class="field"><label for="stkReqComment">Комментарий</label><input id="stkReqComment" placeholder="по желанию"></div>
       <div class="field"><button id="stkReqAdd" class="primary">Добавить в закупку</button></div></div><div id="stkReqStatus" class="status"></div></div>`
     :'<div class="v5-box info">Чтобы написать, что нужно купить, откройте смену.</div>'}
     <div class="actions" style="justify-content:flex-start;margin:10px 0 0;border:0;padding:0"><button id="stkBuyCopy" class="secondary small" ${empty?'disabled':''}>Копировать</button><button id="stkBuyPrint" class="secondary small" ${empty?'disabled':''}>Печать</button></div>
-    <div class="stk-sub" style="margin:6px 0">Список обновляется сам: всё, что заканчивается по расходу, и заявки сотрудников появляются сразу.${isAdmin?' «Куплено» убирает строку (у материала склада ещё и записывает приход на филиалы). «Нет в магазине» прячет строку — вернуть можно внизу в «Скрытых».':''}</div>
-    ${empty?'<div class="v5-box info">Сейчас покупать ничего не нужно.</div>':`<div style="overflow:auto"><table class="customer-table stk-table"><thead><tr><th>Что купить</th><th>Код</th>${br.map(b=>`<th class="num">${esc(b.name)}</th>`).join('')}<th class="num">Итого</th>${isAdmin?'<th></th>':''}</tr></thead><tbody>${calc.map(calcRow).join('')}${reqs.map(reqRow).join('')}</tbody>${total>0?`<tfoot><tr><td colspan="${br.length+3+(isAdmin?1:0)}"><b>Сумма по материалам с ценой: ${salesMoney(total)}</b></td></tr></tfoot>`:''}</table></div>`}
-    ${hidden.length?`<details class="stk-hidden"><summary>Скрытые — нет в магазине (${hidden.length})</summary>${hidden.map(h=>h.calc?`<div class="stk-hid-row"><span><b>${esc(h.calc.name)}</b> — ${amount(h.calc,h.calc.total,h.calc.packs,true)}</span>${isAdmin?`<button class="secondary small" onclick="stkUnhide('m',${h.calc.material_id})">Вернуть в список</button>`:''}</div>`
-      :`<div class="stk-hid-row"><span><b>${esc(h.req.name)}</b>${h.req.qty!=null?' — '+reqQty(h.req,true):''} <span class="stk-sub">${esc(stkBranchName(h.req.branch_id))}</span></span>${isAdmin?`<button class="secondary small" onclick="stkUnhide('r',${h.req.id})">Вернуть в список</button>`:''}</div>`).join('')}</details>`:''}`;
+    <div class="stk-sub" style="margin:6px 0">Только ручные заявки сотрудников. Непокупленные остаются в списке, купленные перемещаются вниз. Отметка не меняет остатки: поступление оформляется отдельно.</div>
+    ${!reqs.length?'<div class="v5-box info">Заявок пока нет.</div>':`<div style="overflow:auto"><table class="customer-table stk-table"><thead><tr><th>Куплено</th><th>Что купить</th><th>Филиал</th><th>Код материала</th><th>Количество</th><th>Срочность / статус</th></tr></thead><tbody>${reqs.map(reqRow).join('')}</tbody></table></div>`}`;
   if($('stkReqWhat')){
     stk.req=null;
     const inp=stkCombo($('stkReqWhat'),{items:stkReqItems(),free:true,keep:true,placeholder:'Например: пакеты 10х15',onPick:x=>{stk.req=x.item||null},onInput:()=>{stk.req=null}});
@@ -5355,48 +5340,24 @@ async function stkDrawBuy(){
       $('stkReqAdd').disabled=true;st.textContent='Сохраняю…';
       const q=$('stkReqQty').value;
       const res=await db.rpc('stock_request_add',{...stkActor(),p_branch_id:Number($('stkReqBranch').value)||null,p_name:name,p_qty:q===''?null:Number(q),
-        p_catalog_id:it?.kind==='catalog'?it.id:null,p_material_id:it?.kind==='material'?it.id:null,p_comment:$('stkReqComment').value||null});
+        p_catalog_id:it?.kind==='catalog'?it.id:null,p_material_id:it?.kind==='material'?it.id:null,p_comment:$('stkReqComment').value||null,p_urgent:$('stkReqUrgent').value==='true'});
       $('stkReqAdd').disabled=false;
       if(res.error){st.textContent='Ошибка: '+res.error.message;return}
       v5Toast('Добавлено в закупку: '+name);stkDrawBuy();
     };
   }
-  const lines=()=>[...calc.map(x=>{const c=stkBuyCode(x);return `${x.urgent?'СРОЧНО! ':''}${x.name}${c?` (код ${c})`:''} — ${amount(x,x.total,x.packs)}: `+br.map(b=>{const v=bv(x,b);return v&&Number(v.need)>0?`${b.name} ${amount(x,v.need,v.packs)}`:''}).filter(Boolean).join(', ')}),
-    ...reqs.map(q=>`${q.name}${q.code?` (код ${q.code})`:''}${q.qty!=null?' — '+reqQty(q):''}${q.branch_id?`: ${stkBranchName(q.branch_id)}`:''}${q.comment?` (${q.comment})`:''}`)];
+  const lines=()=>pending.map(q=>`${q.urgent?'СРОЧНО! ':''}${q.name} — ${q.branch_name||stkBranchName(q.branch_id)} — код: ${stkBuyCode(q)||'—'} — ${reqQty(q)}${q.comment?` (${q.comment})`:''}`);
   if($('stkBuyCopy'))$('stkBuyCopy').onclick=async()=>{const t='Закупка\n'+lines().join('\n');try{await navigator.clipboard.writeText(t);v5Toast('Список закупки скопирован.')}catch(e){prompt('Скопируйте текст:',t)}};
   if($('stkBuyPrint'))$('stkBuyPrint').onclick=()=>{const w=window.open('','_blank','width=900,height=700');if(!w){alert('Разрешите всплывающие окна для печати.');return}
     w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Закупка</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#111}li{margin:6px 0}</style></head><body><h2>Закупка расходников, ${new Date().toLocaleDateString('ru-RU')}</h2><ol>${lines().map(l=>`<li>${esc(l)}</li>`).join('')}</ol></body></html>`);
     w.document.close();w.focus();w.print()};
 }
 function stkBuyCode(r){const m=stkMaterials(true).find(x=>Number(x.id)===Number(r.material_id));return (m?m.purchase_code:r.code)||''}
-window.stkBought=async(t,id)=>{
-  if(t==='m'){
-    const x=(stk.buy?.rows||[]).find(r=>Number(r.material_id)===Number(id));if(!x)return;
-    const parts=x.branches.filter(b=>Number(b.need)>0);
-    if(!confirm(`«${x.name}» куплено?\nЗапишу приход: ${parts.map(b=>`${stkBranchName(b.b)} — ${stkQty(b.need)} ${x.unit}`).join(', ')}.`))return;
-    for(const b of parts){
-      const price=Number(x.pack_price)>0?Number(x.pack_price)*Number(b.packs??b.need):null;
-      const r=await db.rpc('stock_operation',{...stkActor(),p_kind:'receipt',p_branch_id:Number(b.b),p_items:[{material_id:Number(x.material_id),qty:Number(b.need),price_total:price}],p_to_branch_id:null,p_supplier:null,p_comment:'Закупка'});
-      if(r.error){alert('Ошибка: '+r.error.message);break}
-    }
-  }else{
-    const q=(stk.buy?.requests||[]).find(r=>Number(r.id)===Number(id));
-    const r=await db.rpc('stock_request_set',{p_id:id,p_status:'bought'});
-    if(r.error){alert('Ошибка: '+r.error.message);return}
-    const m=q&&q.material_id?stkMaterials(true).find(x=>Number(x.id)===Number(q.material_id)):null;
-    if(m&&!m.no_track&&Number(q.qty)>0&&q.branch_id)await db.rpc('stock_operation',{...stkActor(),p_kind:'receipt',p_branch_id:Number(q.branch_id),p_items:[{material_id:Number(m.id),qty:Number(q.qty),price_total:null}],p_to_branch_id:null,p_supplier:null,p_comment:'Закупка по заявке'});
-  }
-  await stkLoad();stkDrawBuy();
-};
-window.stkNoShop=async(t,id)=>{
-  const r=t==='m'?await db.rpc('stock_purchase_hide_set',{p_material_id:id,p_hidden:true}):await db.rpc('stock_request_set',{p_id:id,p_status:'unavailable'});
-  if(r.error){alert('Ошибка: '+r.error.message);return}
-  stkDrawBuy();
-};
-window.stkUnhide=async(t,id)=>{
-  const r=t==='m'?await db.rpc('stock_purchase_hide_set',{p_material_id:id,p_hidden:false}):await db.rpc('stock_request_set',{p_id:id,p_status:'open'});
-  if(r.error){alert('Ошибка: '+r.error.message);return}
-  stkDrawBuy();
+window.stkRequestToggle=async(id,input)=>{
+  input.disabled=true;
+  const r=await db.rpc('stock_request_set',{p_id:id,p_status:input.checked?'bought':'open'});
+  if(r.error){input.checked=!input.checked;input.disabled=false;alert('Ошибка: '+r.error.message);return}
+  await stkDrawBuy();
 };
 
 // --- Материалы и нормы (администратор) ---
