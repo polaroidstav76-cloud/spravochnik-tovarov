@@ -5080,9 +5080,19 @@ function stkDrawBal(){
   $('stkLowOnly').onchange=e=>{stk.lowOnly=e.target.checked;stkDrawBalRows()};
   stkDrawBalRows();
 }
+// Показываем остатки выбранных товаров. Это фильтр интерфейса: учёт всех материалов продолжается.
+const STK_BALANCE_MATERIALS_BY_SKU = {
+  '321':[144,145,146], '079':[149], '131':[171], '062':[19,151],
+  '1041':[152], '025':[5], '347':[150], '051':[32]
+};
+function stkBalanceSkus(m){
+  const id=Number(m.parent_id||m.id);
+  return Object.keys(STK_BALANCE_MATERIALS_BY_SKU).filter(sku=>STK_BALANCE_MATERIALS_BY_SKU[sku].includes(id));
+}
+function stkBalanceVisible(m){return !!m&&stkBalanceSkus(m).length>0}
 function stkDrawBalRows(){
   const br=stkPlaces(),my=stkMyBranch(),words=stk.balSearch.toLowerCase().split(/\s+/).filter(Boolean);
-  const all=stkMaterials(),hit=m=>words.every(w=>m.name.toLowerCase().includes(w))&&(!stk.lowOnly||br.some(b=>stkIsLow(m,b.id)));
+  const all=stkMaterials(),hit=m=>stkBalanceVisible(m)&&words.every(w=>[m.name,...stkBalanceSkus(m)].join(' ').toLowerCase().includes(w))&&(!stk.lowOnly||br.some(b=>stkIsLow(m,b.id)));
   const mats=[];all.filter(m=>!m.parent_id).forEach(m=>{
     if(!stkHasVars(m)){if(hit(m))mats.push(m);return}
     const kids=all.filter(c=>Number(c.parent_id)===Number(m.id)&&hit(c));if(kids.length)mats.push({...m,group:true},...kids.map(c=>({...c,child:true})));
@@ -5090,7 +5100,7 @@ function stkDrawBalRows(){
   const cell=(m,b)=>{const q=stkBal(m.id,b.id),u=stkUse(m.id,b.id),days=u>0?Math.floor(q/(u/30)):null,low=stkIsLow(m,b.id);
     return `<td class="num ${Number(b.id)===my?'cur':''} ${low?'stk-low-cell':''}" title="Расход за 30 дней: ${stkQty(u)} ${esc(m.unit)}${days!=null?` · хватит примерно на ${Math.max(days,0)} дн.`:''}"><span class="${low?'stk-low':''}">${stkQty(q)}</span></td>`};
   $('stkBalTable').innerHTML=`<thead><tr><th>Материал</th>${br.map(b=>`<th class="num ${Number(b.id)===my?'cur':''}">${esc(b.name)}</th>`).join('')}<th class="num">Всего</th></tr></thead><tbody>${
-    mats.map(m=>m.group?`<tr><td colspan="${br.length+2}"><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)} · размеры и цвета${m.in_workshop?' · 🏭 мастерская':''}</span></td></tr>`:`<tr><td>${m.child?`<span style="padding-left:18px">↳ <b>${esc([m.var_color,m.var_size].filter(Boolean).join(' ')||m.name)}</b></span>`:`<b>${esc(m.name)}</b>`} <span class="stk-sub">${esc(m.unit)}${Number(m.min_qty)>0?` · мин. ${stkQty(m.min_qty)}`:''}</span>${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}<div class="stk-sub" ${m.child?'hidden':''}>${m.in_workshop?'🏭 Хранится в мастерской · ':''}${m.store_branch_id?stkStoreNote(m)+' · ':''}${m.norms.length?`Списывается с ${m.norms.length} поз. прайса`:'⚠ Не привязан к позициям прайса — по продажам не списывается'}</div></td>${br.map(b=>cell(m,b)).join('')}<td class="num"><b>${stkQty(br.reduce((a,b)=>a+stkBal(m.id,b.id),0))}</b></td></tr>`).join('')||`<tr><td colspan="${br.length+2}" class="stk-sub">Ничего не найдено.</td></tr>`}</tbody>`;
+    mats.map(m=>m.group?`<tr><td colspan="${br.length+2}"><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)} · размеры и цвета${m.in_workshop?' · 🏭 мастерская':''}</span></td></tr>`:`<tr><td>${m.child?`<span style="padding-left:18px">↳ <b>${esc([m.var_color,m.var_size].filter(Boolean).join(' ')||m.name)}</b></span>`:`<b>${esc(m.name)}</b>`} <span class="stk-sub">арт. ${esc(stkBalanceSkus(m).join(', '))} · ${esc(m.unit)}${Number(m.min_qty)>0?` · мин. ${stkQty(m.min_qty)}`:''}</span>${m.comment?`<div class="stk-sub">${esc(m.comment)}</div>`:''}<div class="stk-sub" ${m.child?'hidden':''}>${m.in_workshop?'🏭 Хранится в мастерской · ':''}${m.store_branch_id?stkStoreNote(m)+' · ':''}${m.norms.length?`Списывается с ${m.norms.length} поз. прайса`:'⚠ Не привязан к позициям прайса — по продажам не списывается'}</div></td>${br.map(b=>cell(m,b)).join('')}<td class="num"><b>${stkQty(br.reduce((a,b)=>a+stkBal(m.id,b.id),0))}</b></td></tr>`).join('')||`<tr><td colspan="${br.length+2}" class="stk-sub">Ничего не найдено.</td></tr>`}</tbody>`;
 }
 
 // --- Операции: приход, перемещение, списание, инвентаризация ---
@@ -5128,7 +5138,7 @@ function stkOpBranch(){return Number($('stkFrom')?.value)||stkMyBranch()}
 function stkDrawOpRows(){
   const k=stk.opKind,b=stkOpBranch(),mats=stkStockMats();
   if(k==='inventory'){
-    $('stkOpRows').innerHTML=`<table class="customer-table stk-table" style="margin-top:10px"><thead><tr><th>Материал</th><th class="num">По программе</th><th class="num">Насчитали</th></tr></thead><tbody>${mats.map(m=>`<tr><td><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)}</span></td><td class="num">${stkQty(stkBal(m.id,b))}</td><td class="num"><input type="number" min="0" step="any" data-inv="${m.id}" style="max-width:130px" placeholder="—"></td></tr>`).join('')}</tbody></table>`;
+    $('stkOpRows').innerHTML=`<table class="customer-table stk-table" style="margin-top:10px"><thead><tr><th>Материал</th><th class="num">По программе</th><th class="num">Насчитали</th></tr></thead><tbody>${mats.map(m=>`<tr><td><b>${esc(m.name)}</b> <span class="stk-sub">${esc(m.unit)}</span></td><td class="num">${stkBalanceVisible(m)?stkQty(stkBal(m.id,b)):'—'}</td><td class="num"><input type="number" min="0" step="any" data-inv="${m.id}" style="max-width:130px" placeholder="—"></td></tr>`).join('')}</tbody></table>`;
     return;
   }
   const price=k==='receipt';
@@ -5136,7 +5146,7 @@ function stkDrawOpRows(){
   // сумма подставляется сама: упаковки × себестоимость упаковки из «Материалов». Сумму можно поправить руками.
   const mat=r=>stkMaterials(true).find(m=>Number(m.id)===Number(r.m));
   const packs=r=>price&&Number(mat(r)?.pack_qty)>0;
-  $('stkOpRows').innerHTML=stk.opRows.map((r,i)=>`<div class="stk-row ${price?'':'no-price'}"><div class="field"><label>Товар</label><div data-combo="${i}"></div><div class="stk-sub">${mat(r)?`есть ${stkQty(stkBal(mat(r).id,b))} ${esc(mat(r).unit)}`:'поиск по материалам склада'}</div></div>
+  $('stkOpRows').innerHTML=stk.opRows.map((r,i)=>`<div class="stk-row ${price?'':'no-price'}"><div class="field"><label>Товар</label><div data-combo="${i}"></div><div class="stk-sub">${mat(r)?(stkBalanceVisible(mat(r))?`есть ${stkQty(stkBal(mat(r).id,b))} ${esc(mat(r).unit)}`:''):'поиск по материалам склада'}</div></div>
     <div class="field"><label>${packs(r)?'Упаковок':'Количество'}</label><input type="number" min="0" step="any" data-r="${i}" data-f="q" value="${esc(r.q)}"><div class="stk-sub" data-hint="${i}">${packs(r)?`уп. по ${stkQty(mat(r).pack_qty)} ${esc(mat(r).unit)}${Number(r.q)>0?` = ${stkQty(Number(r.q)*Number(mat(r).pack_qty))} ${esc(mat(r).unit)}`:''}`:''}</div></div>
     ${price?`<div class="field"><label>Сумма закупки, ₽</label><input type="number" min="0" step="any" data-r="${i}" data-f="p" value="${esc(r.p)}"><div class="stk-sub">${Number(mat(r)?.pack_price)>0?`по ${salesMoney(mat(r).pack_price)} за ${packs(r)?'упаковку':esc(mat(r).unit)}`:''}</div></div>`:''}
     <button class="secondary small" data-del="${i}" title="Убрать строку" aria-label="Убрать строку">×</button></div>`).join('');
@@ -5162,7 +5172,7 @@ function stkDrawOpRows(){
 // Список для выбора товара в операциях: только материалы склада, с поиском.
 function stkOpItems(){
   const b=stkOpBranch();
-  return stkStockMats().map(m=>({kind:'material',id:Number(m.id),name:m.name,sub:`есть ${stkQty(stkBal(m.id,b))} ${m.unit}`}));
+  return stkStockMats().map(m=>({kind:'material',id:Number(m.id),name:m.name,sub:stkBalanceVisible(m)?`есть ${stkQty(stkBal(m.id,b))} ${m.unit}`:''}));
 }
 async function stkOpMaterialFor(it){
   if(!it)return null;if(it.kind==='material')return it.id;
@@ -5472,7 +5482,10 @@ openSaleV4=async function(){await stkBaseOpenSale.apply(this,arguments);stkFillS
 // на филиале смены; материалы мастерской — по мастерской. Позиции без материалов — без строки.
 function saleStockLine(c){try{
   const br=stkMyBranch();if(!br||!stk.data)return '';
-  const all=stkMaterials(),mats=all.filter(m=>!m.no_track&&!m.parent_id&&(m.norms||[]).some(n=>Number(n.catalog_id)===Number(c.id)));
+  const sku=String(c.sku||'').trim();
+  if(sku==='079'&&Number(c.id)!==66)return ''; // 079 у Voice — другой товар.
+  const ids=STK_BALANCE_MATERIALS_BY_SKU[sku];if(!ids)return '';
+  const all=stkMaterials(),mats=all.filter(m=>!m.parent_id&&ids.includes(Number(m.id)));
   if(!mats.length)return '';let low=false;
   const parts=mats.map(m=>{
     const list=stkHasVars(m)?all.filter(k=>Number(k.parent_id)===Number(m.id)&&!k.no_track):[m];let q=0,ws=false,st='';
