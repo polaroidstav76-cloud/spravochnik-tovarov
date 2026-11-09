@@ -1,0 +1,212 @@
+{
+  "documents": [
+    {
+      "file": "Чехол.docx",
+      "blocks": 28,
+      "images": 4,
+      "embedded_media": 4,
+      "red_runs": 11,
+      "black_runs": 54,
+      "source_text_chars": 2434
+    },
+    {
+      "file": "Пазл.docx",
+      "blocks": 25,
+      "images": 4,
+      "embedded_media": 4,
+      "red_runs": 9,
+      "black_runs": 46,
+      "source_text_chars": 1921
+    },
+    {
+      "file": "Подушка.docx",
+      "blocks": 27,
+      "images": 4,
+      "embedded_media": 4,
+      "red_runs": 10,
+      "black_runs": 46,
+      "source_text_chars": 1769
+    },
+    {
+      "file": "Круглые стикеры.docx",
+      "blocks": 47,
+      "images": 15,
+      "embedded_media": 15,
+      "red_runs": 8,
+      "black_runs": 66,
+      "source_text_chars": 4743
+    },
+    {
+      "file": "Пленка.docx",
+      "blocks": 66,
+      "images": 18,
+      "embedded_media": 9,
+      "red_runs": 13,
+      "black_runs": 75,
+      "source_text_chars": 5049
+    },
+    {
+      "file": "Кружки.docx",
+      "blocks": 29,
+      "images": 5,
+      "embedded_media": 5,
+      "red_runs": 11,
+      "black_runs": 45,
+      "source_text_chars": 3225
+    }
+  ],
+  "assets": {
+    "3f5742773560a1aebcce9c25.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\3f5742773560a1aebcce9c25.png",
+      "size": 26538
+    },
+    "fef6b8b3e9f42eb495a04ca7.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\fef6b8b3e9f42eb495a04ca7.png",
+      "size": 22824
+    },
+    "de19790019cd728ff077820a.jpg": {
+      "file": "imports\\sublimation-20261110-strict\\media\\de19790019cd728ff077820a.jpg",
+      "size": 80820
+    },
+    "94f0865703bcbc20409f7320.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\94f0865703bcbc20409f7320.png",
+      "size": 62668
+    },
+    "b1ff1f92e0d1adc6a2553a6a.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\b1ff1f92e0d1adc6a2553a6a.png",
+      "size": 32243
+    },
+    "8ec33ec555ac6dabf3790b56.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\8ec33ec555ac6dabf3790b56.png",
+      "size": 26085
+    },
+    "b65b5a128cd0f9fee59658af.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\b65b5a128cd0f9fee59658af.png",
+      "size": 64285
+    },
+    "14a1d941492c34583953a85a.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\14a1d941492c34583953a85a.png",
+      "size": 24023
+    },
+    "e8420f856adf5e030f65d41a.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\e8420f856adf5e030f65d41a.png",
+      "size": 23660
+    },
+    "3504f7cc6596d3f382e9786d.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\3504f7cc6596d3f382e9786d.png",
+      "size": 62856
+    },
+    "d3a5907f7fb0823ec70e24b4.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\d3a5907f7fb0823ec70e24b4.png",
+      "size": 41164
+    },
+    "0af2c1b8d60c6f0a865ecec8.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\0af2c1b8d60c6f0a865ecec8.png",
+      "size": 21294
+    },
+    "2f855138ef581c0d2bb6238e.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\2f855138ef581c0d2bb6238e.png",
+      "size": 22474
+    },
+    "a9b052b117c67e1bd1847290.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\a9b052b117c67e1bd1847290.png",
+      "size": 39737
+    },
+    "c00abc1b42b45bde1863d693.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\c00abc1b42b45bde1863d693.png",
+      "size": 28436
+    },
+    "8774e6b42c7c069cfea29901.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\8774e6b42c7c069cfea29901.png",
+      "size": 41014
+    },
+    "e4057732fb600bcf03c38457.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\e4057732fb600bcf03c38457.png",
+      "size": 73476
+    },
+    "2e8256e84f41aa4df273a392.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\2e8256e84f41aa4df273a392.png",
+      "size": 38286
+    },
+    "08022d6e9176203e469d065b.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\08022d6e9176203e469d065b.png",
+      "size": 4394
+    },
+    "5d5cb2e3e1f1d2e8c354d240.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\5d5cb2e3e1f1d2e8c354d240.png",
+      "size": 25082
+    },
+    "23f453a9d612877979046779.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\23f453a9d612877979046779.png",
+      "size": 5362
+    },
+    "3c2c6665b9e0a43034ff186e.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\3c2c6665b9e0a43034ff186e.png",
+      "size": 117619
+    },
+    "03491807660b20e8795a99d3.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\03491807660b20e8795a99d3.png",
+      "size": 5149
+    },
+    "7ef7cbf36415da41aada37f1.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\7ef7cbf36415da41aada37f1.png",
+      "size": 21375
+    },
+    "37e6aac4545e71edfde00830.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\37e6aac4545e71edfde00830.png",
+      "size": 45221
+    },
+    "62dbf25324749925d049eab4.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\62dbf25324749925d049eab4.png",
+      "size": 19262
+    },
+    "5b88d7a5d16934e0f50bc9ab.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\5b88d7a5d16934e0f50bc9ab.png",
+      "size": 50064
+    },
+    "7d5a3bc60ef801da86fc995d.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\7d5a3bc60ef801da86fc995d.png",
+      "size": 8007
+    },
+    "470ba3de7f5615c95c40a8f2.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\470ba3de7f5615c95c40a8f2.png",
+      "size": 6462
+    },
+    "35a4d8c9b3f1228da82e1594.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\35a4d8c9b3f1228da82e1594.png",
+      "size": 12282
+    },
+    "48b80446cf1c384e97def169.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\48b80446cf1c384e97def169.png",
+      "size": 29527
+    },
+    "b087e736eecb063c2ee22548.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\b087e736eecb063c2ee22548.png",
+      "size": 11983
+    },
+    "08e4c3501e103c2c3c8ce579.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\08e4c3501e103c2c3c8ce579.png",
+      "size": 4650
+    },
+    "7742e836201219f431fee51a.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\7742e836201219f431fee51a.png",
+      "size": 46489
+    },
+    "7db484726709ad4cb46a6b02.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\7db484726709ad4cb46a6b02.png",
+      "size": 28249
+    },
+    "bdff8b3a5a59a6f87c10c7b7.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\bdff8b3a5a59a6f87c10c7b7.png",
+      "size": 113049
+    },
+    "cc1f93b339b52af6287cc15f.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\cc1f93b339b52af6287cc15f.png",
+      "size": 25835
+    },
+    "118c239297ff249d67c20080.png": {
+      "file": "imports\\sublimation-20261110-strict\\media\\118c239297ff249d67c20080.png",
+      "size": 58394
+    }
+  }
+}
