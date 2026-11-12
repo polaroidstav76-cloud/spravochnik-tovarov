@@ -35,11 +35,13 @@ jobs:
               root=tk.Tk()
               root.withdraw()
               instance=App(root)
-              root.update_idletasks()
-              assert 'perezakazi_bot' in root.title()
-              assert instance.q.setting('automatic','0') == '0'
-              assert not instance.c.get('recipient')
-              instance.q.db.close()
-              root.destroy()
+              try:
+                  root.update_idletasks()
+                  assert 'perezakazi_bot' in root.title()
+                  assert instance.q.setting('automatic','0') == '0'
+                  assert not instance.c.get('recipient')
+              finally:
+                  instance.q.db.close()
+                  root.destroy()
           print('PASS: window and settings initialized, automatic mail disabled, no credentials read')
           '@ | python -

@@ -48,7 +48,7 @@ class App:
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
         self.q=Queue(folder)
         self.messages=threadqueue.Queue();self.worker=None;self.thread=None
-        root.title('Клаудшоп — заказы партнёрам');root.geometry('1040x810');root.minsize(900,700)
+        root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');root.geometry('1040x810');root.minsize(900,700)
         outer=ttk.Frame(root,padding=14);outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='Заказы партнёрам · @perezakazi_bot',font=('Segoe UI',18,'bold')).pack(anchor='w')
         ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · отправка в 18:00 МСК · ДТФ подключим отдельно').pack(anchor='w',pady=(2,10))
