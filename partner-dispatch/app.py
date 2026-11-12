@@ -308,6 +308,9 @@ def self_test(report_path):
     report={'ok':False}
     try:
         import telethon
+        import cryptg
+        sample=b'\0'*16; key=b'\1'*32; iv=b'\2'*32
+        assert cryptg.decrypt_ige(cryptg.encrypt_ige(sample,key,iv),key,iv)==sample
         with tempfile.TemporaryDirectory() as folder:
             previous=os.environ.get('LOCALAPPDATA')
             os.environ['LOCALAPPDATA']=folder
@@ -320,7 +323,7 @@ def self_test(report_path):
                 assert instance.wizard is not None
                 assert 'perezakazi_bot' in root.title()
                 assert (BASE/'ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif').exists()
-                report={'ok':True,'version':VERSION,'telethon':telethon.__version__,'gui':True,'dpapi':True,'automatic_enabled':False}
+                report={'ok':True,'version':VERSION,'telethon':telethon.__version__,'gui':True,'dpapi':True,'fast_file_crypto':True,'automatic_enabled':False}
             finally:
                 if instance:instance.q.db.close()
                 if root:root.destroy()

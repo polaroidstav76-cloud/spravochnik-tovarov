@@ -13,3 +13,6 @@ https://pyinstaller.org/en/stable/license.html
 Python license: https://docs.python.org/3/license.html
 Tcl/Tk license: https://www.tcl.tk/software/tcltk/license.html
 All direct build dependencies are pinned with hashes in build-requirements.lock.
+
+cryptg 0.6.1 — CC0 — https://pypi.org/project/cryptg/0.6.1/
+Native Windows builds use cryptg for fast Telegram file encryption/decryption.
