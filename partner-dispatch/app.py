@@ -2,6 +2,10 @@
 from __future__ import annotations
 import asyncio
 import ctypes
+import json
+import platform
+import tempfile
+import urllib.parse
 import os
 import queue as threadqueue
 import re
@@ -11,15 +15,17 @@ import threading
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import messagebox,ttk
+from tkinter import messagebox,ttk,filedialog
 import webbrowser
 from core import Queue,UserError
-from services import Settings,Disk,smtp_connect
+from services import Settings,Disk,smtp_connect,check_dedicated_bot,protect
 from worker import Worker
+from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
+VERSION='0.3'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
-        ('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
+        ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
 
 
@@ -48,12 +54,14 @@ class App:
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
         self.q=Queue(folder)
         self.messages=threadqueue.Queue();self.worker=None;self.thread=None
-        root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');root.geometry('1040x810');root.minsize(900,700)
+        root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');width=min(1040,root.winfo_screenwidth()-50);height=min(810,root.winfo_screenheight()-90)
+        root.geometry(f'{width}x{height}');root.minsize(min(900,width),min(650,height))
         outer=ttk.Frame(root,padding=14);outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='Заказы партнёрам · @perezakazi_bot',font=('Segoe UI',18,'bold')).pack(anchor='w')
         ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · отправка в 18:00 МСК · ДТФ подключим отдельно').pack(anchor='w',pady=(2,10))
-        notebook=ttk.Notebook(outer);notebook.pack(fill='both',expand=True)
+        notebook=ttk.Notebook(outer);self.notebook=notebook;notebook.pack(fill='both',expand=True)
         setup=ttk.Frame(notebook,padding=12);main=ttk.Frame(notebook,padding=12)
+        self.setup_tab=setup;self.main_tab=main
         notebook.add(main,text='Очередь и отправка');notebook.add(setup,text='Настройки')
         self.entries={}
         for i,(key,label,secret) in enumerate(FIELDS):
@@ -63,8 +71,9 @@ class App:
             self.entries[key]=entry
         setup.columnconfigure(1,weight=1)
         actions=ttk.Frame(setup);actions.grid(row=len(FIELDS),column=0,columnspan=2,sticky='w',pady=12)
-        ttk.Button(actions,text='Сохранить настройки',command=self.save).pack(side='left',padx=3)
+        ttk.Button(actions,text='Сохранить черновик',command=self.save_partial).pack(side='left',padx=3)
         ttk.Button(actions,text='Проверить Диск и почту (без отправки)',command=self.check).pack(side='left',padx=3)
+        ttk.Button(actions,text='Получить токен Диска',command=self.disk_oauth).pack(side='left',padx=3)
         ttk.Button(actions,text='Инструкция',command=self.help).pack(side='left',padx=3)
         ttk.Label(setup,text='Секреты сохраняются с шифрованием Windows DPAPI. В чат их присылать не нужно.\nСоздайте отдельного нового бота, не используйте бота сводки или закупок.\nПочта отправляет ссылку на ZIP. Любой получивший ссылку сможет скачать архив.',wraplength=850).grid(row=len(FIELDS)+1,column=0,columnspan=2,sticky='w',pady=10)
         links=ttk.Frame(setup);links.grid(row=len(FIELDS)+2,column=0,columnspan=2,sticky='w')
@@ -78,38 +87,56 @@ class App:
         self.auto=tk.BooleanVar(value=self.q.setting('automatic','0')=='1')
         ttk.Checkbutton(main,text='Ежедневная отправка в 18:00 МСК включена',variable=self.auto,command=self.set_auto).pack(anchor='w',pady=10)
         self.status=ttk.Label(main,text='Обработчик не запущен. Сначала заполните настройки.');self.status.pack(anchor='w')
-        self.table=ttk.Treeview(main,columns=('id','name','state'),show='headings',height=10)
+        self.table=ttk.Treeview(main,columns=('id','name','state'),show='headings',height=8)
         for col,title,width in [('id','№',55),('name','Файл',570),('state','Состояние',240)]:
             self.table.heading(col,text=title);self.table.column(col,width=width)
         self.table.pack(fill='both',expand=True,pady=8)
         tools=ttk.Frame(main);tools.pack(fill='x')
-        ttk.Button(tools,text='Отправить сейчас (вся очередь)',command=self.send).pack(side='left',padx=3)
-        ttk.Button(tools,text='Удалить выбранный файл',command=self.delete).pack(side='left',padx=3)
-        ttk.Button(tools,text='Проверить неопределённое письмо',command=self.uncertain).pack(side='left',padx=3)
-        ttk.Button(tools,text='Автозапуск при входе Windows',command=self.autostart).pack(side='left',padx=3)
-        self.logs=tk.Text(main,height=8,state='disabled',wrap='word');self.logs.pack(fill='x',pady=8)
+        ttk.Button(tools,text='Отправить сейчас (вся очередь)',command=self.send).grid(row=0,column=0,sticky='w',padx=3,pady=2)
+        ttk.Button(tools,text='Удалить выбранный файл',command=self.delete).grid(row=0,column=1,sticky='w',padx=3,pady=2)
+        ttk.Button(tools,text='Проверить неопределённое письмо',command=self.uncertain).grid(row=1,column=0,sticky='w',padx=3,pady=2)
+        ttk.Button(tools,text='Автозапуск при входе Windows',command=self.autostart).grid(row=1,column=1,sticky='w',padx=3,pady=2)
+        verification=ttk.Frame(main);verification.pack(fill='x',pady=5)
+        ttk.Button(verification,text='Тестовое письмо проверено',command=self.confirm_test).pack(side='left',padx=3)
+        ttk.Button(verification,text='Отчёт без секретов',command=self.export_report).pack(side='left',padx=3)
+        self.logs=tk.Text(main,height=5,state='disabled',wrap='word');self.logs.pack(fill='x',pady=8)
         ttk.Label(main,text='Файл принят только после ответа бота «Сохранён». Нельзя выключать или усыплять компьютер до завершения отправки.\nОтправки после 18:00 уходят на следующий день. Архивы и оригиналы автоматически не удаляются.',wraplength=900).pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW',self.close)
+        self.wizard=Wizard(notebook,self)
+        notebook.insert(0,self.wizard,text='Первый запуск')
+        notebook.select(self.wizard if self.q.setting('first_test_confirmed','0')!='1' else main)
         self.refresh()
         if '--autostart' in sys.argv:root.after(1200,self.start)
 
     def log(self,text):self.messages.put(str(text))
 
-    def config(self):
+    def config(self,require_all=True):
         c=dict(self.c)
         c.update({key:e.get().strip() for key,e in self.entries.items()})
         for key,_,_ in FIELDS:
-            if not c[key]:raise UserError('Заполните все поля настроек.')
-        if not c['api_id'].isdigit() or int(c['api_id'])<=0:raise UserError('Telegram API ID должен быть числом.')
-        if not re.fullmatch(r'[a-fA-F0-9]{32}',c['api_hash']):raise UserError('API hash должен содержать 32 символа из Telegram.')
-        if not re.fullmatch(r'\d+:[A-Za-z0-9_-]+',c['bot_token']):raise UserError('Проверьте токен бота.')
+            if require_all and key!='disk_client_id' and not c[key]:raise UserError('Заполните все обязательные поля настроек.')
+        if c['api_id'] and (not c['api_id'].isdigit() or int(c['api_id'])<=0):raise UserError('Telegram API ID должен быть числом.')
+        if c['api_hash'] and not re.fullmatch(r'[a-fA-F0-9]{32}',c['api_hash']):raise UserError('API hash должен содержать 32 символа из Telegram.')
+        if c['bot_token'] and not re.fullmatch(r'\d+:[A-Za-z0-9_-]+',c['bot_token']):raise UserError('Проверьте токен бота.')
         for key in ['sender','recipient']:
-            if not re.fullmatch(r'[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',c[key]):raise UserError('Проверьте почтовые адреса.')
+            if c[key] and not re.fullmatch(r'[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',c[key]):raise UserError('Проверьте почтовые адреса.')
+        if c.get('disk_client_id') and not re.fullmatch(r'[a-fA-F0-9]{32}',c['disk_client_id']):raise UserError('Проверьте ClientID приложения Яндекс Диска.')
+        if '#access_token=' in c['disk_token']:
+            c['disk_token']=urllib.parse.parse_qs(urllib.parse.urlsplit(c['disk_token']).fragment).get('access_token',[''])[0]
         return c
 
-    def save(self):
+    def save_partial(self):return self.save(require_all=False)
+
+    def save(self,require_all=True):
         if self.thread and self.thread.is_alive():messagebox.showinfo('Настройки','Сначала остановите обработчик.');return False
-        try:self.c=self.config();self.settings.save(self.c)
+        try:
+            updated=self.config(require_all=require_all)
+            changed=any(self.c.get(k,'')!=updated.get(k,'') for k,_,_ in FIELDS if k!='disk_client_id')
+            self.settings.save(updated);self.c=updated
+            if changed:
+                self.q.set_setting('generation',int(self.q.setting('generation','0'))+1)
+                for key in ('first_test_confirmed','automatic','bot_checked','disk_checked','mail_checked'):self.q.set_setting(key,'0')
+                self.auto.set(False)
         except UserError as e:messagebox.showerror('Настройки',str(e));return False
         self.log('Настройки сохранены на этом компьютере.');return True
 
@@ -118,8 +145,8 @@ class App:
         c=dict(self.c)
         def check():
             try:
-                space=Disk(c['disk_token']).check()
-                smtp=smtp_connect(c);smtp.close()
+                space=Disk(c['disk_token']).check();self.q.set_setting('disk_checked','1')
+                smtp=smtp_connect(c);smtp.close();self.q.set_setting('mail_checked','1')
                 self.log(f'Диск и почта доступны. Свободно на Диске: {space/1024**3:.1f} ГБ. Письмо не отправлялось.')
             except UserError as e:self.log(str(e))
             except Exception:self.log('Проверка не завершена. Проверьте интернет.')
@@ -142,6 +169,8 @@ class App:
     def set_auto(self):
         if self.auto.get() and not self.q.setting('owner'):
             self.auto.set(False);messagebox.showinfo('Подключение','Сначала подключите владельца через кнопку «Подключить сотрудников».');return
+        if self.auto.get() and self.q.setting('first_test_confirmed','0')!='1':
+            self.auto.set(False);messagebox.showinfo('Сначала тест','Сначала получите тестовое письмо, скачайте архив и нажмите «Тестовое письмо проверено».');return
         self.q.set_setting('automatic',int(self.auto.get()))
         self.log('Ежедневная отправка '+('включена.' if self.auto.get() else 'выключена.'))
 
@@ -188,9 +217,64 @@ class App:
             return
         if not messagebox.askyesno('Автозапуск','Запускать обработчик автоматически после входа этого пользователя в Windows?'):return
         # Arguments contain no credentials.
-        python=Path(sys.executable).with_name('pythonw.exe')
-        target.write_text(f'@echo off\r\nchcp 65001 >nul\r\nstart "" "{python}" "{BASE / "app.py"}" --autostart\r\n',encoding='utf-8')
+        command=f'"{sys.executable}" --autostart' if getattr(sys,'frozen',False) else f'"{Path(sys.executable).with_name("pythonw.exe")}" "{BASE / "app.py"}" --autostart'
+        target.write_text('@echo off\r\nchcp 65001 >nul\r\nstart "" '+command+'\r\n',encoding='utf-8')
         self.log('Автозапуск включён. Программа запускается после входа в Windows, не до него.')
+
+    def wizard_action(self,action):
+        if action.startswith('url:'):webbrowser.open(action[4:]);return
+        if action.startswith('field:'):
+            self.notebook.select(self.setup_tab);self.entries[action[6:]].focus_set();return
+        operations={'bot':self.check_bot,'oauth':self.disk_oauth,'check':self.check,'start':self.start,'pair':self.pair,
+                    'sample':self.sample,'confirm':self.confirm_test,'main':lambda:self.notebook.select(self.main_tab),
+                    'autostart':self.autostart,'report':self.export_report}
+        operations[action]()
+
+    def disk_oauth(self):
+        client=self.entries['disk_client_id'].get().strip()
+        if not re.fullmatch(r'[a-fA-F0-9]{32}',client):
+            messagebox.showinfo('ClientID','Введите ClientID вашего приложения Яндекс Диска в настройках.');return
+        webbrowser.open('https://oauth.yandex.ru/authorize?'+urllib.parse.urlencode({'response_type':'token','client_id':client}))
+
+    def check_bot(self):
+        if not self.save_partial():return
+        if not self.c.get('bot_token'):messagebox.showinfo('Токен','Сначала введите токен нового бота.');return
+        c=dict(self.c)
+        def check():
+            try:
+                username=check_dedicated_bot(c['bot_token'],c['bot_username'])
+                self.q.set_setting('bot_checked','1');self.log('Telegram подтвердил @'+username+'. Другой обработчик к нему не подключён.')
+            except UserError as e:self.log(str(e))
+        threading.Thread(target=check,daemon=True).start()
+
+    def sample(self):
+        source=BASE/'ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif'
+        if not source.exists():messagebox.showinfo('Тест','Тестовый файл не найден. Возьмите любой безопасный TIF для проверки.');return
+        dest=self.q.root/source.name
+        dest.write_bytes(source.read_bytes())
+        os.startfile(self.q.root)
+        messagebox.showinfo('Тестовый файл','В открывшейся папке выделите ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif и отправьте его в @perezakazi_bot как файл, без сжатия.')
+
+    def confirm_test(self):
+        with self.q.lock:
+            test=self.q.db.execute("select id from batches where state='sent' and test_mode=1 and generation=? order by created desc limit 1",(int(self.q.setting('generation','0')),)).fetchone()
+        if not test:
+            messagebox.showinfo('Сначала отправка','Программа ещё не получила подтверждение приёма тестового письма почтовым сервером. Сначала отправьте тест через бота.');return
+        if not messagebox.askyesno('Подтверждение теста','Вы нашли тестовое письмо в своём ящике, скачали ZIP и открыли исходный TIF?'):
+            return
+        self.q.set_setting('first_test_confirmed','1')
+        self.log('Тестовое письмо и архив проверены вами. Теперь можно включить ежедневное расписание.')
+
+    def export_report(self):
+        with self.q.lock:
+            files={r[0]:r[1] for r in self.q.db.execute('select state,count(*) from files group by state')}
+            batches={r[0]:r[1] for r in self.q.db.execute('select state,count(*) from batches group by state')}
+        report={'version':VERSION,'windows':platform.release(),'python':platform.python_version(),
+                'settings_present':{k:bool(e.get().strip()) for k,e in self.entries.items()},
+                'checks':{k:self.q.setting(k,'0')=='1' for k in ('bot_checked','disk_checked','mail_checked','first_test_confirmed','automatic')},
+                'files_by_state':files,'batches_by_state':batches}
+        name=filedialog.asksaveasfilename(parent=self.root,title='Отчёт без секретов',initialfile='Cloudshop-check.json',defaultextension='.json',filetypes=[('JSON','*.json')])
+        if name:Path(name).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');self.log('Отчёт сохранён: без токенов, адресов, кодов сотрудников и названий файлов.')
 
     def help(self):os.startfile(BASE/'ИНСТРУКЦИЯ.txt')
 
@@ -220,7 +304,38 @@ class App:
         self.stop();self.root.destroy()
 
 
+def self_test(report_path):
+    report={'ok':False}
+    try:
+        import telethon
+        with tempfile.TemporaryDirectory() as folder:
+            previous=os.environ.get('LOCALAPPDATA')
+            os.environ['LOCALAPPDATA']=folder
+            root=None;instance=None
+            try:
+                assert protect(protect(b'Windows encryption test'),decrypt=True)==b'Windows encryption test'
+                root=tk.Tk();root.withdraw();instance=App(root);root.update_idletasks()
+                assert instance.q.setting('automatic','0')=='0'
+                assert instance.q.setting('first_test_confirmed','0')=='0'
+                assert instance.wizard is not None
+                assert 'perezakazi_bot' in root.title()
+                assert (BASE/'ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif').exists()
+                report={'ok':True,'version':VERSION,'telethon':telethon.__version__,'gui':True,'dpapi':True,'automatic_enabled':False}
+            finally:
+                if instance:instance.q.db.close()
+                if root:root.destroy()
+                if previous is None:os.environ.pop('LOCALAPPDATA',None)
+                else:os.environ['LOCALAPPDATA']=previous
+    except Exception as e:report['error_type']=type(e).__name__
+    Path(report_path).write_text(json.dumps(report,indent=2),encoding='utf-8')
+    return 0 if report['ok'] else 1
+
+
 if __name__=='__main__':
+    if '--self-test' in sys.argv:
+        try:report_path=sys.argv[sys.argv.index('--report')+1]
+        except (ValueError,IndexError):sys.exit(2)
+        sys.exit(self_test(report_path))
     root=tk.Tk()
     try:app=App(root)
     except Exception as e:

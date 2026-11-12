@@ -86,6 +86,10 @@ class Queue:
         for table in ('files','batches'):
             if 'direction' not in {r[1] for r in self.db.execute('pragma table_info('+table+')')}:
                 self.db.execute("alter table "+table+" add column direction text not null default 'wideformat'")
+        if 'test_mode' not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
+            self.db.execute('alter table batches add column test_mode integer not null default 1')
+        if 'generation' not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
+            self.db.execute('alter table batches add column generation integer not null default 0')
         self.db.execute('create index if not exists files_direction_waiting on files(direction,state,due)')
         # We never automatically resend after an ambiguous SMTP result or crash.
         self.db.execute("update batches set state='uncertain',error='Программа закрылась во время передачи письма. Требуется проверить почту.' where state='submitting'")
@@ -180,7 +184,7 @@ class Queue:
             ids=[r[0] for r in self.db.execute(query,args)]
             if not ids:return None
             bid=uuid.uuid4().hex
-            self.db.execute("insert into batches(id,state,created,recipient,direction) values(?,'collecting',?,?,?)",(bid,now,recipient,direction))
+            self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting('first_test_confirmed','0')!='1'),int(self.setting('generation','0'))))
             self.db.executemany('update files set batch=? where id=?',[(bid,i) for i in ids])
             return bid
 

@@ -87,7 +87,7 @@ class Worker:
                 await self.delete_menu(event,0,direction)
             elif event.document:
                 file=event.file
-                r=self.q.add(event.chat_id,event.id,uid,file.name or '',file.size,event.date.timestamp(),direction=direction)
+                r=self.q.add(event.chat_id,event.id,uid,file.name or '',(file.size or 0),event.date.timestamp(),direction=direction)
                 if r['state']=='cancelled':await self.reply(event,'Этот файл ранее удалён.');return
                 self.cached[(r['chat'],r['message'])]=event.message
                 await self.reply(event,f'{DIRECTIONS[direction]["label"]}: получаю «{r["name"]}». Дождитесь подтверждения «Сохранён».')
@@ -154,7 +154,8 @@ class Worker:
                 os.replace(temp,dest);self.q.downloaded(r['id'],sha)
                 self.log('Сохранён: '+r['name'])
                 try:
-                    await self.client.send_message(r['chat'],f'Сохранён: {r["name"]}\nОтправка по расписанию: {r["due"]}, 18:00 МСК. Для срочной отправки нажмите «Отправить сейчас».',parse_mode=None)
+                    schedule=f'Отправка по расписанию: {r["due"]}, 18:00 МСК.' if self.q.setting('automatic','0')=='1' else 'Расписание пока выключено.'
+                    await self.client.send_message(r['chat'],f'Сохранён: {r["name"]}\n{schedule} Для теста или срочной отправки нажмите «Отправить сейчас».',parse_mode=None)
                 except Exception:self.log('Не удалось отправить подтверждение загрузки. Файл сохранён.')
             except asyncio.CancelledError:raise
             except Exception as e:
@@ -174,6 +175,10 @@ class Worker:
     async def process_batch(self,b):
         bid=b['id'];disk=Disk(self.c['disk_token'])
         if self.retry_at.get(bid,0)>time.time():return
+        if b['recipient']!=self.c['recipient']:
+            self.retry_at[bid]=time.time()+300
+            self.log('У незавершённой отправки другой получатель. Отправка остановлена; удалите её файлы из очереди и загрузите заново для нового адреса.')
+            return
         if b['state']=='invalidated':
             self.q.transition(bid,'invalidated','collecting');return
         rows=self.q.batch_files(bid)

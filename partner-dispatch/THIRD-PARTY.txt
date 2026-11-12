@@ -6,3 +6,10 @@ pyasn1 0.6.5 — BSD-2-Clause — https://pypi.org/project/pyasn1/0.6.5/
 License and copyright files are included inside each wheel in wheelhouse.
 pyaes wheel was built from the pinned official PyPI source distribution.
 This package contains no real credentials, bot tokens, customer files or mail passwords.
+
+Native builds also bundle the Python runtime and Tcl/Tk via PyInstaller.
+PyInstaller 6.22.3 — GPL-2.0-or-later with bootloader exception:
+https://pyinstaller.org/en/stable/license.html
+Python license: https://docs.python.org/3/license.html
+Tcl/Tk license: https://www.tcl.tk/software/tcltk/license.html
+All direct build dependencies are pinned with hashes in build-requirements.lock.

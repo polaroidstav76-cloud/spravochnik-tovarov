@@ -175,6 +175,34 @@ class TestDispatch(unittest.TestCase):
             self.assertIn('Сначала выберите',event.messages[0][0])
             self.assertEqual(len(self.q.waiting()),0)
         asyncio.run(check())
+    def test_test_mode_and_configuration_generation(self):
+        from services import email_for
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        batch=self.q.batch(bid)
+        self.assertEqual(batch['test_mode'],1)
+        self.assertTrue(str(email_for(CONFIG,{**batch,'link':'https://example.invalid/zip'},self.q.batch_files(bid))['Subject']).startswith('ТЕСТ'))
+        self.q.transition(bid,'collecting','sent')
+        self.q.set_setting('first_test_confirmed','1');self.q.set_setting('generation','7')
+        self.file(mid=2);second=self.q.claim(CONFIG['recipient'],self.now)
+        self.assertEqual(self.q.batch(second)['test_mode'],0)
+        self.assertEqual(self.q.batch(second)['generation'],7)
+    def test_changed_recipient_pauses_pending_batch(self):
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        worker=Worker(self.q,{**CONFIG,'recipient':'new@example.invalid'},self.logs.append)
+        with patch('worker.smtp_connect') as smtp:
+            asyncio.run(worker.process_batch(self.q.batch(bid)))
+            smtp.assert_not_called()
+        self.assertEqual(self.q.batch(bid)['state'],'collecting')
+    def test_partial_settings_and_oauth_url_normalization(self):
+        from app import App,FIELDS
+        class Value:
+            def __init__(self,v):self.v=v
+            def get(self):return self.v
+        app=object.__new__(App);app.c={}
+        app.entries={k:Value('') for k,_,_ in FIELDS}
+        app.entries['disk_token']=Value('https://oauth.yandex.ru/verification_code#access_token=fake-token&expires_in=1')
+        self.assertEqual(app.config(require_all=False)['disk_token'],'fake-token')
+        with self.assertRaises(UserError):app.config(require_all=True)
     @unittest.skipUnless(os.environ.get('TEST_LARGE_FILE')=='1','Explicit 500 MiB streaming test')
     def test_500_mib_original(self):
         r=self.q.add(11,99,11,'баннер 500 МБ.tif',MAX_BYTES,self.now-1)

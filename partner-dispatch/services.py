@@ -126,15 +126,15 @@ def email_for(config,batch,files):
     msg['From']=config['sender'];msg['To']=batch['recipient']
     msg['Date']=formatdate(localtime=False)
     msg['Message-ID']=f'<cloudshop-print-{batch["id"]}@{config["sender"].split("@")[-1]}>'
-    msg['Subject']=f'Широкоформатная печать · {len(files)} файлов · заказ {batch["id"][:8]}'
-    body=['Здравствуйте!','',f'Архив с {len(files)} макетами для печати:',batch['link'],'','Состав заказа:']
+    msg['Subject']=('ТЕСТ · ' if batch.get('test_mode',1) else '')+f'Широкоформатная печать · {len(files)} файлов · заказ {batch["id"][:8]}'
+    body=['Здравствуйте!', 'ТЕСТОВАЯ ОТПРАВКА. НЕ ПЕРЕДАВАТЬ В ПРОИЗВОДСТВО.' if batch.get('test_mode',1) else '', '',f'Архив с {len(files)} макетами для печати:',batch['link'],'','Состав заказа:']
     body += [f'• {r["branch"]}: {r["name"]}' for r in files]
     body += ['','Файлы в архиве сохранены в оригинале.','Ссылка доступна любому, кто её получил. Не пересылайте её посторонним.']
     msg.set_content('\n'.join(body))
     return msg
 
 
-def check_dedicated_bot(token):
+def check_dedicated_bot(token,expected_username=''):
     if not re.fullmatch(r'[0-9]+:[A-Za-z0-9_-]+',token):raise UserError('Неверный формат токена бота.')
     try:
         with urllib.request.urlopen('https://api.telegram.org/bot'+token+'/getWebhookInfo',timeout=30) as r:
@@ -142,5 +142,11 @@ def check_dedicated_bot(token):
         if not value.get('ok'):raise UserError('Telegram не подтвердил токен бота.')
         if value.get('result',{}).get('url'):
             raise UserError('У этого бота уже есть webhook. Создайте отдельного нового бота; работа существующего не изменена.')
+        with urllib.request.urlopen('https://api.telegram.org/bot'+token+'/getMe',timeout=30) as r:
+            me=json.load(r)
+        if not me.get('ok') or not me.get('result',{}).get('is_bot'):raise UserError('Telegram не подтвердил бота.')
+        username=me['result'].get('username','')
+        if expected_username and username.lower()!=expected_username.lstrip('@').lower():raise UserError('Токен относится к другому боту. Нужен @'+expected_username.lstrip('@')+'.')
+        return username
     except UserError:raise
     except Exception:raise UserError('Не удалось проверить токен Telegram. Проверьте интернет и токен.') from None
