@@ -1,0 +1,45 @@
+name: Partner dispatch Windows checks
+on:
+  push:
+    branches: [partner-print-dispatch]
+    paths: ['partner-dispatch/**', '.github/workflows/partner-dispatch-windows.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install hash-locked offline dependencies
+        run: python -m pip install --no-index --find-links partner-dispatch/wheelhouse --require-hashes -r partner-dispatch/requirements.lock
+      - name: Windows DPAPI and directory permissions
+        run: python partner-dispatch/diagnostics.py
+      - name: Queue, routing, deletion, SMTP ambiguity and 500 MiB archive
+        env:
+          TEST_LARGE_FILE: '1'
+        run: python -m unittest discover -s partner-dispatch -p test_dispatch.py -v
+      - name: Desktop window initialization without credentials
+        working-directory: partner-dispatch
+        run: |
+          @'
+          import tempfile, os, tkinter as tk
+          from app import App
+          with tempfile.TemporaryDirectory() as folder:
+              os.environ['LOCALAPPDATA'] = folder
+              root=tk.Tk()
+              root.withdraw()
+              instance=App(root)
+              root.update_idletasks()
+              assert 'perezakazi_bot' in root.title()
+              assert instance.q.setting('automatic','0') == '0'
+              assert not instance.c.get('recipient')
+              instance.q.db.close()
+              root.destroy()
+          print('PASS: window and settings initialized, automatic mail disabled, no credentials read')
+          '@ | python -

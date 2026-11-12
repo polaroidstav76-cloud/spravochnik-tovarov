@@ -1,0 +1,8 @@
+Included dependencies, pinned in requirements.lock, installed from local wheels:
+Telethon 1.45.0 — MIT — https://pypi.org/project/Telethon/1.45.0/
+rsa 4.9.1 — Apache-2.0 — https://pypi.org/project/rsa/4.9.1/
+pyaes 1.6.1 — MIT — https://pypi.org/project/pyaes/1.6.1/
+pyasn1 0.6.5 — BSD-2-Clause — https://pypi.org/project/pyasn1/0.6.5/
+License and copyright files are included inside each wheel in wheelhouse.
+pyaes wheel was built from the pinned official PyPI source distribution.
+This package contains no real credentials, bot tokens, customer files or mail passwords.
