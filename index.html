@@ -4030,12 +4030,11 @@ $('saveSale').onclick=async()=>{
   const pay=$('salePayment').value,club=$('saleClubEnabled').checked;
   pickupLastResult=null;
   if(pay==='on_pickup'){
-    if(salePickup){$('saleStatus').textContent='Этот заказ уже ждёт оплаты. Выберите, как клиент платит сейчас.';return}
     if(club&&saleLoyaltyCustomerId&&pickupOrders.some(o=>String(o.customer_id)===String(saleLoyaltyCustomerId)&&pickupFinal(o))){$('saleStatus').textContent='⛔ У этого клиента только предоплата: он не оплатил прошлый заказ. Выберите способ оплаты сейчас.';return}
     if(salePointsUsed()>0){$('saleStatus').textContent='При оплате «при получении» баллы списать нельзя. Спишите их, когда клиент будет оплачивать.';return}
     const contact=$('salePickupContact').value.trim(),ref=$('salePickupRef').value.trim(),isPhone=/^[+\d\s()\-]{10,}$/.test(contact)&&v5Digits(contact).length>=10;
     if(!contact&&!(club&&saleLoyaltyCustomerId)){$('saleStatus').textContent='Укажите контакт клиента: Telegram, Max или телефон.';$('salePickupContact').focus();return}
-    pickupRpcOverride=a=>v5Rpc('sales_hold_pickup_v2',{p_shift_id:a.p_shift_id,p_employee_id:a.p_employee_id,p_items:a.p_items,p_discount_percent:a.p_discount_percent,p_comment:a.p_comment,p_order_number:a.p_order_number,p_customer_id:a.p_loyalty_customer_id,p_client_name:contact||(club?a.p_loyalty_name:null),p_client_phone:isPhone?contact:(club?a.p_loyalty_phone:null),p_client_order_ref:ref||null}).then(r=>{if(!r.error)pickupLastResult={kind:'hold',no:r.data};return r});
+    pickupRpcOverride=a=>v5Rpc(salePickup?'sales_update_pickup':'sales_hold_pickup_v2',{...(salePickup?{p_pickup_id:salePickup.id}:{}),p_shift_id:a.p_shift_id,p_employee_id:a.p_employee_id,p_items:a.p_items,p_discount_percent:a.p_discount_percent,p_comment:a.p_comment,...(salePickup?{}:{p_order_number:a.p_order_number}),p_customer_id:a.p_loyalty_customer_id,p_client_name:contact||(club?a.p_loyalty_name:null),p_client_phone:isPhone?contact:(club?a.p_loyalty_phone:null),p_client_order_ref:ref||null}).then(r=>{if(!r.error)pickupLastResult={kind:'hold',no:r.data};return r});
   }else if(salePickup){
     const o=salePickup;
     pickupRpcOverride=a=>{const x={...a,p_pickup_id:o.id};delete x.p_order_number;return v5Rpc('sales_pay_pickup',x).then(r=>{if(!r.error)pickupLastResult={kind:'pay',no:r.data};return r})};
@@ -4060,10 +4059,12 @@ window.startPickupPayment=async id=>{
   saleDraft=(o.items||[]).map(i=>({catalogId:Number(i.catalog_id),quantity:Number(i.quantity),unitPrice:Number(i.unit_price),...(i.variant_material_id?{variantId:Number(i.variant_material_id),vt:-1}:{})}));
   $('saleDiscountPercent').value=String(Number(o.discount_percent||0));
   $('saleComment').value=o.comment||'';
-  setPickupOptionAvailable(false);$('salePayment').value='';$('salePayment').onchange();
+  setPickupOptionAvailable(true);$('salePayment').value='';
+  $('salePickupContact').value=o.client_name||o.client_phone||'';$('salePickupRef').value=o.client_order_ref||'';
+  $('salePayment').onchange();
   $('saleOrderPreview').textContent=`№ ${o.order_number} (заказ при получении)`;
   const otherBranch=Number(o.branch_id)!==Number(salesSession.branchId);
-  $('salePickupBanner').innerHTML=`<b>Оплата заказа №${esc(o.order_number)} от ${v5Date(o.created_at)}</b> · ${esc(pickupClient(o))}<br>Сумма была ${salesMoney(o.total)}. Проверьте позиции, выберите способ оплаты и при необходимости клубную карту, затем нажмите «Оформить». Продажа попадёт в отчёт текущей смены.${otherBranch?`<br>Заказ оформлен в филиале «${esc(o.branch_name||'')}», здесь у продажи будет новый номер.`:''}`;
+  $('salePickupBanner').innerHTML=`<b>Оплата заказа №${esc(o.order_number)} от ${v5Date(o.created_at)}</b> · ${esc(pickupClient(o))}<br>Сумма была ${salesMoney(o.total)}. Можно добавить товары. Выберите оплату сейчас или «При получении», чтобы сохранить дополненный заказ в долгах. При оплате продажа попадёт в отчёт текущей смены.${otherBranch?`<br>Заказ оформлен в филиале «${esc(o.branch_name||'')}», здесь у продажи будет новый номер.`:''}`;
   $('salePickupBanner').style.display='block';
   if(!o.customer_id&&o.client_phone){$('saleClubNewName').value=o.client_name!==o.client_phone?(o.client_name||''):'';$('saleClubNewPhone').value=o.client_phone}
   renderSaleDraft();
@@ -5122,7 +5123,7 @@ function stkDrawBalRows(){
 function stkDrawOp(){
   const kinds=[['receipt','Приход (закупка)'],['transfer','Перемещение'],['writeoff','Списание (брак, порча)'],['inventory','Инвентаризация']];
   const my=stkMyBranch(),br=stkPlaces();
-  if(!stkMaterials().length){$('stockBody').innerHTML='<div class="v5-box info">Сначала нужны материалы — их добавляет администратор во вкладке «Материалы и нормы».</div>';return}
+  if(!stkMaterials().length&&stk.opKind!=='receipt'){$('stockBody').innerHTML='<div class="v5-box info">Сначала нужны материалы — их добавляет администратор во вкладке «Материалы и нормы».</div>';return}
   if(!stk.opRows.length)stk.opRows=[{m:'',q:'',p:''}];
   const k=stk.opKind,lockOwn=!isAdmin&&k!=='transfer'&&!!my;
   const own=lockOwn?br.filter(b=>Number(b.id)===Number(my)||b.workshop):br;
@@ -5178,9 +5179,10 @@ function stkDrawOpRows(){
   $('stkOpRows').querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{stk.opRows.splice(Number(el.dataset.del),1);if(!stk.opRows.length)stk.opRows=[{m:'',q:'',p:''}];stkDrawOpRows()});
   const items=stkOpItems();
   $('stkOpRows').querySelectorAll('[data-combo]').forEach(el=>{const i=Number(el.dataset.combo),r=stk.opRows[i];
-    stkCombo(el,{items,keep:true,value:mat(r)?.name||'',placeholder:'Начните вводить или выберите материал',onPick:async x=>{
+    stkCombo(el,{items,keep:true,value:mat(r)?.name||r.name||'',free:price,placeholder:price?'Выберите товар или впишите новый':'Начните вводить или выберите материал',onInput:value=>{r.m='';r.name=value;r.pEdited=true;},onPick:async x=>{
+      if(x.free){r.m='';r.name=x.free;stkDrawOpRows();return}
       const id=await stkOpMaterialFor(x.item);if(!id){stkDrawOpRows();return}
-      r.m=id;r.pEdited=false;const m=mat(r),unit=Number(m?.pack_price)||0;r.p=price&&unit>0&&Number(r.q)>0?String(Math.round(Number(r.q)*unit*100)/100):'';stkDrawOpRows();
+      r.m=id;r.name='';r.pEdited=false;const m=mat(r),unit=Number(m?.pack_price)||0;r.p=price&&unit>0&&Number(r.q)>0?String(Math.round(Number(r.q)*unit*100)/100):'';stkDrawOpRows();
     }});
   });
 }
@@ -5200,8 +5202,9 @@ async function stkSaveOp(){
   const k=stk.opKind,st=$('stkOpStatus');
   const items=k==='inventory'
     ?[...document.querySelectorAll('#stkOpRows [data-inv]')].filter(i=>i.value!=='').map(i=>({material_id:Number(i.dataset.inv),qty:Number(i.value)}))
-    :stk.opRows.filter(r=>r.m&&Number(r.q)>0).map(r=>{const pq=k==='receipt'?Number(stkMaterials(true).find(m=>Number(m.id)===Number(r.m))?.pack_qty)||0:0;
-        return {material_id:Number(r.m),qty:pq>0?Number(r.q)*pq:Number(r.q),price_total:r.p===''?null:Number(r.p)}});
+    :stk.opRows.filter(r=>(r.m||k==='receipt'&&r.name?.trim())&&Number(r.q)>0).map(r=>{const pq=k==='receipt'?Number(stkMaterials(true).find(m=>Number(m.id)===Number(r.m))?.pack_qty)||0:0;
+        return {material_id:r.m?Number(r.m):null,...(!r.m?{name:r.name.trim()}:{}),qty:pq>0?Number(r.q)*pq:Number(r.q),price_total:r.p===''?null:Number(r.p)}});
+  if(k!=='inventory'&&stk.opRows.some(r=>(r.m||r.name?.trim()||r.q!=='')&&(!(Number(r.q)>0)||!Number.isFinite(Number(r.q))||(!r.m&&!(k==='receipt'&&r.name?.trim()))))){st.textContent='В каждой строке укажите товар и количество больше нуля.';return}
   if(!items.length){st.textContent='Добавьте материал и количество.';return}
   if(k==='transfer'&&!Number($('stkTo').value)){st.textContent='Выберите, в какой филиал передаёте.';return}
   if(k==='writeoff'&&!$('stkComment').value.trim()){st.textContent='Укажите причину списания.';return}
@@ -7132,6 +7135,6 @@ $('staffSave').onclick=async()=>{
 <link rel="stylesheet" href="client-updates.css">
 <script src="client-updates-config.js"></script>
 <script src="client-updates.js"></script>
-<script src="purchase-rounds.js"></script>
+<script src="purchase-rounds.js?v=20261112"></script>
 </body>
 </html>
