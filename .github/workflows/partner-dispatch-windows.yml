@@ -3,6 +3,9 @@ on:
   push:
     branches: [partner-print-dispatch]
     paths: ['partner-dispatch/**', '.github/workflows/partner-dispatch-windows.yml']
+concurrency:
+  group: partner-dispatch-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -37,7 +40,7 @@ jobs:
         run: >-
           python -m PyInstaller --noconfirm --clean --onefile --windowed
           --name CloudshopPrint-${{ matrix.architecture }}
-          --distpath native --workpath build/native --specpath build/spec
+          --distpath native --workpath build/native --specpath .
           --add-data "partner-dispatch/ИНСТРУКЦИЯ.txt:."
           --add-data "partner-dispatch/ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif:."
           partner-dispatch/app.py
