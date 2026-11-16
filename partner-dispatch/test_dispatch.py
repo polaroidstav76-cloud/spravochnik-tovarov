@@ -21,7 +21,8 @@ class TestDispatch(unittest.TestCase):
         self.now=datetime(2026,11,12,18,0,tzinfo=MOSCOW).timestamp()
         self.logs=[]
     def tearDown(self):self.q.db.close();self.tmp.cleanup()
-    def file(self,chat=11,mid=1,name='самоклейка 50х50 см.tif',data=b'original-tiff',stamp=None):
+    def file(self,chat=11,mid=1,name=None,data=b'original-tiff',stamp=None):
+        name=name or f'самоклейка {chat}-{mid} 50х50 см.tif'
         r=self.q.add(chat,mid,chat,name,len(data),stamp or self.now-10)
         p=self.q.path(r);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
         self.q.downloaded(r['id'],hashlib.sha256(data).hexdigest());return self.q.file(r['id'])
@@ -67,7 +68,7 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual(len(names),2)
             self.assertEqual(z.read(names[0]),b'original-tiff')
             self.assertEqual(z.read(names[1]),b'different original')
-            self.assertTrue(all(Path(n).name==a['name'] for n in names))
+            self.assertEqual({Path(n).name for n in names},{a['name'],b['name']})
     def test_partner_package_hides_branches_and_has_no_attachments(self):
         from services import email_for
         self.file(name='баннер.tif');self.file(chat=22,name='холст.tif')
@@ -99,11 +100,128 @@ class TestDispatch(unittest.TestCase):
         a=self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
         self.q.transition(bid,'collecting','ready');self.assertTrue(self.q.accept_smtp(bid))
         with self.assertRaises(UserError):self.q.cancel(a['id'])
-        self.assertEqual(len(self.q.waiting()),0)
+        self.assertEqual(len(self.q.waiting()),1)
         self.q.db.close();self.q=Queue(self.tmp.name)
         self.assertEqual(self.q.batch(bid)['state'],'uncertain')
         self.assertIsNone(self.q.claim(CONFIG['recipient'],self.now))
         self.q.reset_uncertain(bid,False);self.assertEqual(self.q.batch(bid)['state'],'collecting')
+    def test_duplicate_names_rejected_until_order_completed(self):
+        self.file(name='Макет.tif')
+        with self.assertRaisesRegex(UserError,'Переименуйте'):
+            self.q.add(22,9,22,'макет.TIF',12,self.now)
+        self.assertEqual(len(self.q.waiting()),1)
+        bid=self.q.claim(CONFIG['recipient'],self.now)
+        self.q.transition(bid,'collecting','sent')
+        self.assertIsNotNone(self.q.add(22,9,22,'Макет.tif',12,self.now))
+
+    def test_duplicate_add_is_atomic_between_two_staff(self):
+        from concurrent.futures import ThreadPoolExecutor
+        def add(uid):
+            try:self.q.add(uid,99,uid,'одинаковое.tif',4,self.now);return True
+            except UserError:return False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(sum(pool.map(add,[11,22])),1)
+        self.assertEqual(len(self.q.waiting()),1)
+
+    def test_send_confirmation_expires_and_detects_changed_queue(self):
+        from bot_features import BotFeatures
+        features=BotFeatures(self.q);self.file()
+        token,count=features.request(11,'wideformat');self.assertEqual(count,1)
+        with self.assertRaises(UserError):features.confirm(token,22,CONFIG['recipient'])
+        self.file(mid=2)
+        with self.assertRaisesRegex(UserError,'Очередь изменилась'):features.confirm(token,11,CONFIG['recipient'])
+        token,count=features.request(11,'wideformat')
+        bid=features.confirm(token,11,CONFIG['recipient'])
+        self.assertEqual(len(self.q.batch_files(bid)),2)
+        with self.assertRaises(UserError):features.confirm(token,11,CONFIG['recipient'])
+
+    def test_confirmation_timeout_does_not_send(self):
+        from bot_features import BotFeatures
+        features=BotFeatures(self.q);self.file()
+        token,_=features.request(11,'wideformat')
+        with patch('bot_features.time.time',return_value=time.time()+301):
+            with self.assertRaises(UserError):features.confirm(token,11,CONFIG['recipient'])
+        self.assertIsNone(self.q.active_batch())
+
+    def test_queue_broadcast_names_only_updates_and_retries(self):
+        from bot_features import BotFeatures
+        from unittest.mock import AsyncMock
+        features=BotFeatures(self.q);self.file(name='самоклейка.tif')
+        client=type('Client',(),{'send_message':AsyncMock(side_effect=ConnectionError())})()
+        asyncio.run(features.broadcast(client))
+        client.send_message=AsyncMock()
+        asyncio.run(features.broadcast(client));asyncio.run(features.broadcast(client))
+        self.assertEqual(client.send_message.await_count,2)
+        texts=[call.args[1] for call in client.send_message.await_args_list]
+        self.assertTrue(all('самоклейка.tif' in t and 'Первый филиал' not in t for t in texts))
+        bid=self.q.claim(CONFIG['recipient'],self.now);self.q.transition(bid,'collecting','sent')
+        asyncio.run(features.broadcast(client))
+        self.assertEqual(client.send_message.await_count,4)
+        self.assertIn('Файлов, ожидающих отправки, нет',client.send_message.await_args.args[1])
+        self.q.db.close();self.q=Queue(self.tmp.name)
+        asyncio.run(BotFeatures(self.q).broadcast(client))
+        self.assertEqual(client.send_message.await_count,4)
+
+    def test_manual_claim_stops_retries_and_is_single_operator(self):
+        self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
+        self.q.join(22,'Ответственный');self.q.set_setting('alert_role:22','Ответственный')
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        worker=Worker(self.q,CONFIG,self.logs.append)
+        taken=worker.handoff.take(bid,22,0)
+        self.assertEqual(taken['state'],'manual')
+        self.assertIsNone(self.q.active_batch())
+        with self.assertRaises(UserError):worker.handoff.take(bid,11,0)
+        with self.assertRaises(UserError):self.q.claim(CONFIG['recipient'],self.now,manual=True)
+        with patch('worker.Disk') as disk:
+            asyncio.run(worker.process_batch(taken));disk.return_value.upload.assert_not_called()
+        worker.handoff.finish(bid,22,0)
+        self.assertEqual(self.q.batch(bid)['state'],'manual_sent')
+        self.assertEqual(self.q.waiting(),[])
+
+    def test_manual_delete_invalidates_link_and_old_buttons(self):
+        self.q.set_setting('owner',11)
+        row=self.file();self.file(mid=2)
+        bid=self.q.claim(CONFIG['recipient'],self.now);worker=Worker(self.q,CONFIG,self.logs.append)
+        self.q.transition(bid,'collecting','ready',link='https://example.invalid/old',remote_path='disk:/Cloudshop-Print/'+('a'*32)+'_'+('b'*32)+'/Полароид.zip')
+        worker.handoff.pause(bid,'ready','Проверка');worker.handoff.take(bid,11,0)
+        self.q.cancel(row['id'])
+        batch=self.q.batch(bid)
+        self.assertIsNone(batch['link']);self.assertTrue(batch['needs_revoke'])
+        self.assertEqual(batch['manual_revision'],1)
+        with self.assertRaises(UserError):worker.handoff.finish(bid,11,0)
+        worker.handoff.finish(bid,11,1)
+
+    def test_manual_originals_without_disk_and_no_automatic_email(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        self.q.set_setting('owner',11);row=self.file()
+        bid=self.q.claim(CONFIG['recipient'],self.now);worker=Worker(self.q,CONFIG,self.logs.append)
+        worker.handoff.take(bid,11,0);worker.handoff.request_files(bid,11,0)
+        original=SimpleNamespace(document=object())
+        async def send_file(*args,**kw):
+            self.assertIs(args[1],original.document);worker.running=False
+            return SimpleNamespace(id=100)
+        worker.client=SimpleNamespace(get_messages=AsyncMock(return_value=original),send_file=AsyncMock(side_effect=send_file))
+        with patch('worker.smtp_connect') as smtp,patch('handoff.Disk') as disk:
+            asyncio.run(worker.handoff.file_loop(worker))
+            smtp.assert_not_called();disk.assert_not_called()
+        self.assertEqual(worker.client.send_file.await_count,1)
+        state=self.q.db.execute('select state from handoff_files').fetchone()[0]
+        self.assertEqual(state,'done')
+
+    def test_delay_alerts_only_for_active_download_or_started_order(self):
+        from monitoring import Monitoring
+        self.q.set_setting('owner',11)
+        self.q.add(11,5,11,'долго.tif',4,self.now-1000)
+        monitor=Monitoring(self.q)
+        with patch('monitoring.time.time',return_value=self.now):asyncio.run(monitor.check_delays())
+        keys=[r[0] for r in self.q.db.execute('select id from operator_alerts')]
+        self.assertTrue(any(k.startswith('file:') for k in keys))
+        self.assertFalse(any(k.startswith('delay:') for k in keys))
+        bid=self.q.claim(CONFIG['recipient'],self.now)
+        with patch('monitoring.time.time',return_value=self.now+1900):asyncio.run(monitor.check_delays())
+        self.assertIsNotNone(self.q.db.execute('select 1 from operator_alerts where id=?',('delay:'+bid,)).fetchone())
+
     def test_operator_alerts_require_separate_role_and_retry_after_offline(self):
         from monitoring import Monitoring
         from unittest.mock import AsyncMock
@@ -257,18 +375,19 @@ class TestDispatch(unittest.TestCase):
         worker=Worker(self.q,{**CONFIG,'owner_code':'owner','join_code':'staff'},self.logs.append)
         async def check():
             event=Event('/start');await worker.on_message(event)
-            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[r['label'] for r in DIRECTIONS.values()])
+            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[r['label'] for r in DIRECTIONS.values()]+['Ручная отправка'])
             event=Event(DIRECTIONS['wideformat']['label']);await worker.on_message(event)
             event=Event(BUTTONS[0]);await worker.on_message(event)
-            self.assertEqual(event.messages[0][0],'самоклейка 50х50 см.tif')
+            self.assertEqual(event.messages[0][0],self.q.waiting()[0]['name'])
             keyboard=event.messages[0][1]['buttons']
-            self.assertEqual([b.button.text for row in keyboard for b in row],[UPLOAD,*BUTTONS,BACK])
+            self.assertEqual([b.button.text for row in keyboard for b in row],[UPLOAD,*BUTTONS,'Состояние',BACK,'Ручная отправка'])
             event=Event(BUTTONS[2]);await worker.on_message(event)
             button=event.messages[0][1]['buttons'][0][0]
             self.assertTrue(button.type.data.startswith(b'delete:'))
             event=Event('/owner не-ASCII');await worker.on_message(event)
             event=Event(BUTTONS[1]);await worker.on_message(event)
-            self.assertIsNotNone(self.q.active_batch())
+            self.assertIsNone(self.q.active_batch())
+            self.assertIn('Подтвердить',event.messages[0][1]['buttons'][0][0].text)
         asyncio.run(check())
     def test_direction_queues_do_not_mix(self):
         wide=self.file()

@@ -19,11 +19,12 @@ from tkinter import messagebox,ttk,filedialog
 import webbrowser
 from core import Queue,UserError,MOSCOW
 from services import Settings,Disk,smtp_connect,check_dedicated_bot,protect
+from handoff import Handoff
 from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.3.4'
+VERSION='0.4'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -53,7 +54,7 @@ class App:
         self.c.setdefault('owner_code',secrets.token_urlsafe(18))
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
         self.c.setdefault('responsible_code',secrets.token_urlsafe(18))
-        self.q=Queue(folder)
+        self.q=Queue(folder);self.handoff=Handoff(self.q)
         self.messages=threadqueue.Queue();self.worker=None;self.thread=None
         root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');width=min(1040,root.winfo_screenwidth()-50);height=min(810,root.winfo_screenheight()-90)
         root.geometry(f'{width}x{height}');root.minsize(min(900,width),min(650,height))
@@ -121,7 +122,12 @@ class App:
         ttk.Label(options,text='Предупреждать, если свободно менее (ГБ):').grid(row=1,column=0,sticky='w',pady=6)
         self.space_threshold=tk.StringVar(value=self.q.setting('space_threshold_gb','10'))
         ttk.Entry(options,textvariable=self.space_threshold,width=8).grid(row=1,column=1,sticky='w',padx=5)
-        ttk.Button(options,text='Сохранить уведомления',command=self.save_alerts).grid(row=2,column=0,pady=6,sticky='w')
+        ttk.Button(options,text='Сохранить уведомления',command=self.save_alerts).grid(row=4,column=0,pady=6,sticky='w')
+        self.download_delay=tk.StringVar(value=self.q.setting('download_delay_minutes','15'))
+        self.send_delay=tk.StringVar(value=self.q.setting('send_delay_minutes','30'))
+        for row,label,var in [(2,'Предупреждать о загрузке дольше (мин):',self.download_delay),(3,'Предупреждать об отправке дольше (мин):',self.send_delay)]:
+            ttk.Label(options,text=label).grid(row=row,column=0,sticky='w',pady=3)
+            ttk.Entry(options,textvariable=var,width=8).grid(row=row,column=1,sticky='w',padx=5)
         ttk.Label(history,text='Владелец получает уведомления всегда. Ответственный филиал подключается отдельной командой.\nБез интернета уведомления ожидают восстановления связи. Диск проверяется раз в час.',wraplength=850).pack(anchor='w',pady=6)
         self.space_status=ttk.Label(history,text='Свободное место ещё не проверено');self.space_status.pack(anchor='w')
         self.history_table=ttk.Treeview(history,columns=('date','state','count','recipient'),show='headings',height=10)
@@ -232,6 +238,10 @@ class App:
             win.clipboard_clear();win.clipboard_append('/owner '+self.c['owner_code']);win.update()
             messagebox.showinfo('Скопировано','Команда владельца скопирована. Вставьте её в личный чат @perezakazi_bot.',parent=win)
         ttk.Button(win,text='Скопировать команду владельца',command=copy_owner).pack(pady=8)
+        def copy_staff():
+            win.clipboard_clear();win.clipboard_append('/join '+self.c['join_code']+' Филиал');win.update()
+            messagebox.showinfo('Скопировано','Замените слово «Филиал» точным адресом филиала.',parent=win)
+        ttk.Button(win,text='Скопировать команду сотрудника',command=copy_staff).pack(pady=4)
         def copy_responsible():
             win.clipboard_clear();win.clipboard_append('/responsible '+self.c['responsible_code']);win.update()
             messagebox.showinfo('Скопировано','Отправьте команду только сотрудникам ответственного филиала.',parent=win)
@@ -242,6 +252,7 @@ class App:
     def send(self):
         if not self.worker or not self.thread or not self.thread.is_alive():messagebox.showinfo('Отправка','Сначала запустите бота.');return
         if not self.q.setting('owner'):messagebox.showinfo('Отправка','Сначала подключите владельца через кнопку «Подключить сотрудников».');return
+        if not messagebox.askyesno('Подтвердите отправку',f'Отправить всю общую очередь: {len(self.q.waiting())} файлов?'):return
         try:
             bid=self.q.claim(self.c['recipient'],datetime.now().timestamp(),manual=True)
             self.log('Начинаю подготовку отправки.' if bid else 'Очередь пуста.')
@@ -263,9 +274,10 @@ class App:
         with self.q.lock:
             batch=self.q.db.execute("select * from batches where state='uncertain' order by created limit 1").fetchone()
         if not batch:messagebox.showinfo('Проверка','Неопределённых отправок нет.');return
-        answer=messagebox.askyesnocancel('Проверьте почту',f'Письмо по заказу {batch["id"][:8]} НАЙДЕНО в ящике {batch["recipient"]}?\n\nДа — отметить отправленным.\nНет — повторить отправку (если письмо всё же было доставлено, получится дубль).\nОтмена — ничего не менять.')
+        answer=messagebox.askyesnocancel('Проверьте почту',f'Письмо по заказу {batch["id"][:8]} НАЙДЕНО в ящике {batch["recipient"]}?\n\nДа — отметить отправленным.\nНет — передать заказ в ручной режим после проверки почты.\nОтмена — ничего не менять.')
         if answer is None:return
-        self.q.reset_uncertain(batch['id'],confirmed_received=answer)
+        if answer:self.q.reset_uncertain(batch['id'],confirmed_received=True)
+        else:self.handoff.pause(batch['id'],'uncertain','Письмо не найдено по проверке владельца. Требуется ручная отправка.')
         self.log('Результат письма уточнён по вашей проверке.')
 
     def autostart(self):
@@ -344,6 +356,12 @@ class App:
             if not 0<value<=100000:raise ValueError()
         except ValueError:
             messagebox.showerror('Уведомления','Введите порог свободного места от 0 до 100000 ГБ (больше нуля).');return
+        try:
+            download=int(self.download_delay.get());send=int(self.send_delay.get())
+            if not 1<=download<=1440 or not 1<=send<=1440:raise ValueError()
+        except ValueError:
+            messagebox.showerror('Уведомления','Время ожидания должно быть целым числом от 1 до 1440 минут.');return
+        self.q.set_setting('download_delay_minutes',download);self.q.set_setting('send_delay_minutes',send)
         self.q.set_setting('alert_branch',self.alert_branch.get().strip()[:80])
         self.q.set_setting('space_threshold_gb',value)
         self.q.set_setting('space_check_after','0')
@@ -353,7 +371,7 @@ class App:
         selected=self.history_table.selection()
         if not selected:return
         batch=self.q.batch(selected[0])
-        link=batch.get('link') if batch and batch['state']=='sent' else None
+        link=batch.get('link') if batch and batch['state'] in ('sent','manual_sent') else None
         if not link:
             messagebox.showinfo('Ссылка','Ссылка доступна для отправок, принятых почтовым сервером.');return
         if copy:
@@ -377,7 +395,7 @@ class App:
             if key in existing:self.table.item(key,values=values);existing.remove(key)
             else:self.table.insert('','end',iid=key,values=values)
         for key in existing:self.table.delete(key)
-        history_states={'sent':'Письмо принято сервером','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
+        history_states={'sent':'Письмо принято сервером','manual':'Ручная отправка','manual_sent':'Отмечено отправленным вручную','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
         old=set(self.history_table.get_children())
         history_rows=self.q.history()
         for batch in history_rows:

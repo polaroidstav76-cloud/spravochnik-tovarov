@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import uuid
 import zipfile
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -90,6 +91,9 @@ class Queue:
             self.db.execute('alter table batches add column test_mode integer not null default 1')
         if 'generation' not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
             self.db.execute('alter table batches add column generation integer not null default 0')
+        for column,definition in [('manual_revision','integer not null default 0'),('manual_by','integer'),('needs_revoke','text')]:
+            if column not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
+                self.db.execute('alter table batches add column '+column+' '+definition)
         self.db.execute('create index if not exists files_direction_waiting on files(direction,state,due)')
         # We never automatically resend after an ambiguous SMTP result or crash.
         self.db.execute("update batches set state='uncertain',error='Программа закрылась во время передачи письма. Требуется проверить почту.' where state='submitting'")
@@ -126,6 +130,12 @@ class Queue:
             raise UserError('Принимаются TIF, TIFF, PDF, JPG и PNG. Отправляйте макеты документом, без сжатия.')
         if not 0<size<=MAX_BYTES: raise UserError('Размер файла должен быть от 1 байта до 500 МБ.')
         with self.lock,self.db:
+            existing=self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone()
+            if existing:return dict(existing)
+            active=self.db.execute("select f.name from files f left join batches b on b.id=f.batch where f.state!='cancelled' and f.direction=? and (f.batch is null or b.state not in ('sent','manual_sent','cancelled'))",(direction,))
+            key=unicodedata.normalize('NFC',name).casefold()
+            if any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
+                raise UserError('Переименуйте файл, так как такой уже существует.')
             self.db.execute('insert or ignore into files(chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?)',
                 (chat,message,sender,branch,name,size,received,due_day(received),direction))
             return dict(self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone())
@@ -140,11 +150,11 @@ class Queue:
 
     def waiting(self,direction='wideformat'):
         with self.lock:
-            return [dict(x) for x in self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state!='cancelled' and (f.batch is null or b.state not in ('sent','submitting','uncertain')) and f.direction=? order by f.received,f.id",(direction,))]
+            return [dict(x) for x in self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state!='cancelled' and (f.batch is null or b.state not in ('sent','manual_sent','cancelled')) and f.direction=? order by f.received,f.id",(direction,))]
 
     def download_candidate(self,now):
         with self.lock,self.db:
-            r=self.db.execute("select * from files where state in ('queued','failed') and attempts<5 and next_try<=? order by received,id limit 1",(now,)).fetchone()
+            r=self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state in ('queued','failed') and f.attempts<5 and f.next_try<=? and (f.batch is null or b.state not in ('sent','manual_sent','cancelled')) order by f.received,f.id limit 1",(now,)).fetchone()
             if not r:return None
             self.db.execute("update files set state='downloading',attempts=attempts+1 where id=?",(r['id'],))
             return dict(r)
@@ -162,16 +172,18 @@ class Queue:
             r=self.db.execute('select f.*,b.state batch_state from files f left join batches b on b.id=f.batch where f.id=?',(id,)).fetchone()
             if not r or r['state']=='cancelled':raise UserError('Этот файл уже удалён или не найден.')
             if direction is not None and r['direction']!=direction:raise UserError('Этот файл относится к другому направлению. Откройте нужный раздел.')
-            if r['batch_state'] in ('sent','submitting','uncertain'):
+            if r['batch_state'] in ('sent','manual_sent','submitting','uncertain'):
                 raise UserError('Письмо уже передано на отправку. Удалить файл из него нельзя. При неопределённом результате сначала проверьте почту.')
             self.db.execute("update files set state='cancelled' where id=?",(id,))
             if r['batch']:
-                self.db.execute("update batches set state='invalidated' where id=?",(r['batch'],))
+                if r['batch_state']=='manual':
+                    self.db.execute("update batches set manual_revision=manual_revision+1,needs_revoke=coalesce(remote_path,needs_revoke),link=null,remote_path=null,notified=0 where id=?",(r['batch'],))
+                else:self.db.execute("update batches set state='invalidated',manual_revision=manual_revision+1,needs_revoke=coalesce(remote_path,needs_revoke),link=null,remote_path=null where id=?",(r['batch'],))
             return dict(r)
 
-    def claim(self,recipient,now,manual=False,direction='wideformat'):
+    def claim(self,recipient,now,manual=False,direction='wideformat',expected=None):
         with self.lock,self.db:
-            existing=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','submitting','uncertain') and direction=? order by created limit 1",(direction,)).fetchone()
+            existing=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','submitting','uncertain','manual') and direction=? order by created limit 1",(direction,)).fetchone()
             if existing:
                 if manual:raise UserError('Предыдущая отправка ещё не завершена. Проверьте её состояние на основном компьютере.')
                 return None
@@ -186,6 +198,7 @@ class Queue:
             if not manual:
                 query+=' and received<?';args.append(cutoff.timestamp())
             ids=[r[0] for r in self.db.execute(query,args)]
+            if expected is not None and sorted(ids)!=sorted(expected):raise UserError('Очередь изменилась. Нажмите «Отправить сейчас» заново и проверьте новый состав.')
             if not ids:return None
             bid=uuid.uuid4().hex
             self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting('first_test_confirmed','0')!='1'),int(self.setting('generation','0'))))
@@ -225,7 +238,7 @@ class Queue:
 
     def pending_notifications(self):
         with self.lock:
-            return [dict(r) for r in self.db.execute("select * from batches where state in ('sent','uncertain') and notified=0")]
+            return [dict(r) for r in self.db.execute("select * from batches where state in ('sent','uncertain','manual','manual_sent') and notified=0")]
 
     def notice_done(self,batch,chat):
         with self.lock:

@@ -67,6 +67,8 @@ class Settings:
         os.replace(tmp,self.path)
 
 
+class RemoteMissing(UserError):pass
+
 class Disk:
     def __init__(self,token):self.token=token
     def request(self,method,endpoint,**params):
@@ -76,6 +78,7 @@ class Disk:
                 body=r.read();return json.loads(body) if body else {}
         except urllib.error.HTTPError as e:
             if e.code==409 and method=='PUT' and endpoint=='/resources':return {}
+            if e.code==404:raise RemoteMissing('Архив не найден на Диске.') from None
             raise UserError(f'Яндекс Диск вернул ошибку {e.code}. Проверьте доступ и свободное место.') from None
         except (OSError,ValueError):raise UserError('Нет ответа Яндекс Диска. Проверьте интернет.') from None
     def check(self):
@@ -86,6 +89,14 @@ class Disk:
             raise UserError('Недопустимый путь архива.')
         try:self.request('DELETE','/resources',path=path,permanently='false')
         except UserError:pass # A failed best-effort cleanup never sends an invalid archive.
+    def revoke_generated(self,path):
+        if not re.fullmatch(r'disk:/Cloudshop-Print/[a-f0-9]{32}_[a-f0-9]{32}(?:\.zip|/Полароид\.zip)',path):
+            raise UserError('Недопустимый путь архива.')
+        try:self.request('PUT','/resources/unpublish',path=path)
+        except RemoteMissing:return
+        try:self.request('DELETE','/resources',path=path,permanently='false')
+        except RemoteMissing:pass
+
     def upload(self,filename,remote):
         filename=Path(filename)
         if self.check()<filename.stat().st_size:raise UserError('На Яндекс Диске недостаточно места. Освободите место и повторите.')

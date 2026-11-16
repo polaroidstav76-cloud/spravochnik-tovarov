@@ -10,6 +10,8 @@ import uuid
 from pathlib import Path
 from core import Queue, UserError, MOSCOW, BUTTONS, DIRECTIONS, UPLOAD, BACK, build_archive, chunks
 from monitoring import Monitoring
+from handoff import Handoff,MANUAL_MENU
+from bot_features import BotFeatures,STATUS
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -17,7 +19,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue)
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue)
 
     def stop(self):
         self.running=False
@@ -37,9 +39,10 @@ class Worker:
             direction=self.direction(event.sender_id)
             if direction:
                 buttons=[[Button.text(UPLOAD,resize=True,persistent=True)],
-                         [Button.text(BUTTONS[0])],[Button.text(BUTTONS[1]),Button.text(BUTTONS[2])],[Button.text(BACK)]]
+                         [Button.text(BUTTONS[0])],[Button.text(BUTTONS[1]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
             else:
                 buttons=[[Button.text(r['label'],resize=True,persistent=True)] for r in DIRECTIONS.values()]
+            if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
 
     async def on_message(self,event):
@@ -80,6 +83,8 @@ class Worker:
         if not self.q.user(uid):
             await event.respond('Этот бот принимает файлы только от подключённых сотрудников. Получите код подключения у руководителя.',parse_mode=None);return
         try:
+            if text==MANUAL_MENU or text=='/manual':
+                await self.handoff.show_list(self,event);return
             if text in ('/start','/menu',BACK,'Главное меню'):
                 self.choose(uid,None)
                 await self.reply(event,'Выберите направление печати.');return
@@ -101,8 +106,15 @@ class Worker:
                 for part in chunks(r['name'] for r in rows):await self.reply(event,part)
             elif text==BUTTONS[1] or text=='/send':
                 if not self.q.setting('owner'):raise UserError('Сначала подключите владельца на основном компьютере.')
-                bid=self.q.claim(self.c['recipient'],time.time(),manual=True,direction=direction)
-                await self.reply(event,'Начинаю отправку текущей очереди.' if bid else 'Очередь пуста.')
+                from telethon import Button
+                token,count=self.features.request(uid,direction)
+                if not token:
+                    await self.reply(event,'Текущий заказ уже обрабатывается. Проверьте «Состояние».' if self.q.waiting(direction) else 'Очередь пуста.');return
+                rows=self.q.waiting(direction)
+                branches=len({r['branch'] for r in rows if r['batch'] is None})
+                await self.reply(event,f'Отправить общую очередь: {count} файлов от {branches} филиалов? Состав фиксируется после подтверждения. Подтверждение действует 5 минут.',[[Button.inline('Подтвердить отправку',('send:'+token).encode()),Button.inline('Отмена',('abort:'+token).encode())]])
+            elif text==STATUS or text=='/status':
+                await self.reply(event,self.features.status(direction))
             elif text==BUTTONS[2] or text=='/delete':
                 await self.delete_menu(event,0,direction)
             elif event.document:
@@ -133,6 +145,18 @@ class Worker:
             await event.answer('Нет доступа.',alert=True);return
         try:
             data=event.data.decode()
+            if data.startswith('h:'):
+                await self.handoff.callback(self,event);return
+            if data.startswith('send:'):
+                bid=self.features.confirm(data.split(':',1)[1],event.sender_id,self.c['recipient'])
+                await event.answer('Отправка подтверждена.')
+                await event.edit('Начинаю отправку текущей очереди.' if bid else 'Очередь пуста.',buttons=None);return
+            if data.startswith('abort:'):
+                token=data.split(':',1)[1]
+                with self.q.lock,self.q.db:
+                    changed=self.q.db.execute('update send_confirmations set used=1 where token=? and user=? and used=0',(token,event.sender_id)).rowcount
+                if not changed:raise UserError('Подтверждение уже использовано.')
+                await event.answer('Отменено.');await event.edit('Отправка отменена. Файлы остаются в очереди.',buttons=None);return
             action,direction,value=data.split(':',2)
             if direction!=self.direction(event.sender_id):
                 await event.answer('Откройте соответствующее направление и выберите файл заново.',alert=True);return
@@ -251,6 +275,8 @@ class Worker:
         owner=self.q.setting('owner')
         if not owner:return
         for b in self.q.pending_notifications():
+            if b['state'] in ('manual','manual_sent','uncertain'):
+                await self.handoff.notify(self,b);continue
             if b['state']=='sent':
                 text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо принято почтовым сервером; получение партнёром не подтверждено.'
                 chats={r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets()
@@ -280,10 +306,19 @@ class Worker:
                 b=self.q.active_batch()
                 if b:await self.process_batch(b)
                 await self.notify()
-                await self.monitor.check_space(self.c)
-                await self.monitor.notify(self.client)
+                await self.handoff.cleanup_links(self)
             except asyncio.CancelledError:raise
             except Exception:self.log('Не удалось выполнить проверку очереди. Повторим через 10 секунд.')
+            await asyncio.sleep(10)
+
+    async def watch_loop(self):
+        while self.running:
+            try:
+                await self.monitor.check_delays()
+                await self.monitor.notify(self.client)
+                await self.monitor.check_space(self.c)
+            except asyncio.CancelledError:raise
+            except Exception:self.log('Проверка задержек ожидает восстановления связи.')
             await asyncio.sleep(10)
 
     async def run(self):
@@ -304,7 +339,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop())]
+            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False
