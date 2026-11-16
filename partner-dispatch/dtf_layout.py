@@ -33,7 +33,7 @@ class Layout:
 def contains(a,b):
     return a[0]<=b[0] and a[1]<=b[1] and a[0]+a[2]>=b[0]+b[2] and a[1]+a[3]>=b[1]+b[3]
 
-def pack(items,width,height,gap):
+def pack(items,width,height,gap,strategy='short-side'):
     """MaxRects best-short-side-fit; gaps are never added to artwork dimensions."""
     free=[(0,0,width+gap,height+gap)];placed=[]
     for item in items:
@@ -43,7 +43,7 @@ def pack(items,width,height,gap):
                 w,h=(item.height,item.width) if rotate else (item.width,item.height)
                 rw,rh=w+gap,h+gap
                 if rw<=rect[2] and rh<=rect[3]:
-                    score=(min(rect[2]-rw,rect[3]-rh),max(rect[2]-rw,rect[3]-rh),rect[1],rect[0],rotate)
+                    score=((rect[1],rect[0],min(rect[2]-rw,rect[3]-rh),rotate) if strategy=='bottom-left' else (min(rect[2]-rw,rect[3]-rh),max(rect[2]-rw,rect[3]-rh),rect[1],rect[0],rotate))
                     if best is None or score<best[0]:best=(score,rect[0],rect[1],w,h,rotate)
         if best is None:return None
         _,x,y,w,h,rotate=best;right=x+w+gap;bottom=y+h+gap
@@ -72,7 +72,7 @@ def arrange(items,width_cm,base_height_cm=50):
             sorted(items,key=lambda p:(-p.width*p.height,-max(p.width,p.height),p.key)),
             sorted(items,key=lambda p:(-p.height,-p.width,p.key))]
     def attempt(height,gap):
-        candidates=[v for order in orders if (v:=pack(order,usable,height-2*margin,gap)) is not None]
+        candidates=[v for strategy in ('short-side','bottom-left') for order in orders if (v:=pack(order,usable,height-2*margin,gap,strategy)) is not None]
         return min(candidates,key=lambda v:max(p.y+p.height for p in v)) if candidates else None
     for mm in range(20,4,-1):
         gap=min(floor(DPI*2/2.54),ceil(DPI*(mm/10)/2.54))

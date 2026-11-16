@@ -22,6 +22,12 @@ class TestDTFLayout(unittest.TestCase):
             layout=arrange(items,width)
             self.assertEqual(layout.width,pixels(width));self.assertEqual(layout.height,pixels(50))
             self.assert_geometry(layout,items)
+    def test_small_order_uses_width_before_growing_occupied_height(self):
+        items=[Print(str(i),pixels(10),pixels(15)) for i in range(2)]
+        layout=arrange(items,56)
+        self.assertEqual(len({p.y for p in layout.prints}),1)
+        self.assert_geometry(layout,items)
+
     def test_extends_height_and_preserves_margins(self):
         items=[Print(str(i),pixels(50),pixels(45)) for i in range(5)]
         layout=arrange(items,56)
