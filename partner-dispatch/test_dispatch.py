@@ -151,16 +151,16 @@ class TestDispatch(unittest.TestCase):
         asyncio.run(features.broadcast(client))
         client.send_message=AsyncMock()
         asyncio.run(features.broadcast(client));asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,4)
+        self.assertEqual(client.send_message.await_count,8)
         texts=[call.args[1] for call in client.send_message.await_args_list if 'Широкоформатная печать' in call.args[1]]
         self.assertTrue(all('самоклейка.tif' in t and 'Первый филиал' not in t for t in texts))
         bid=self.q.claim(CONFIG['recipient'],self.now);self.q.transition(bid,'collecting','sent')
         asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,6)
+        self.assertEqual(client.send_message.await_count,10)
         self.assertIn('Файлов, ожидающих отправки, нет',client.send_message.await_args.args[1])
         self.q.db.close();self.q=Queue(self.tmp.name)
         asyncio.run(BotFeatures(self.q).broadcast(client))
-        self.assertEqual(client.send_message.await_count,6)
+        self.assertEqual(client.send_message.await_count,10)
 
     def test_manual_claim_stops_retries_and_is_single_operator(self):
         self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
@@ -434,7 +434,7 @@ class TestDispatch(unittest.TestCase):
         class Value:
             def __init__(self,v):self.v=v
             def get(self):return self.v
-        app=object.__new__(App);app.c={};app.dtf_recipient=Value('')
+        app=object.__new__(App);app.c={};app.dtf_recipient=Value('');app.workshop_recipient=Value('')
         app.entries={k:Value('') for k,_,_ in FIELDS}
         app.entries['disk_token']=Value('https://oauth.yandex.ru/verification_code#access_token=fake-token&expires_in=1')
         self.assertEqual(app.config(require_all=False)['disk_token'],'fake-token')

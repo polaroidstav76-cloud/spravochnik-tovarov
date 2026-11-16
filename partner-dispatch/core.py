@@ -20,6 +20,8 @@ BUTTONS = ('Просмотр файлов', 'Отправить сейчас', '
 DIRECTIONS = {
     'wideformat': {'label': 'Широкоформатная печать', 'enabled': True},
     'dtf': {'label': 'ДТФ-печать', 'enabled': True},
+    'workshop': {'label': 'Мастерская', 'enabled': True},
+    'photo30': {'label': '30×40', 'enabled': True},
 }
 UPLOAD = 'Загрузить файл'
 BACK = 'Назад'
@@ -136,7 +138,7 @@ class Queue:
         with self.lock,self.db:
             existing=self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone()
             if existing:return dict(existing)
-            active=self.db.execute("select f.name from files f left join batches b on b.id=f.batch where f.state!='cancelled' and f.direction=? and (f.batch is null or b.state not in ('sent','manual_sent','cancelled'))",(direction,))
+            active=self.db.execute("select f.name from files f left join batches b on b.id=f.batch where f.state!='cancelled' and f.direction=? and (f.batch is null or b.state not in ('sent','manual_sent','local_saved','cancelled'))",(direction,))
             key=unicodedata.normalize('NFC',name).casefold()
             if any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
                 raise UserError('Переименуйте файл, так как такой уже существует.')
@@ -164,11 +166,11 @@ class Queue:
 
     def waiting(self,direction='wideformat'):
         with self.lock:
-            return [dict(x) for x in self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state!='cancelled' and (f.batch is null or b.state not in ('sent','manual_sent','cancelled')) and f.direction=? order by f.received,f.id",(direction,))]
+            return [dict(x) for x in self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state!='cancelled' and (f.batch is null or b.state not in ('sent','manual_sent','local_saved','cancelled')) and f.direction=? order by f.received,f.id",(direction,))]
 
     def download_candidate(self,now):
         with self.lock,self.db:
-            r=self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state in ('queued','failed') and f.attempts<5 and f.next_try<=? and (f.batch is null or b.state not in ('sent','manual_sent','cancelled')) order by f.received,f.id limit 1",(now,)).fetchone()
+            r=self.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state in ('queued','failed') and f.attempts<5 and f.next_try<=? and (f.batch is null or b.state not in ('sent','manual_sent','local_saved','cancelled')) order by f.received,f.id limit 1",(now,)).fetchone()
             if not r:return None
             self.db.execute("update files set state='downloading',attempts=attempts+1 where id=?",(r['id'],))
             return dict(r)
@@ -186,7 +188,8 @@ class Queue:
             r=self.db.execute('select f.*,b.state batch_state from files f left join batches b on b.id=f.batch where f.id=?',(id,)).fetchone()
             if not r or r['state']=='cancelled':raise UserError('Этот файл уже удалён или не найден.')
             if direction is not None and r['direction']!=direction:raise UserError('Этот файл относится к другому направлению. Откройте нужный раздел.')
-            if r['batch_state'] in ('sent','manual_sent','submitting','uncertain'):
+            if r['batch_state'] in ('local_saved','awaiting_download','dispatching_local'):raise UserError('Файл уже передан приёмнику 30×40. Удалять полученную копию нужно на компьютере с принтером.')
+            if r['batch_state'] in ('sent','manual_sent','local_saved','awaiting_download','dispatching_local','submitting','uncertain'):
                 raise UserError('Письмо уже передано на отправку. Удалить файл из него нельзя. При неопределённом результате сначала проверьте почту.')
             self.db.execute("update files set state='cancelled' where id=?",(id,))
             if r['batch']:
@@ -224,9 +227,20 @@ class Queue:
             self.db.executemany('update files set batch=? where id=?',[(bid,i) for i in ids])
             return bid
 
+    def claim_immediate(self,recipient,now,direction):
+        if direction not in ('workshop','photo30'):raise UserError('Это направление использует расписание.')
+        with self.lock,self.db:
+            if self.active_batch(direction):return None
+            if self.db.execute("select 1 from batches where direction=? and state in ('submitting','uncertain','manual')",(direction,)).fetchone():return None
+            row=self.db.execute("select id from files where direction=? and batch is null and state='ready' order by received,id limit 1",(direction,)).fetchone()
+            if not row:return None
+            bid=uuid.uuid4().hex;prefix=direction+'_'
+            self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting(prefix+'first_test_confirmed','0')!='1'),int(self.setting(prefix+'generation','0'))))
+            self.db.execute('update files set batch=? where id=?',(bid,row[0]));return bid
+
     def active_batch(self,direction='wideformat'):
         with self.lock:
-            r=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated') and direction=? order by created limit 1",(direction,)).fetchone()
+            r=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','dispatching_local') and direction=? order by created limit 1",(direction,)).fetchone()
             return dict(r) if r else None
 
     def batch(self,id):
@@ -257,7 +271,7 @@ class Queue:
 
     def pending_notifications(self):
         with self.lock:
-            return [dict(r) for r in self.db.execute("select * from batches where state in ('sent','uncertain','manual','manual_sent') and notified=0")]
+            return [dict(r) for r in self.db.execute("select * from batches where state in ('sent','uncertain','manual','manual_sent','local_saved') and notified=0")]
 
     def notice_done(self,batch,chat):
         with self.lock:

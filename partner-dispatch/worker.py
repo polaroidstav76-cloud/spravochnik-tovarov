@@ -13,6 +13,7 @@ from monitoring import Monitoring
 from handoff import Handoff,MANUAL_MENU
 from bot_features import BotFeatures,STATUS
 from dtf_render import inspect_art,build_sheet
+from local_delivery import LocalDelivery
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -20,7 +21,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue)
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self)
 
     def stop(self):
         self.running=False
@@ -43,6 +44,8 @@ class Worker:
                          [Button.text(BUTTONS[0])],[Button.text(BUTTONS[1]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
             else:
                 buttons=[[Button.text(r['label'],resize=True,persistent=True)] for r in DIRECTIONS.values()]
+            if direction in ('workshop','photo30'):
+                buttons=[[Button.text(UPLOAD,resize=True,persistent=True)],[Button.text(BUTTONS[0]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
             if direction=='dtf':buttons.append([Button.text('Количество копий')])
             if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
@@ -117,6 +120,8 @@ class Worker:
             elif text==BUTTONS[1] or text=='/send':
                 if direction=='dtf' and not self.c.get('dtf_recipient'):raise UserError('Укажите тестового получателя ДТФ в программе.')
                 if not self.q.setting('owner'):raise UserError('Сначала подключите владельца на основном компьютере.')
+                if direction in ('workshop','photo30'):
+                    await self.reply(event,'В этом направлении каждый файл отправляется автоматически после сохранения.');return
                 from telethon import Button
                 token,count=self.features.request(uid,direction)
                 if not token:
@@ -145,6 +150,8 @@ class Worker:
         except UserError as e:await self.reply(event,str(e))
 
     def recipient(self,direction):
+        if direction=='photo30':return 'local:30x40'
+        if direction=='workshop':return self.c.get('workshop_recipient','')
         return self.c.get('dtf_recipient','') if direction=='dtf' else self.c['recipient']
 
     async def copies_menu(self,event):
@@ -240,6 +247,8 @@ class Worker:
                 try:
                     prefix='dtf_' if r['direction']=='dtf' else ''
                     schedule='Отправка в выбранные дни в '+self.q.setting(prefix+'dispatch_time','12:00' if prefix else '18:00')+' МСК.' if self.q.setting(prefix+'automatic','0')=='1' else 'Расписание пока выключено.'
+                    if r['direction']=='workshop':schedule='Отправка в мастерскую начнётся автоматически, без ожидания расписания.'
+                    elif r['direction']=='photo30':schedule='Передаю на компьютер 30×40. О сохранении на нём сообщу отдельно.'
                     if prefix:
                         info=await asyncio.to_thread(inspect_art,dest)
                         schedule+=f' Размер: {info["width_cm"]:.2f} × {info["height_cm"]:.2f} см.'
@@ -265,6 +274,8 @@ class Worker:
                     except OSError:pass
 
     async def process_batch(self,b):
+        if b['direction']=='photo30':
+            await self.local_delivery.process(b);return
         bid=b['id'];disk=Disk(self.c['disk_token'])
         if float(self.q.setting('retry_at:'+bid,'0'))>time.time():return
         if b['recipient']!=self.recipient(b['direction']):
@@ -281,8 +292,14 @@ class Worker:
         if not self.q.transition(bid,'collecting','packing'):return
         try:
             if b.get('remote_path'):await asyncio.to_thread(disk.remove_generated,b['remote_path'])
-            artifact='Полароид-ДТФ.png' if b['direction']=='dtf' else 'Полароид.zip'
-            archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid)
+            artifact=rows[0]['name'] if b['direction']=='workshop' else 'Полароид-ДТФ.png' if b['direction']=='dtf' else 'Полароид.zip'
+            if b['direction']=='workshop':
+                archive=self.q.path(rows[0])
+                def verify_original():
+                    with archive.open('rb') as file:
+                        if archive.stat().st_size!=rows[0]['size'] or hashlib.file_digest(file,'sha256').hexdigest()!=rows[0]['sha256']:raise UserError('Исходник мастерской изменился.')
+                await asyncio.to_thread(verify_original)
+            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid)
             remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/{artifact}'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
             link=await asyncio.to_thread(disk.upload,archive,remote)
@@ -325,6 +342,16 @@ class Worker:
         owner=self.q.setting('owner')
         if not owner:return
         for b in self.q.pending_notifications():
+            if b['state']=='local_saved':
+                complete=True
+                for chat in {r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets():
+                    if self.q.notice_done(b['id'],chat):continue
+                    try:
+                        await self.client.send_message(chat,'30×40: файл '+self.q.batch_files(b['id'])[0]['name']+' сохранён на компьютере с принтером. Уведомление в Клаудшопе создано. Печать запускает сотрудник.',parse_mode=None)
+                        self.q.finish_notice(b['id'],chat)
+                    except Exception:complete=False
+                if complete:self.q.mark_notified(b['id'])
+                continue
             if b['state'] in ('manual','manual_sent','uncertain'):
                 await self.handoff.notify(self,b);continue
             if b['state']=='sent':
@@ -354,7 +381,10 @@ class Worker:
         while self.running:
             try:
                 prefix='dtf_' if direction=='dtf' else ''
-                if self.q.setting(prefix+'automatic','0')=='1' and self.recipient(direction):self.q.claim(self.recipient(direction),time.time(),direction=direction)
+                if direction in ('workshop','photo30'):
+                    ready=bool(self.c.get('bridge_token')) if direction=='photo30' else bool(self.recipient(direction))
+                    if ready:self.q.claim_immediate(self.recipient(direction),time.time(),direction)
+                elif self.q.setting(prefix+'automatic','0')=='1' and self.recipient(direction):self.q.claim(self.recipient(direction),time.time(),direction=direction)
                 b=self.q.active_batch(direction)
                 if b:await self.process_batch(b)
             except asyncio.CancelledError:raise
@@ -391,7 +421,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
+            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False

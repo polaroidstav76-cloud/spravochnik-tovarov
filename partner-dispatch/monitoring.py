@@ -30,7 +30,7 @@ class Monitoring:
         download_minutes=float(self.q.setting('download_delay_minutes','15'))
         send_minutes=float(self.q.setting('send_delay_minutes','30'))
         with self.q.lock:
-            files=[dict(r) for r in self.q.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state in ('queued','downloading','failed') and (f.batch is null or b.state not in ('sent','manual_sent','cancelled'))")]
+            files=[dict(r) for r in self.q.db.execute("select f.* from files f left join batches b on b.id=f.batch where f.state in ('queued','downloading','failed') and (f.batch is null or b.state not in ('sent','local_saved','manual_sent','cancelled'))")]
             batches=[dict(r) for r in self.q.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated')")]
         for r in files:
             if now-r['received']>=download_minutes*60 or r['attempts']>=5:
@@ -59,7 +59,7 @@ class Monitoring:
         for a in alerts:
             if a['batch']:
                 batch=self.q.batch(a['batch'])
-                if not batch or batch['state'] in ('sent','manual_sent','manual','cancelled','uncertain'):continue
+                if not batch or batch['state'] in ('sent','local_saved','manual_sent','manual','cancelled','uncertain'):continue
             elif a['id'].startswith('file:'):
                 row=self.q.file(int(a['id'].split(':')[1]))
                 if not row or row['state'] in ('ready','cancelled'):continue
@@ -68,7 +68,7 @@ class Monitoring:
                 with self.q.lock:
                     if self.q.db.execute('select 1 from operator_alert_delivery where alert=? and chat=?',(a['id'],chat)).fetchone():continue
                 buttons=None
-                if a['batch'] and batch['state']=='collecting':
+                if a['batch'] and batch['state']=='collecting' and batch['direction']!='photo30':
                     from handoff import Handoff
                     buttons=[[Handoff.button('Взять отправку вручную','take',batch)]]
                 try:await client.send_message(chat,a['body'],parse_mode=None,buttons=buttons)

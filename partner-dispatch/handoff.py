@@ -40,11 +40,12 @@ class Handoff:
 
     def list(self):
         with self.q.lock:
-            return [dict(r) for r in self.q.db.execute("select * from batches where state in ('manual','uncertain','collecting') order by created")]
+            return [dict(r) for r in self.q.db.execute("select * from batches where direction<>'photo30' and state in ('manual','uncertain','collecting') order by created")]
 
     def check(self,bid,uid,revision,states=('manual',)):
         if not self.authorized(uid):raise UserError('Эта отправка доступна владельцу и сотрудникам ответственного филиала.')
         b=self.q.batch(bid)
+        if b and b['direction']=='photo30':raise UserError('30×40 передаётся приёмнику. Проверьте его подключение на компьютере с принтером.')
         if not b or b['state'] not in states:raise UserError('Отправка уже завершена или её состояние изменилось. Откройте ручные отправки заново.')
         if b['manual_revision']!=revision:raise UserError('Состав заказа изменился. Откройте ручную отправку заново; старую ссылку не используйте.')
         return b

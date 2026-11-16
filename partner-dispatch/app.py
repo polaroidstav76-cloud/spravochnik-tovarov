@@ -19,12 +19,13 @@ from tkinter import messagebox,ttk,filedialog
 import webbrowser
 from core import Queue,UserError,MOSCOW,DIRECTIONS
 from services import Settings,Disk,smtp_connect,check_dedicated_bot,protect
+from bridge_client import BridgeClient
 from handoff import Handoff
 from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.5'
+VERSION='0.6'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -51,12 +52,13 @@ class App:
         self.c.setdefault('bot_username','perezakazi_bot')
         self.c.setdefault('recipient','')
         self.c.setdefault('dtf_recipient',self.c.get('recipient',''))
+        self.c.setdefault('workshop_recipient',self.c.get('recipient',''))
         self.c.setdefault('sender','')
         self.c.setdefault('owner_code',secrets.token_urlsafe(18))
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
         self.c.setdefault('responsible_code',secrets.token_urlsafe(18))
         self.q=Queue(folder);self.handoff=Handoff(self.q)
-        self.messages=threadqueue.Queue();self.worker=None;self.thread=None
+        self.messages=threadqueue.Queue();self.worker=None;self.thread=None;self.bridge_pairing=False
         root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');width=min(1040,root.winfo_screenwidth()-50);height=min(810,root.winfo_screenheight()-90)
         root.geometry(f'{width}x{height}');root.minsize(min(900,width),min(650,height))
         outer=ttk.Frame(root,padding=14);outer.pack(fill='both',expand=True)
@@ -142,6 +144,25 @@ class App:
             self.dtf_table.heading(key,text=label);self.dtf_table.column(key,width=width)
         self.dtf_table.pack(fill='both',expand=True,pady=6)
         ttk.Label(dtf,text='Количество копий сотрудники задают в боте. Файл без DPI или многостраничный TIFF нужно пересохранить.\nПрозрачность исходников сохраняется; белый фон изображения не удаляется автоматически. Принты могут поворачиваться на 90° для экономии места.',wraplength=850).pack(anchor='w',pady=8)
+        instant=ttk.Frame(notebook,padding=12);notebook.add(instant,text='Мастерская и 30×40')
+        ttk.Label(instant,text='Мастерская — каждый файл сразу на почту, ссылкой на оригинал, без архива.',wraplength=850).pack(anchor='w',pady=6)
+        row=ttk.Frame(instant);row.pack(fill='x',pady=6)
+        ttk.Label(row,text='Почта мастерской (пока тестовая):').pack(side='left')
+        self.workshop_recipient=tk.StringVar(value=self.c.get('workshop_recipient',''))
+        ttk.Entry(row,textvariable=self.workshop_recipient,width=36).pack(side='left',padx=5)
+        ttk.Button(row,text='Сохранить',command=self.save_partial).pack(side='left')
+        ttk.Button(instant,text='Тестовое письмо мастерской проверено',command=self.confirm_workshop_test).pack(anchor='w',pady=5)
+        ttk.Separator(instant).pack(fill='x',pady=14)
+        ttk.Label(instant,text='30×40 — передача оригиналов на другой компьютер.\nОткройте Клаудшоп как администратор → «30×40» → код для основной программы.\nНа компьютере с принтером запускайте START-30X40.cmd и используйте код приёмника.',wraplength=850).pack(anchor='w')
+        row=ttk.Frame(instant);row.pack(fill='x',pady=10)
+        self.bridge_code=ttk.Entry(row,width=42,show='•');self.bridge_code.pack(side='left')
+        self.bridge_pair_button=ttk.Button(row,text='Подключить основную программу',command=self.pair_source);self.bridge_pair_button.pack(side='left',padx=6)
+        self.bridge_status=ttk.Label(instant,text='Подключение 30×40: '+self.c.get('bridge_branch','не настроено'));self.bridge_status.pack(anchor='w')
+        ttk.Label(instant,text='На другом компьютере приёмник сохраняет файлы в «Рабочий стол → 30х40».\nТолько после сохранения и проверки файла появится уведомление в Клаудшопе. Печать сотрудник запускает сам.',wraplength=850).pack(anchor='w',pady=10)
+        self.instant_table=ttk.Treeview(instant,columns=('direction','name','state'),show='headings',height=6)
+        for key,label,width in [('direction','Направление',150),('name','Файл',430),('state','Состояние',220)]:
+            self.instant_table.heading(key,text=label);self.instant_table.column(key,width=width)
+        self.instant_table.pack(fill='both',expand=True,pady=6)
         history=ttk.Frame(notebook,padding=12);notebook.add(history,text='История и уведомления')
         options=ttk.Frame(history);options.pack(fill='x')
         ttk.Label(options,text='Ответственный филиал:').grid(row=0,column=0,sticky='w')
@@ -178,12 +199,13 @@ class App:
         c=dict(self.c)
         c.update({key:e.get().strip() for key,e in self.entries.items()})
         c['dtf_recipient']=self.dtf_recipient.get().strip()
+        c['workshop_recipient']=self.workshop_recipient.get().strip()
         for key,_,_ in FIELDS:
             if require_all and key!='disk_client_id' and not c[key]:raise UserError('Заполните все обязательные поля настроек.')
         if c['api_id'] and (not c['api_id'].isdigit() or int(c['api_id'])<=0):raise UserError('Telegram API ID должен быть числом.')
         if c['api_hash'] and not re.fullmatch(r'[a-fA-F0-9]{32}',c['api_hash']):raise UserError('API hash должен содержать 32 символа из Telegram.')
         if c['bot_token'] and not re.fullmatch(r'\d+:[A-Za-z0-9_-]+',c['bot_token']):raise UserError('Проверьте токен бота.')
-        for key in ['sender','recipient','dtf_recipient']:
+        for key in ['sender','recipient','dtf_recipient','workshop_recipient']:
             if c[key] and not re.fullmatch(r'[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',c[key]):raise UserError('Проверьте почтовые адреса.')
         if c.get('disk_client_id') and not re.fullmatch(r'[a-fA-F0-9]{32}',c['disk_client_id']):raise UserError('Проверьте ClientID приложения Яндекс Диска.')
         if '#access_token=' in c['disk_token']:
@@ -193,11 +215,13 @@ class App:
     def save_partial(self):return self.save(require_all=False)
 
     def save(self,require_all=True):
+        if self.bridge_pairing:messagebox.showinfo('Подключение','Дождитесь подключения к Клаудшопу.');return False
         if self.thread and self.thread.is_alive():messagebox.showinfo('Настройки','Сначала остановите обработчик.');return False
         try:
             updated=self.config(require_all=require_all)
             changed=any(self.c.get(k,'')!=updated.get(k,'') for k,_,_ in FIELDS if k!='disk_client_id')
             dtf_changed=self.c.get('dtf_recipient','')!=updated.get('dtf_recipient','') or any(self.c.get(k,'')!=updated.get(k,'') for k in ('api_id','api_hash','bot_token','disk_token','sender','smtp_password'))
+            workshop_changed=self.c.get('workshop_recipient','')!=updated.get('workshop_recipient','') or any(self.c.get(k,'')!=updated.get(k,'') for k in ('disk_token','sender','smtp_password'))
             disk_changed=self.c.get('disk_token')!=updated.get('disk_token')
             self.settings.save(updated);self.c=updated
             if disk_changed:
@@ -209,6 +233,8 @@ class App:
             if dtf_changed:
                 self.q.set_setting('dtf_generation',int(self.q.setting('dtf_generation','0'))+1)
                 self.q.set_setting('dtf_automatic','0');self.q.set_setting('dtf_first_test_confirmed','0');self.dtf_auto.set(False)
+            if workshop_changed:
+                self.q.set_setting('workshop_generation',int(self.q.setting('workshop_generation','0'))+1);self.q.set_setting('workshop_first_test_confirmed','0')
         except UserError as e:messagebox.showerror('Настройки',str(e));return False
         self.log('Настройки сохранены на этом компьютере.');return True
 
@@ -281,6 +307,31 @@ class App:
         if not test:messagebox.showinfo('ДТФ','Сначала отправьте тестовый холст на свою почту.');return
         if messagebox.askyesno('ДТФ','Вы скачали PNG по ссылке, проверили размеры, количество копий и прозрачность?'):
             self.q.set_setting('dtf_first_test_confirmed','1');self.log('Тест ДТФ подтверждён. Можно включить расписание ДТФ.')
+
+    def pair_source(self):
+        if self.thread and self.thread.is_alive():messagebox.showinfo('30×40','Сначала остановите бота, затем подключите основную программу.');return
+        if self.bridge_pairing:return
+        self.bridge_pairing=True
+        code=self.bridge_code.get().strip();self.bridge_pair_button.configure(state='disabled')
+        def work():
+            try:
+                result=BridgeClient.pair(code,'source')
+                self.c.update(bridge_token=result['token'],bridge_branch=result['branch'])
+                self.settings.save(self.c);self.q.set_setting('bridge_connected','1')
+                self.log('Основная программа подключена к 30×40: '+result['branch'])
+                self.root.after(0,lambda:self.bridge_code.delete(0,'end'))
+            except Exception as e:self.log(str(e) if isinstance(e,(UserError,ConnectionError)) else 'Не удалось подключить 30×40.')
+            finally:
+                self.bridge_pairing=False
+                self.root.after(0,lambda:self.bridge_pair_button.configure(state='normal'))
+        threading.Thread(target=work,daemon=True).start()
+
+    def confirm_workshop_test(self):
+        with self.q.lock:
+            test=self.q.db.execute("select 1 from batches where direction='workshop' and state='sent' and test_mode=1 and generation=? limit 1",(int(self.q.setting('workshop_generation','0')),)).fetchone()
+        if not test:messagebox.showinfo('Мастерская','Сначала отправьте файл в мастерскую через бота и проверьте тестовую почту.');return
+        if messagebox.askyesno('Мастерская','Письмо пришло, ссылка открывается и оригинал скачивается?'):
+            self.q.set_setting('workshop_first_test_confirmed','1');self.log('Тест мастерской подтверждён.')
 
     def set_auto(self):
         if self.auto.get() and not self.save_schedule():
@@ -451,6 +502,16 @@ class App:
             try:text=self.messages.get_nowait()
             except threadqueue.Empty:break
             self.logs.configure(state='normal');self.logs.insert('end',datetime.now().strftime('%H:%M:%S')+' '+text+'\n');self.logs.see('end');self.logs.configure(state='disabled')
+        instant_rows=self.q.waiting('workshop')+self.q.waiting('photo30')
+        previous=set(self.instant_table.get_children())
+        for row in instant_rows:
+            key=str(row['id']);batch=self.q.batch(row['batch']) if row['batch'] else None
+            state='Ожидает приёмник' if batch and batch['state']=='awaiting_download' else {'queued':'Ожидает скачивания','downloading':'Скачивается','ready':'Сохранён','failed':'Ошибка'}.get(row['state'],row['state'])
+            values=(DIRECTIONS[row['direction']]['label'],row['name'],state)
+            if key in previous:self.instant_table.item(key,values=values);previous.remove(key)
+            else:self.instant_table.insert('','end',iid=key,values=values)
+        for key in previous:self.instant_table.delete(key)
+        self.bridge_status.configure(text='Подключение 30×40: '+self.c.get('bridge_branch','не настроено'))
         dtf_rows=self.q.waiting('dtf')
         previous=set(self.dtf_table.get_children())
         for row in dtf_rows:
@@ -467,7 +528,7 @@ class App:
             if key in existing:self.table.item(key,values=values);existing.remove(key)
             else:self.table.insert('','end',iid=key,values=values)
         for key in existing:self.table.delete(key)
-        history_states={'sent':'Письмо принято сервером','manual':'Ручная отправка','manual_sent':'Отмечено отправленным вручную','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
+        history_states={'sent':'Письмо принято сервером','dispatching_local':'Передаётся приёмнику','local_saved':'Сохранён на компьютере 30×40','awaiting_download':'Ожидает приёмник 30×40','manual':'Ручная отправка','manual_sent':'Отмечено отправленным вручную','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
         old=set(self.history_table.get_children())
         history_rows=self.q.history()
         for batch in history_rows:
@@ -527,6 +588,11 @@ def self_test(report_path):
                 assert instance.q.setting('first_test_confirmed','0')=='0'
                 assert instance.wizard is not None
                 assert 'perezakazi_bot' in root.title()
+                from receiver import ReceiverApp
+                receiver_window=tk.Toplevel(root);receiver_window.withdraw()
+                receiver_app=ReceiverApp(receiver_window)
+                assert receiver_app.folder.get().endswith('30х40')
+                receiver_window.destroy()
                 assert (BASE/'ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif').exists()
                 report={'ok':True,'version':VERSION,'telethon':telethon.__version__,'gui':True,'dpapi':True,'fast_file_crypto':True,'automatic_enabled':False}
             finally:
@@ -545,7 +611,11 @@ if __name__=='__main__':
         except (ValueError,IndexError):sys.exit(2)
         sys.exit(self_test(report_path))
     root=tk.Tk()
-    try:app=App(root)
+    try:
+        if '--receiver' in sys.argv:
+            from receiver import ReceiverApp
+            app=ReceiverApp(root)
+        else:app=App(root)
     except Exception as e:
         messagebox.showerror('Запуск',str(e) if isinstance(e,UserError) else 'Не удалось открыть локальные настройки.');root.destroy();sys.exit(1)
     root.mainloop()
