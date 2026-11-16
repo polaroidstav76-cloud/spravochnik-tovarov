@@ -23,7 +23,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.3.2'
+VERSION='0.3.3'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -58,7 +58,7 @@ class App:
         root.geometry(f'{width}x{height}');root.minsize(min(900,width),min(650,height))
         outer=ttk.Frame(root,padding=14);outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='Заказы партнёрам · @perezakazi_bot',font=('Segoe UI',18,'bold')).pack(anchor='w')
-        ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · отправка в 18:00 МСК · ДТФ подключим отдельно').pack(anchor='w',pady=(2,10))
+        ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · настраиваемое расписание МСК · ДТФ подключим отдельно').pack(anchor='w',pady=(2,10))
         notebook=ttk.Notebook(outer);self.notebook=notebook;notebook.pack(fill='both',expand=True)
         setup=ttk.Frame(notebook,padding=12);main=ttk.Frame(notebook,padding=12)
         self.setup_tab=setup;self.main_tab=main
@@ -85,7 +85,17 @@ class App:
         ttk.Button(toolbar,text='Подключить сотрудников',command=self.pair).pack(side='left',padx=3)
         ttk.Button(toolbar,text='Открыть папку данных',command=lambda:os.startfile(self.q.root)).pack(side='left',padx=3)
         self.auto=tk.BooleanVar(value=self.q.setting('automatic','0')=='1')
-        ttk.Checkbutton(main,text='Ежедневная отправка в 18:00 МСК включена',variable=self.auto,command=self.set_auto).pack(anchor='w',pady=10)
+        ttk.Checkbutton(main,text='Автоматическая отправка по расписанию включена',variable=self.auto,command=self.set_auto).pack(anchor='w',pady=4)
+        schedule=ttk.Frame(main);schedule.pack(fill='x',pady=4)
+        ttk.Label(schedule,text='Время МСК (ЧЧ:ММ):').pack(side='left')
+        self.dispatch_time=tk.StringVar(value=self.q.setting('dispatch_time','18:00'))
+        ttk.Entry(schedule,textvariable=self.dispatch_time,width=6).pack(side='left',padx=4)
+        selected=self.q.setting('dispatch_days','0,1,2,3,4,5,6').split(',')
+        self.dispatch_days=[]
+        for index,label in enumerate(('Пн','Вт','Ср','Чт','Пт','Сб','Вс')):
+            var=tk.BooleanVar(value=str(index) in selected);self.dispatch_days.append(var)
+            ttk.Checkbutton(schedule,text=label,variable=var).pack(side='left')
+        ttk.Button(schedule,text='Сохранить расписание',command=self.save_schedule).pack(side='left',padx=4)
         self.status=ttk.Label(main,text='Обработчик не запущен. Сначала заполните настройки.');self.status.pack(anchor='w')
         self.table=ttk.Treeview(main,columns=('id','name','state'),show='headings',height=8)
         for col,title,width in [('id','№',55),('name','Файл',570),('state','Состояние',240)]:
@@ -100,7 +110,7 @@ class App:
         ttk.Button(verification,text='Тестовое письмо проверено',command=self.confirm_test).pack(side='left',padx=3)
         ttk.Button(verification,text='Отчёт без секретов',command=self.export_report).pack(side='left',padx=3)
         self.logs=tk.Text(main,height=5,state='disabled',wrap='word');self.logs.pack(fill='x',pady=8)
-        ttk.Label(main,text='Файл принят только после ответа бота «Сохранён». Нельзя выключать или усыплять компьютер до завершения отправки.\nОтправки после 18:00 уходят на следующий день. Архивы и оригиналы автоматически не удаляются.',wraplength=900).pack(anchor='w')
+        ttk.Label(main,text='Файл принят только после ответа бота «Сохранён». Нельзя выключать или усыплять компьютер до завершения отправки.\nФайлы после выбранного времени ждут следующего дня отправки. Архивы и оригиналы автоматически не удаляются.',wraplength=900).pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW',self.close)
         self.wizard=Wizard(notebook,self)
         notebook.insert(0,self.wizard,text='Первый запуск')
@@ -166,13 +176,28 @@ class App:
     def stop(self):
         if self.worker:self.worker.stop()
 
+    def save_schedule(self):
+        value=self.dispatch_time.get().strip()
+        if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',value):
+            messagebox.showerror('Расписание','Введите время от 00:00 до 23:59, например 18:00.');return False
+        days=[str(i) for i,var in enumerate(self.dispatch_days) if var.get()]
+        if not days:
+            messagebox.showerror('Расписание','Выберите хотя бы один день недели.');return False
+        with self.q.lock,self.q.db:
+            self.q.set_setting('dispatch_time',value)
+            self.q.set_setting('dispatch_days',','.join(days))
+        self.log('Расписание сохранено: '+value+' МСК, '+', '.join(('Пн','Вт','Ср','Чт','Пт','Сб','Вс')[int(i)] for i in days)+'.')
+        return True
+
     def set_auto(self):
+        if self.auto.get() and not self.save_schedule():
+            self.auto.set(False);return
         if self.auto.get() and not self.q.setting('owner'):
             self.auto.set(False);messagebox.showinfo('Подключение','Сначала подключите владельца через кнопку «Подключить сотрудников».');return
         if self.auto.get() and self.q.setting('first_test_confirmed','0')!='1':
             self.auto.set(False);messagebox.showinfo('Сначала тест','Сначала получите тестовое письмо, скачайте архив и нажмите «Тестовое письмо проверено».');return
         self.q.set_setting('automatic',int(self.auto.get()))
-        self.log('Ежедневная отправка '+('включена.' if self.auto.get() else 'выключена.'))
+        self.log('Автоматическая отправка '+('включена.' if self.auto.get() else 'выключена.'))
 
     def pair(self):
         if not self.c.get('owner_code'):return
@@ -277,6 +302,7 @@ class App:
         report={'version':VERSION,'windows':platform.release(),'python':platform.python_version(),
                 'settings_present':{k:bool(e.get().strip()) for k,e in self.entries.items()},
                 'checks':{k:self.q.setting(k,'0')=='1' for k in ('bot_checked','disk_checked','mail_checked','first_test_confirmed','automatic')},
+                'schedule':{'time_moscow':self.q.setting('dispatch_time','18:00'),'weekdays':self.q.setting('dispatch_days','0,1,2,3,4,5,6'),'retry_minutes':10},
                 'owner_connected':bool(self.q.setting('owner')),
                 'owner_last_result':self.q.setting('owner_last_result','not_recorded'),
                 'files_by_state':files,'batches_by_state':batches}
@@ -326,6 +352,10 @@ def self_test(report_path):
                 assert protect(protect(b'Windows encryption test'),decrypt=True)==b'Windows encryption test'
                 root=tk.Tk();root.withdraw();instance=App(root);root.update_idletasks()
                 assert instance.q.setting('automatic','0')=='0'
+                assert len(instance.dispatch_days)==7
+                instance.dispatch_time.set('17:45')
+                assert instance.save_schedule()
+                assert instance.q.setting('dispatch_time')=='17:45'
                 assert instance.q.setting('first_test_confirmed','0')=='0'
                 assert instance.wizard is not None
                 assert 'perezakazi_bot' in root.title()

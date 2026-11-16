@@ -164,7 +164,7 @@ class Worker:
                 os.replace(temp,dest);self.q.downloaded(r['id'],sha)
                 self.log('Сохранён: '+r['name'])
                 try:
-                    schedule=f'Отправка по расписанию: {r["due"]}, 18:00 МСК.' if self.q.setting('automatic','0')=='1' else 'Расписание пока выключено.'
+                    schedule='Отправка в выбранные дни в '+self.q.setting('dispatch_time','18:00')+' МСК.' if self.q.setting('automatic','0')=='1' else 'Расписание пока выключено.'
                     await self.client.send_message(r['chat'],f'Сохранён: {r["name"]}\n{schedule} Для теста или срочной отправки нажмите «Отправить сейчас».',parse_mode=None)
                 except Exception:self.log('Не удалось отправить подтверждение загрузки. Файл сохранён.')
             except asyncio.CancelledError:raise
@@ -184,9 +184,9 @@ class Worker:
 
     async def process_batch(self,b):
         bid=b['id'];disk=Disk(self.c['disk_token'])
-        if self.retry_at.get(bid,0)>time.time():return
+        if float(self.q.setting('retry_at:'+bid,'0'))>time.time():return
         if b['recipient']!=self.c['recipient']:
-            self.retry_at[bid]=time.time()+300
+            self.q.set_setting('retry_at:'+bid,time.time()+600)
             self.log('У незавершённой отправки другой получатель. Отправка остановлена; удалите её файлы из очереди и загрузите заново для нового адреса.')
             return
         if b['state']=='invalidated':
@@ -215,8 +215,8 @@ class Worker:
                     await asyncio.to_thread(smtp.send_message,msg)
                 except (smtplib.SMTPRecipientsRefused,smtplib.SMTPSenderRefused,smtplib.SMTPDataError):
                     self.q.transition(bid,'submitting','collecting',error='Почтовый сервер отказал в отправке. Заказ сохранён.')
-                    self.retry_at[bid]=time.time()+300
-                    self.log('Почтовый сервер отказал в отправке. Будет повтор через 5 минут.')
+                    self.q.set_setting('retry_at:'+bid,time.time()+600)
+                    self.log('Почтовый сервер отказал в отправке. Будет повтор через 10 минут.')
                 except Exception:
                     self.q.transition(bid,'submitting','uncertain',error='Почтовый сервер не подтвердил результат. Проверьте тестовый ящик перед повтором.')
                     self.log('Результат письма не определён. Автоповтор остановлен, чтобы не создать дубль.')
@@ -232,8 +232,8 @@ class Worker:
             current=self.q.batch(bid)['state']
             if current in ('packing','uploading','ready'):
                 self.q.transition(bid,current,'collecting',error=reason)
-            self.retry_at[bid]=time.time()+300
-            self.log(reason+' Повтор через 5 минут; файлы сохранены.')
+            self.q.set_setting('retry_at:'+bid,time.time()+600)
+            self.log(reason+' Повтор через 10 минут; файлы сохранены.')
 
     async def notify(self):
         owner=self.q.setting('owner')

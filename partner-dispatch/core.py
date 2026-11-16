@@ -176,11 +176,15 @@ class Queue:
                 if manual:raise UserError('Предыдущая отправка ещё не завершена. Проверьте её состояние на основном компьютере.')
                 return None
             dt=datetime.fromtimestamp(now,MOSCOW)
-            if not manual and dt.hour<18:return None
+            dispatch_time=self.setting('dispatch_time','18:00')
+            hour,minute=map(int,dispatch_time.split(':'))
+            days={int(x) for x in self.setting('dispatch_days','0,1,2,3,4,5,6').split(',') if x}
+            cutoff=dt.replace(hour=hour,minute=minute,second=0,microsecond=0)
+            if not manual and (dt.weekday() not in days or dt<cutoff):return None
             query="select id from files where state!='cancelled' and batch is null and direction=?"
             args=[direction]
             if not manual:
-                query+=' and due<=?';args.append(dt.date().isoformat())
+                query+=' and received<?';args.append(cutoff.timestamp())
             ids=[r[0] for r in self.db.execute(query,args)]
             if not ids:return None
             bid=uuid.uuid4().hex

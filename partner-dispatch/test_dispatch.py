@@ -104,6 +104,37 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual(self.q.batch(bid)['state'],'uncertain')
         self.assertIsNone(self.q.claim(CONFIG['recipient'],self.now))
         self.q.reset_uncertain(bid,False);self.assertEqual(self.q.batch(bid)['state'],'collecting')
+    def test_custom_schedule_days_time_and_late_arrivals(self):
+        self.q.set_setting('dispatch_time','16:30')
+        self.q.set_setting('dispatch_days','0,2,4')
+        fri=datetime(2026,11,13,16,30,tzinfo=MOSCOW).timestamp()
+        self.file(stamp=fri-1)
+        self.assertIsNone(self.q.claim(CONFIG['recipient'],fri-1))
+        thu=datetime(2026,11,12,18,0,tzinfo=MOSCOW).timestamp()
+        self.assertIsNone(self.q.claim(CONFIG['recipient'],thu))
+        self.assertIsNotNone(self.q.claim(CONFIG['recipient'],fri))
+        self.q.db.execute("update batches set state='sent'");self.q.db.commit()
+        self.file(mid=2,stamp=fri)
+        self.assertIsNone(self.q.claim(CONFIG['recipient'],fri+60))
+        sat=datetime(2026,11,14,18,0,tzinfo=MOSCOW).timestamp()
+        self.assertIsNone(self.q.claim(CONFIG['recipient'],sat))
+        mon=datetime(2026,11,16,16,30,tzinfo=MOSCOW).timestamp()
+        self.assertIsNotNone(self.q.claim(CONFIG['recipient'],mon))
+
+    def test_retry_is_ten_minutes_and_persists_restart(self):
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        worker=Worker(self.q,CONFIG,self.logs.append)
+        with patch('worker.time.time',return_value=self.now),patch('worker.Disk') as disk:
+            disk.return_value.upload.side_effect=UserError('Нет соединения')
+            asyncio.run(worker.process_batch(self.q.batch(bid)))
+        self.assertEqual(float(self.q.setting('retry_at:'+bid)),self.now+600)
+        self.q.db.close();self.q=Queue(self.tmp.name)
+        worker=Worker(self.q,CONFIG,self.logs.append)
+        with patch('worker.time.time',return_value=self.now+599),patch('worker.Disk') as disk:
+            asyncio.run(worker.process_batch(self.q.batch(bid)))
+            disk.return_value.upload.assert_not_called()
+        self.assertEqual(self.q.batch(bid)['state'],'collecting')
+
     def test_empty_and_after_cutoff(self):
         self.assertIsNone(self.q.claim(CONFIG['recipient'],self.now))
         self.file(stamp=self.now+10)
