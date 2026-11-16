@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 from core import Queue, UserError, MOSCOW, BUTTONS, DIRECTIONS, UPLOAD, BACK, build_archive, chunks
+from monitoring import Monitoring
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -16,7 +17,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[]
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue)
 
     def stop(self):
         self.running=False
@@ -61,11 +62,20 @@ class Worker:
             self.q.set_setting('owner',uid);self.q.join(uid,'Основной филиал')
             self.choose(uid,None)
             await self.reply(event,'Владелец подключён. Выберите направление печати.');return
+        if text.startswith('/responsible '):
+            code=text.split(maxsplit=1)[1].strip()
+            expected=self.c.get('responsible_code','')
+            branch=self.q.setting('alert_branch')
+            if not expected or not branch or not hmac.compare_digest(code.encode(),expected.encode()):
+                await event.respond('Неверный код ответственного филиала или филиал не настроен в программе.',parse_mode=None);return
+            self.q.join(uid,branch);self.q.set_setting('alert_role:'+str(uid),branch)
+            self.choose(uid,None)
+            await self.reply(event,'Ответственный филиал подключён. Вам будут приходить уведомления о сбоях и нехватке места.');return
         if text.startswith('/join '):
             parts=text.split(maxsplit=2)
             if len(parts)!=3 or not hmac.compare_digest(parts[1].encode(),self.c['join_code'].encode()):
                 await event.respond('Неверный код подключения. Обратитесь к руководителю.',parse_mode=None);return
-            self.q.join(uid,parts[2]);self.choose(uid,None)
+            self.q.join(uid,parts[2]);self.q.set_setting('alert_role:'+str(uid),'');self.choose(uid,None)
             await self.reply(event,'Филиал подключён. Выберите направление печати.');return
         if not self.q.user(uid):
             await event.respond('Этот бот принимает файлы только от подключённых сотрудников. Получите код подключения у руководителя.',parse_mode=None);return
@@ -217,6 +227,7 @@ class Worker:
                     self.q.transition(bid,'submitting','collecting',error='Почтовый сервер отказал в отправке. Заказ сохранён.')
                     self.q.set_setting('retry_at:'+bid,time.time()+600)
                     self.log('Почтовый сервер отказал в отправке. Будет повтор через 10 минут.')
+                    self.monitor.failure(bid,'Почтовый сервер отказал в отправке.')
                 except Exception:
                     self.q.transition(bid,'submitting','uncertain',error='Почтовый сервер не подтвердил результат. Проверьте тестовый ящик перед повтором.')
                     self.log('Результат письма не определён. Автоповтор остановлен, чтобы не создать дубль.')
@@ -234,6 +245,7 @@ class Worker:
                 self.q.transition(bid,current,'collecting',error=reason)
             self.q.set_setting('retry_at:'+bid,time.time()+600)
             self.log(reason+' Повтор через 10 минут; файлы сохранены.')
+            self.monitor.failure(bid,reason)
 
     async def notify(self):
         owner=self.q.setting('owner')
@@ -241,14 +253,14 @@ class Worker:
         for b in self.q.pending_notifications():
             if b['state']=='sent':
                 text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо принято почтовым сервером; получение партнёром не подтверждено.'
-                chats={r['chat'] for r in self.q.batch_files(b['id'])}|{int(owner)}
+                chats={r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets()
             else:
                 text='Не удалось подтвердить отправку письма. Проверьте ящик и окно программы на основном компьютере. Автоматический повтор остановлен, чтобы не отправить заказ дважды.'
-                chats={int(owner)}
+                chats=self.monitor.targets()
             complete=True
             for chat in chats:
                 if self.q.notice_done(b['id'],chat):continue
-                notice=text if chat==int(owner) or b['state']!='sent' else f'Заказ отправлен. Файлов в отправке: {len(self.q.batch_files(b["id"]))}. Письмо принято почтовым сервером.'
+                notice=text if chat in self.monitor.targets() or b['state']!='sent' else f'Заказ отправлен. Файлов в отправке: {len(self.q.batch_files(b["id"]))}. Письмо принято почтовым сервером.'
                 try:
                     await self.client.send_message(chat,notice,parse_mode=None)
                     self.q.finish_notice(b['id'],chat)
@@ -268,6 +280,8 @@ class Worker:
                 b=self.q.active_batch()
                 if b:await self.process_batch(b)
                 await self.notify()
+                await self.monitor.check_space(self.c)
+                await self.monitor.notify(self.client)
             except asyncio.CancelledError:raise
             except Exception:self.log('Не удалось выполнить проверку очереди. Повторим через 10 секунд.')
             await asyncio.sleep(10)

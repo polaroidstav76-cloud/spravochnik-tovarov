@@ -202,6 +202,10 @@ class Queue:
             r=self.db.execute('select * from batches where id=?',(id,)).fetchone()
             return dict(r) if r else None
 
+    def history(self):
+        with self.lock:
+            return [dict(r) for r in self.db.execute("select b.*,count(f.id) as file_count from batches b left join files f on f.batch=b.id and f.state!='cancelled' group by b.id order by b.created desc limit 500")]
+
     def batch_files(self,id):
         with self.lock:
             return [dict(r) for r in self.db.execute("select * from files where batch=? and state!='cancelled' order by received,id",(id,))]

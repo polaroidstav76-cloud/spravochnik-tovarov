@@ -17,13 +17,13 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox,ttk,filedialog
 import webbrowser
-from core import Queue,UserError
+from core import Queue,UserError,MOSCOW
 from services import Settings,Disk,smtp_connect,check_dedicated_bot,protect
 from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.3.3'
+VERSION='0.3.4'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -52,6 +52,7 @@ class App:
         self.c.setdefault('sender','')
         self.c.setdefault('owner_code',secrets.token_urlsafe(18))
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
+        self.c.setdefault('responsible_code',secrets.token_urlsafe(18))
         self.q=Queue(folder)
         self.messages=threadqueue.Queue();self.worker=None;self.thread=None
         root.title('Клаудшоп — заказы партнёрам · @perezakazi_bot');width=min(1040,root.winfo_screenwidth()-50);height=min(810,root.winfo_screenheight()-90)
@@ -112,6 +113,25 @@ class App:
         self.logs=tk.Text(main,height=5,state='disabled',wrap='word');self.logs.pack(fill='x',pady=8)
         ttk.Label(main,text='Файл принят только после ответа бота «Сохранён». Нельзя выключать или усыплять компьютер до завершения отправки.\nФайлы после выбранного времени ждут следующего дня отправки. Архивы и оригиналы автоматически не удаляются.',wraplength=900).pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW',self.close)
+        history=ttk.Frame(notebook,padding=12);notebook.add(history,text='История и уведомления')
+        options=ttk.Frame(history);options.pack(fill='x')
+        ttk.Label(options,text='Ответственный филиал:').grid(row=0,column=0,sticky='w')
+        self.alert_branch=tk.StringVar(value=self.q.setting('alert_branch'))
+        ttk.Entry(options,textvariable=self.alert_branch,width=32).grid(row=0,column=1,padx=5)
+        ttk.Label(options,text='Предупреждать, если свободно менее (ГБ):').grid(row=1,column=0,sticky='w',pady=6)
+        self.space_threshold=tk.StringVar(value=self.q.setting('space_threshold_gb','10'))
+        ttk.Entry(options,textvariable=self.space_threshold,width=8).grid(row=1,column=1,sticky='w',padx=5)
+        ttk.Button(options,text='Сохранить уведомления',command=self.save_alerts).grid(row=2,column=0,pady=6,sticky='w')
+        ttk.Label(history,text='Владелец получает уведомления всегда. Ответственный филиал подключается отдельной командой.\nБез интернета уведомления ожидают восстановления связи. Диск проверяется раз в час.',wraplength=850).pack(anchor='w',pady=6)
+        self.space_status=ttk.Label(history,text='Свободное место ещё не проверено');self.space_status.pack(anchor='w')
+        self.history_table=ttk.Treeview(history,columns=('date','state','count','recipient'),show='headings',height=10)
+        for key,label,width in [('date','Создано (МСК)',150),('state','Состояние',230),('count','Файлов',65),('recipient','Получатель',240)]:
+            self.history_table.heading(key,text=label);self.history_table.column(key,width=width)
+        self.history_table.pack(fill='both',expand=True,pady=8)
+        history_actions=ttk.Frame(history);history_actions.pack(fill='x')
+        ttk.Button(history_actions,text='Открыть ссылку',command=lambda:self.history_link(False)).pack(side='left',padx=3)
+        ttk.Button(history_actions,text='Скопировать ссылку',command=lambda:self.history_link(True)).pack(side='left',padx=3)
+        ttk.Label(history,text='«Письмо принято сервером» не подтверждает получение партнёром. Старые ссылки могут стать недоступны после удаления архива с Диска.',wraplength=850).pack(anchor='w',pady=8)
         self.wizard=Wizard(notebook,self)
         notebook.insert(0,self.wizard,text='Первый запуск')
         notebook.select(self.wizard if self.q.setting('first_test_confirmed','0')!='1' else main)
@@ -142,7 +162,10 @@ class App:
         try:
             updated=self.config(require_all=require_all)
             changed=any(self.c.get(k,'')!=updated.get(k,'') for k,_,_ in FIELDS if k!='disk_client_id')
+            disk_changed=self.c.get('disk_token')!=updated.get('disk_token')
             self.settings.save(updated);self.c=updated
+            if disk_changed:
+                self.q.set_setting('disk_free_bytes','');self.q.set_setting('space_check_after','0');self.q.set_setting('low_space_episode','')
             if changed:
                 self.q.set_setting('generation',int(self.q.setting('generation','0'))+1)
                 for key in ('first_test_confirmed','automatic','bot_checked','disk_checked','mail_checked'):self.q.set_setting(key,'0')
@@ -202,12 +225,18 @@ class App:
     def pair(self):
         if not self.c.get('owner_code'):return
         text=('1. Откройте нового бота в Telegram и отправьте:\n/owner '+self.c['owner_code']+'\n\n2. Сотрудники отправляют боту (вместо Филиал укажите название):\n/join '+self.c['join_code']+' Филиал\n\nКод сотрудников выдавайте только своим сотрудникам. Код владельца никому не передавайте.')
+        text+='\n\n3. Ответственный филиал (команда только его сотрудникам):\n/responsible '+self.c['responsible_code']+'\nНастройте название филиала во вкладке «История и уведомления». Обычный /join не даёт этих прав.'
         win=tk.Toplevel(self.root);win.title('Подключение к боту')
-        box=tk.Text(win,width=95,height=13,wrap='word');box.pack(padx=14,pady=14);box.insert('1.0',text);box.configure(state='disabled')
+        box=tk.Text(win,width=95,height=17,wrap='word');box.pack(padx=14,pady=14);box.insert('1.0',text);box.configure(state='disabled')
         def copy_owner():
             win.clipboard_clear();win.clipboard_append('/owner '+self.c['owner_code']);win.update()
             messagebox.showinfo('Скопировано','Команда владельца скопирована. Вставьте её в личный чат @perezakazi_bot.',parent=win)
         ttk.Button(win,text='Скопировать команду владельца',command=copy_owner).pack(pady=8)
+        def copy_responsible():
+            win.clipboard_clear();win.clipboard_append('/responsible '+self.c['responsible_code']);win.update()
+            messagebox.showinfo('Скопировано','Отправьте команду только сотрудникам ответственного филиала.',parent=win)
+        ttk.Button(win,text='Скопировать команду ответственного филиала',command=copy_responsible).pack(pady=4)
+
 
 
     def send(self):
@@ -309,6 +338,29 @@ class App:
         name=filedialog.asksaveasfilename(parent=self.root,title='Отчёт без секретов',initialfile='Cloudshop-check.json',defaultextension='.json',filetypes=[('JSON','*.json')])
         if name:Path(name).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');self.log('Отчёт сохранён: без токенов, адресов, кодов сотрудников и названий файлов.')
 
+    def save_alerts(self):
+        try:
+            value=float(self.space_threshold.get().replace(',','.'))
+            if not 0<value<=100000:raise ValueError()
+        except ValueError:
+            messagebox.showerror('Уведомления','Введите порог свободного места от 0 до 100000 ГБ (больше нуля).');return
+        self.q.set_setting('alert_branch',self.alert_branch.get().strip()[:80])
+        self.q.set_setting('space_threshold_gb',value)
+        self.q.set_setting('space_check_after','0')
+        self.log('Настройки уведомлений сохранены. Подключите ответственных сотрудников отдельной командой.')
+
+    def history_link(self,copy):
+        selected=self.history_table.selection()
+        if not selected:return
+        batch=self.q.batch(selected[0])
+        link=batch.get('link') if batch and batch['state']=='sent' else None
+        if not link:
+            messagebox.showinfo('Ссылка','Ссылка доступна для отправок, принятых почтовым сервером.');return
+        if copy:
+            self.root.clipboard_clear();self.root.clipboard_append(link);self.root.update()
+            self.log('Ссылка на архив скопирована.')
+        elif link.startswith('https://'):webbrowser.open(link)
+
     def help(self):os.startfile(BASE/'ИНСТРУКЦИЯ.txt')
 
     def refresh(self):
@@ -325,6 +377,16 @@ class App:
             if key in existing:self.table.item(key,values=values);existing.remove(key)
             else:self.table.insert('','end',iid=key,values=values)
         for key in existing:self.table.delete(key)
+        history_states={'sent':'Письмо принято сервером','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
+        old=set(self.history_table.get_children())
+        for batch in self.q.history():
+            key=batch['id'];values=(datetime.fromtimestamp(batch['created'],MOSCOW).strftime('%d.%m.%Y %H:%M'),history_states.get(batch['state'],batch['state']),batch['file_count'],batch['recipient'])
+            if key in old:self.history_table.item(key,values=values);old.remove(key)
+            else:self.history_table.insert('','end',iid=key,values=values)
+        for batch in self.q.history():self.history_table.move(batch['id'],'','end')
+        for key in old:self.history_table.delete(key)
+        free=self.q.setting('disk_free_bytes')
+        if free:self.space_status.configure(text=f'Последняя проверка: свободно {int(free)/1024**3:.1f} ГБ')
         running=self.thread and self.thread.is_alive()
         with self.q.lock:
             uncertain=self.q.db.execute("select count(*) from batches where state='uncertain'").fetchone()[0]
@@ -353,6 +415,8 @@ def self_test(report_path):
                 root=tk.Tk();root.withdraw();instance=App(root);root.update_idletasks()
                 assert instance.q.setting('automatic','0')=='0'
                 assert len(instance.dispatch_days)==7
+                assert instance.history_table.winfo_exists()
+                assert instance.alert_branch.get()==''
                 instance.dispatch_time.set('17:45')
                 assert instance.save_schedule()
                 assert instance.q.setting('dispatch_time')=='17:45'

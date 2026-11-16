@@ -104,6 +104,57 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual(self.q.batch(bid)['state'],'uncertain')
         self.assertIsNone(self.q.claim(CONFIG['recipient'],self.now))
         self.q.reset_uncertain(bid,False);self.assertEqual(self.q.batch(bid)['state'],'collecting')
+    def test_operator_alerts_require_separate_role_and_retry_after_offline(self):
+        from monitoring import Monitoring
+        from unittest.mock import AsyncMock
+        self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
+        self.q.join(22,'Ответственный')
+        monitor=Monitoring(self.q)
+        self.assertEqual(monitor.targets(),{11})
+        self.q.set_setting('alert_role:22','Ответственный')
+        self.assertEqual(monitor.targets(),{11,22})
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        monitor.failure(bid,'Ошибка соединения')
+        client=type('Client',(),{'send_message':AsyncMock(side_effect=ConnectionError())})()
+        asyncio.run(monitor.notify(client))
+        self.q.db.close();self.q=Queue(self.tmp.name);monitor=Monitoring(self.q)
+        client.send_message=AsyncMock()
+        asyncio.run(monitor.notify(client));asyncio.run(monitor.notify(client))
+        self.assertEqual(client.send_message.await_count,2)
+        self.q.set_setting('alert_branch','Другая точка')
+        self.assertEqual(monitor.targets(),{11})
+
+    def test_disk_space_warning_once_per_low_space_episode(self):
+        from monitoring import Monitoring
+        from unittest.mock import AsyncMock
+        self.q.set_setting('owner',11);monitor=Monitoring(self.q)
+        client=type('Client',(),{'send_message':AsyncMock()})()
+        with patch('monitoring.Disk') as disk,patch('monitoring.time.time',return_value=self.now):
+            disk.return_value.check.return_value=1024**3
+            asyncio.run(monitor.check_space(CONFIG));asyncio.run(monitor.notify(client))
+            self.q.set_setting('space_check_after','0')
+            asyncio.run(monitor.check_space(CONFIG));asyncio.run(monitor.notify(client))
+            self.assertEqual(client.send_message.await_count,1)
+            disk.return_value.check.return_value=20*1024**3
+            self.q.set_setting('space_check_after','0');asyncio.run(monitor.check_space(CONFIG))
+            self.assertEqual(self.q.setting('low_space_episode'),'')
+
+    def test_responsible_join_does_not_change_owner_and_history_survives(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
+        worker=Worker(self.q,dict(CONFIG,responsible_code='sample-role-secret'),self.logs.append)
+        worker.reply=AsyncMock()
+        event=SimpleNamespace(is_private=True,sender_id=99,raw_text='/responsible sample-role-secret',respond=AsyncMock())
+        asyncio.run(worker.on_message(event))
+        self.assertEqual(worker.monitor.targets(),{11,99})
+        self.assertEqual(self.q.setting('owner'),'11')
+        self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
+        self.q.db.close();self.q=Queue(self.tmp.name)
+        history=self.q.history()
+        self.assertEqual(history[0]['id'],bid)
+        self.assertEqual(history[0]['file_count'],1)
+
     def test_custom_schedule_days_time_and_late_arrivals(self):
         self.q.set_setting('dispatch_time','16:30')
         self.q.set_setting('dispatch_days','0,2,4')
