@@ -23,7 +23,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.3'
+VERSION='0.3.1'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -179,6 +179,11 @@ class App:
         text=('1. Откройте нового бота в Telegram и отправьте:\n/owner '+self.c['owner_code']+'\n\n2. Сотрудники отправляют боту (вместо Филиал укажите название):\n/join '+self.c['join_code']+' Филиал\n\nКод сотрудников выдавайте только своим сотрудникам. Код владельца никому не передавайте.')
         win=tk.Toplevel(self.root);win.title('Подключение к боту')
         box=tk.Text(win,width=95,height=13,wrap='word');box.pack(padx=14,pady=14);box.insert('1.0',text);box.configure(state='disabled')
+        def copy_owner():
+            win.clipboard_clear();win.clipboard_append('/owner '+self.c['owner_code']);win.update()
+            messagebox.showinfo('Скопировано','Команда владельца скопирована. Вставьте её в личный чат @perezakazi_bot.',parent=win)
+        ttk.Button(win,text='Скопировать команду владельца',command=copy_owner).pack(pady=8)
+
 
     def send(self):
         if not self.worker or not self.thread or not self.thread.is_alive():messagebox.showinfo('Отправка','Сначала запустите бота.');return
@@ -272,6 +277,8 @@ class App:
         report={'version':VERSION,'windows':platform.release(),'python':platform.python_version(),
                 'settings_present':{k:bool(e.get().strip()) for k,e in self.entries.items()},
                 'checks':{k:self.q.setting(k,'0')=='1' for k in ('bot_checked','disk_checked','mail_checked','first_test_confirmed','automatic')},
+                'owner_connected':bool(self.q.setting('owner')),
+                'owner_last_result':self.q.setting('owner_last_result','not_recorded'),
                 'files_by_state':files,'batches_by_state':batches}
         name=filedialog.asksaveasfilename(parent=self.root,title='Отчёт без секретов',initialfile='Cloudshop-check.json',defaultextension='.json',filetypes=[('JSON','*.json')])
         if name:Path(name).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');self.log('Отчёт сохранён: без токенов, адресов, кодов сотрудников и названий файлов.')

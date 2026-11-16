@@ -25,6 +25,28 @@ class TestDispatch(unittest.TestCase):
         r=self.q.add(chat,mid,chat,name,len(data),stamp or self.now-10)
         p=self.q.path(r);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
         self.q.downloaded(r['id'],hashlib.sha256(data).hexdigest());return self.q.file(r['id'])
+    def test_owner_connection_replies_without_changing_code(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        worker=Worker(self.q,dict(CONFIG,owner_code='sample-secret'),self.logs.append)
+        worker.reply=AsyncMock()
+        event=SimpleNamespace(is_private=True,sender_id=99,raw_text='/owner wrong',respond=AsyncMock())
+        asyncio.run(worker.on_message(event))
+        self.assertEqual(self.q.setting('owner_last_result'),'code_mismatch')
+        self.assertFalse(self.q.setting('owner'))
+        event.respond.assert_awaited_once()
+        self.assertNotIn('sample-secret',' '.join(self.logs))
+        event.raw_text='/owner sample-secret'
+        asyncio.run(worker.on_message(event))
+        self.assertEqual(self.q.setting('owner'),'99')
+        self.assertEqual(self.q.setting('owner_last_result'),'connected')
+        worker.reply.assert_awaited_once()
+        event.sender_id=100
+        asyncio.run(worker.on_message(event))
+        self.assertEqual(self.q.setting('owner_last_result'),'different_owner')
+        self.assertEqual(self.q.setting('owner'),'99')
+        self.assertEqual(worker.c['owner_code'],'sample-secret')
+
     def test_cutoff_and_duplicates(self):
         self.assertEqual(due_day(self.now-1),'2026-11-12')
         self.assertEqual(due_day(self.now),'2026-11-13')

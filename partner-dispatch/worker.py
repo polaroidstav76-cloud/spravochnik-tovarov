@@ -45,9 +45,19 @@ class Worker:
         if not event.is_private:return
         text=(event.raw_text or '').strip();uid=event.sender_id
         owner=self.q.setting('owner')
-        if text.startswith('/owner '):
-            if not hmac.compare_digest(text[7:].strip().encode(),self.c['owner_code'].encode()):return
-            if owner and owner!=str(uid):return
+        parts=text.split(maxsplit=1)
+        if parts and parts[0].split('@')[0]=='/owner':
+            if len(parts)!=2:
+                await event.respond('Нужна полная команда /owner с кодом из программы на компьютере.',parse_mode=None);return
+            if not hmac.compare_digest(parts[1].strip().encode(),self.c['owner_code'].encode()):
+                self.q.set_setting('owner_last_result','code_mismatch')
+                self.log('Подключение владельца отклонено: код не совпадает с кодом запущенной программы.')
+                await event.respond('Код владельца не совпадает с кодом запущенной программы. Откройте «Подключить сотрудников» на компьютере и нажмите «Скопировать команду владельца».',parse_mode=None);return
+            if owner and owner!=str(uid):
+                self.q.set_setting('owner_last_result','different_owner')
+                self.log('Подключение отклонено: владельцем уже назначен другой Telegram-аккаунт.')
+                await event.respond('Владельцем уже назначен другой Telegram-аккаунт. Доступы и код не изменены.',parse_mode=None);return
+            self.q.set_setting('owner_last_result','connected')
             self.q.set_setting('owner',uid);self.q.join(uid,'Основной филиал')
             self.choose(uid,None)
             await self.reply(event,'Владелец подключён. Выберите направление печати.');return
