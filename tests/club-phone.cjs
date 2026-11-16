@@ -12,9 +12,9 @@ const input=document.getElementById('saleClubNewPhone');for(const value of ['+7'
 const start=html.indexOf('function showSaleClubMatches'),end=html.indexOf("$('saleUsePoints').onchange=",start);vm.runInContext(html.slice(start,end),ctx);
 (async()=>{
  rows=[{customer_id:'one',customer_name:'Первый',customer_phone:'+79001234567',balance:10,order_count:1},{customer_id:'two',customer_name:'Второй',customer_phone:'+79111234567',balance:20,order_count:2}];
- document.getElementById('saleClubQuery').value='4567';await document.getElementById('saleClubSearchBtn').onclick();assert.equal(chosen,null);assert.equal(ctx.saleLoyaltyCustomerId,null);assert.equal(vm.runInContext('saleClubNeedsSelection',ctx),true);assert(box.innerHTML.includes('полный номер'));
+ document.getElementById('saleClubQuery').value='4567';await document.getElementById('saleClubSearchBtn').onclick();assert.equal(chosen,null);assert.equal(ctx.saleLoyaltyCustomerId,null);assert.equal(vm.runInContext('saleClubNeedsSelection',ctx),true);assert.equal(box.querySelectorAll('[data-club-match]').length,2);assert(box.innerHTML.includes('+79001234567'));assert(box.innerHTML.includes('+79111234567'));const suffixButtons=box.querySelectorAll('[data-club-match]');suffixButtons[1].onclick();assert.equal(chosen,'two');chosen=null;
  document.getElementById('saleClubQuery').value='89001234567';rows=[rows[0]];await document.getElementById('saleClubSearchBtn').onclick();assert.equal(chosen,'one');assert.equal(vm.runInContext('saleClubNeedsSelection',ctx),false);
  chosen=null;rows.push({...rows[0],customer_id:'legacy',customer_name:'Старая карта'});await document.getElementById('saleClubSearchBtn').onclick();assert.equal(chosen,null);const buttons=box.querySelectorAll('[data-club-match]');assert.equal(buttons.length,2);buttons[1].onclick();assert.equal(chosen,'legacy');
  assert(html.includes('<span aria-hidden="true">+7</span>'));
- console.log('PASS: fixed +7 prefix; typing/paste normalization; invalid-length validation; suffix ambiguity and explicit selection for duplicated full numbers; scripts parse');
+ console.log('PASS: fixed +7 prefix; typing/paste normalization; invalid-length validation; all suffix matches and click selection for full/duplicated numbers; scripts parse');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -2127,14 +2127,16 @@ window.adjustPointsStaff=async(id,sign)=>{
   setTimeout(lookupLoyalty,800);
 }
 async function lookupLoyalty(){
+  const epoch=window.__clubLookupEpoch=(window.__clubLookupEpoch||0)+1;
   const q=normalizePhone($('clubLookup').value); const box=$('clubCustomerResults');
-  if(q.length<4){box.innerHTML='<div class="status">Введите последние 4 цифры номера. Если найдено несколько клиентов — введите полный номер.</div>';return}
+  if(q.length<4){box.innerHTML='<div class="status">Введите последние 4 цифры номера. При совпадениях выберите клиента по полному номеру и имени.</div>';return}
   const r=await db.rpc('loyalty_find_customers',{p_query:q});
+  if(epoch!==window.__clubLookupEpoch)return;
   if(r.error){box.innerHTML='<div class="status">Ошибка: '+esc(r.error.message)+'</div>';return}
   let rows=r.data||[];
   if(q.length>4)rows=rows.filter(x=>normalizePhone(x.customer_phone)===normalizePhone(q));
   if(!rows.length){box.innerHTML='<div class="status">Клиент не найден.</div>';return}
-  if(q.length===4 && rows.length>1){box.innerHTML='<div class="loyalty-card"><b>Найдено несколько клиентов.</b><div class="status" style="margin-top:6px">Введите полный номер клиента.</div></div>';return}
+
   box.innerHTML=rows.map(renderLoyaltyCustomer).join('');
 }
 $('clubLookupBtn').onclick=lookupLoyalty;
@@ -2149,7 +2151,9 @@ window.showLoyaltyHistory=async(id)=>{
   $('loyaltyHistoryTitle').textContent=
     c?`${c.customer_name} — ${c.customer_phone}`:'История клиента';
 
-  const employeeName=c?.created_by_employee||'Не указан';
+  const metadata=await db.rpc('workflow_card_creator',{p_customer_id:id});
+  const employeeName=metadata.data?.name||c?.created_by_employee||'Автор не указан';
+  if(!c&&metadata.data?.customer_name)$('loyaltyHistoryTitle').textContent=metadata.data.customer_name+' — '+displayClubPhone(metadata.data.customer_phone);
 
   $('loyaltyHistoryRows').innerHTML=`
     <div class="status" style="margin-bottom:12px">
@@ -2171,7 +2175,7 @@ window.showLoyaltyHistory=async(id)=>{
             ${rows.map(x=>`
               <tr>
                 <td>${new Date(x.created_at).toLocaleString('ru-RU')}</td>
-                <td>${esc(x.operation_label)}</td>
+                <td>${esc(x.operation_label||x.transaction_type)}</td>
                 <td>${x.order_amount>0?money(x.order_amount):'—'}</td>
                 <td>
                   <b>${Number(x.points)>=0?'+':''}${loyaltyMoney(x.points)}</b>
@@ -2281,7 +2285,7 @@ async function loadCustomerAdminRows(){
       balance,
       pending,
       orders,
-      created_by_employee_name:creator?.name||'Не указан'
+      created_by_employee_name:creator?.name||c.created_by_name||'Автор не указан'
     };
   });
 
@@ -2473,6 +2477,7 @@ async function renderSalesCatalogPrice(){
 async function openSalesCatalogPrice(){await loadSalesSetup();$('salesCatalogPriceSearch').value='';await renderSalesCatalogPrice();open('salesCatalogPriceModal')}
 $('salesCatalogPriceBtn').onclick=openSalesCatalogPrice;$('salesCatalogPriceSearch').oninput=renderSalesCatalogPrice;$('closeSalesCatalogPrice').onclick=()=>close('salesCatalogPriceModal');
 async function registerSaleClubCard(){
+  const serial=++saleClubLookupSerial;
   const name=$('saleClubNewName').value.trim(), phone=clubPhoneValue($('saleClubNewPhone').value), comment=$('saleClubComment').value.trim();
   if(!name||!validClubPhone($('saleClubNewPhone').value)){$('saleClubStatus').textContent='Введите имя и 10 цифр мобильного номера, начиная с 9. Код +7 уже указан.';return}
 
@@ -2486,6 +2491,10 @@ const createdByPersonId=Number(
   0
 ) || null;
 
+const existing=await db.rpc('loyalty_find_customers',{p_query:phone});
+if(serial!==saleClubLookupSerial)return;
+if(existing.error){$('saleClubStatus').textContent='Не удалось проверить номер: '+existing.error.message;return}
+if(existing.data?.length){showSaleClubMatches(existing.data);$('saleClubStatus').textContent='Карта с этим номером уже существует. Выберите нужного клиента; новая карта не создаётся.';return}
 const r=await db.rpc('loyalty_register_customer',{
   p_name:name,
   p_phone:phone,
@@ -2493,13 +2502,14 @@ const r=await db.rpc('loyalty_register_customer',{
   p_created_by_employee_id:createdByPersonId
 });
 
+  if(serial!==saleClubLookupSerial)return;
   if(r.error){$('saleClubStatus').textContent='Ошибка оформления карты: '+r.error.message;return}
 
   $('saleClubQuery').value=phone.replace(/\D/g,'').slice(-4);
-  $('saleClubStatus').textContent='Клубная карта оформлена. Клиент выбран для этой продажи.';
+  $('saleClubStatus').textContent='Карта готова к продаже. Повторная карта с тем же номером не создаётся.';
 
   const f=await db.rpc('loyalty_find_customers',{p_query:phone});
-  if(!f.error&&f.data?.length) showSaleClubMatches(f.data);
+  if(serial===saleClubLookupSerial&&!f.error&&f.data?.length) showSaleClubMatches(f.data);
 }
 $('saleRegisterClubBtn').onclick=registerSaleClubCard;
 async function openSalesWorkspace(){await loadSalesSetup();if(!salesBranches.length){alert('Сначала администратору нужно настроить филиалы.');return}renderSalesWorkspaceOptions();$('salesWorkspaceStatus').textContent='';open('salesWorkspaceModal')}
@@ -2645,7 +2655,7 @@ $('saleClubSearchBtn').onclick=async()=>{
  // A failed or ambiguous search must not keep another customer's card selected.
  saleLoyaltyCustomerId=null;saleLoyaltyCustomer=null;$('saleLoyaltyBalance').textContent='';$('saleUsePoints').checked=false;$('salePointsToUse').value='0';$('salePointsFields').style.display='none';updateSaleTotal();
  const r=await db.rpc('loyalty_find_customers',{p_query:q});if(serial!==saleClubLookupSerial)return;if(r.error){$('saleClubStatus').textContent='Ошибка: '+r.error.message;return}
- const rows=r.data||[];if(q.replace(/\D/g,'').length===4&&rows.length>1){$('saleClubResults').innerHTML='<div class="sales-warning">Найдено несколько клиентов. Введите полный номер.</div>';return}
+ const rows=r.data||[];
  if(!rows.length){saleClubNeedsSelection=false;$('saleClubResults').innerHTML='<div class="status">Клиент не найден. Можно заполнить имя и полный номер ниже — программа создаст карту при продаже.</div>';return}
  showSaleClubMatches(rows);
 };
@@ -2656,7 +2666,7 @@ $('closeSale').onclick=()=>close('saleModal');
 $('saveSale').onclick=async()=>{
   if(!salesSession?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return}if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return}
   const gross=saleGrossTotal(),points=salePointsUsed(),max=Math.round(gross*.3*100)/100;if(points>max){$('saleStatus').textContent='Нельзя списать больше 30% суммы заказа: '+salesMoney(max);return}
-  let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){if(saleClubNeedsSelection){$('saleStatus').textContent='Уточните полный номер и выберите карту клиента перед оформлением.';return}loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=clubPhoneValue($('saleClubNewPhone').value);if(!saleLoyaltyCustomerId&&(!loyaltyName||!validClubPhone($('saleClubNewPhone').value))){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и 10 цифр номера, начиная с 9. Код +7 уже указан.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}
+  let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){if(saleClubNeedsSelection){$('saleStatus').textContent='Выберите нужного клиента из результатов поиска перед оформлением.';return}loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=clubPhoneValue($('saleClubNewPhone').value);if(!saleLoyaltyCustomerId&&(!loyaltyName||!validClubPhone($('saleClubNewPhone').value))){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и 10 цифр номера, начиная с 9. Код +7 уже указан.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}
   const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice)}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}
   $('saveSale').disabled=true;$('saleStatus').textContent='Оформляю продажу…';
   const r=await db.rpc('sales_create_sale',{p_shift_id:salesSession.shiftId,p_payment_method:$('salePayment').value,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber||null});
@@ -3212,7 +3222,7 @@ $('saleClubQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventD
 async function openSaleV4(){try {$('saleCatalogSearch').value='';if(!(await validateSalesSession())){await openSalesWorkspace();return}await loadSalesSetup();saleContext={...salesSession,participants:[...salesSession.participants]};saleDraft=[];window.v4UpsellSeen=new Set();resetSaleLoyalty();$('saleClubEnabled').checked=false;$('salePayment').value='';$('saleDiscountPercent').value='0';v4SplitRows=[];$('splitPaymentBox').style.display='none';$('saleComment').value='';$('saleStatus').textContent='';$('saleSessionInfo').textContent=`${salesSession.branchName} · Кассир: ${salesSession.employeeName}`;$('saleBranchView').value=salesSession.branchName;renderSaleCashiers();$('saleLoyaltyFields').style.display='none';const key='pendingOrder_'+salesSession.branchId;let num=Number(localStorage.getItem(key)||0);if(!num){const nr=await db.rpc('sales_next_order_number',{p_branch_id:salesSession.branchId});if(nr.error){alert('Не удалось получить номер заказа: '+nr.error.message+'\nПроверьте интернет и попробуйте ещё раз.');return}num=Number(nr.data);localStorage.setItem(key,String(num))}window.currentSaleOrderNumber=num;$('saleOrderPreview').textContent='№ '+num+' (предварительный)';renderSaleCatalog();renderSaleDraft();open('saleModal')} catch(e) {alert('Не удалось открыть продажу: '+e.message);} }
 $('salesBtn').onclick=openSaleV4;
 $('closeSale').onclick=()=>close('saleModal');
-$('saveSale').onclick=async()=>{if($('saveSale').disabled)return;if(!saleContext?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return}if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return}const payment=$('salePayment').value;if(!payment){$('saleStatus').textContent='Выберите способ оплаты.';return}const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),after=Math.round((gross-Math.round(gross*discountPct)/100)*100)/100,points=salePointsUsed(),max=Math.round(after*.3*100)/100;if(points>max){$('saleStatus').textContent='Нельзя списать больше 30% суммы после скидки: '+salesMoney(max);return}let payments=[];if(payment==='split'){payments=v4SplitRows.filter(x=>Number(x.amount)>0).map(x=>({method:x.method,amount:Math.round(Number(x.amount)*100)/100}));if(payments.length<2||Math.abs(payments.reduce((a,x)=>a+x.amount,0)-Math.max(0,after-points))>.01){$('saleStatus').textContent='Для раздельной оплаты распределите всю сумму заказа.';return}}if((payment==='bank_account'||payments.some(x=>x.method==='bank_account'))&&!$('saleClubEnabled').checked&&!confirm('Оплата «Расчётный счёт» без клубной карты не попадёт в «Долги клиентов». Продолжить без карты?'))return;let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){if(saleClubNeedsSelection){$('saleStatus').textContent='Уточните полный номер и выберите карту клиента перед оформлением.';return}loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=clubPhoneValue($('saleClubNewPhone').value);if(!saleLoyaltyCustomerId&&(!loyaltyName||!validClubPhone($('saleClubNewPhone').value))){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и 10 цифр номера, начиная с 9. Код +7 уже указан.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}const noVariant=saleDraft.find(x=>salesCatalog.find(c=>Number(c.id)===Number(x.catalogId))?.variants?.length&&!x.variantId);if(noVariant){$('saleStatus').textContent='Выберите размер и цвет: «'+(salesCatalog.find(c=>Number(c.id)===Number(noVariant.catalogId))?.name||'')+'».';return}const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice),...(x.variantId?{variant_material_id:Number(x.variantId)}:{})}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}const context={...saleContext};const activeParticipants=context.participants.filter(p=>p.isActive);const selectedCashierId=Number($('saleEmployeeView').value||0);if(activeParticipants.length>1&&!selectedCashierId){$('saleStatus').textContent='Выберите кассира для этой продажи.';$('saleEmployeeView').focus();return;}if(activeParticipants.length>1){const selectedCashier=activeParticipants.find(p=>Number(p.employeeId)===selectedCashierId);if(!selectedCashier){$('saleStatus').textContent='Выберите кассира из участников смены.';$('saleEmployeeView').focus();return;}context.employeeId=selectedCashier.employeeId;context.personId=selectedCashier.personId;context.employeeName=selectedCashier.name;}else{const onlyCashier=activeParticipants[0];if(!onlyCashier){$('saleStatus').textContent='Не найден сотрудник для оформления продажи.';return;}context.employeeId=onlyCashier.employeeId;context.personId=onlyCashier.personId;context.employeeName=onlyCashier.name;}$('saveSale').disabled=true;$('saleEmployeeView').disabled=true;try {$('saleStatus').textContent='Оформляю продажу…';const r=await db.rpc('sales_create_sale',{p_shift_id:context.shiftId,p_employee_id:context.employeeId,p_payment_method:payment,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber,p_discount_percent:discountPct,p_payments:payments});if(r.error)throw r.error;const orderNo=r.data;localStorage.removeItem('pendingOrder_'+context.branchId);window.currentSaleOrderNumber=null;$('saleOrderPreview').textContent='№ '+orderNo;$('saleStatus').textContent=`Продажа №${orderNo} оформлена.`;if(typeof v5Toast==='function'&&!(typeof pickupLastResult!=='undefined'&&pickupLastResult)&&orderNo!=null)v5Toast(`Продажа №${orderNo} оформлена.`);saleDraft=[];close('saleModal');await openSaleV4()}catch(e){$('saleStatus').textContent='Ошибка: '+e.message;}finally{$('saveSale').disabled=false;$('saleEmployeeView').disabled=false;}};
+$('saveSale').onclick=async()=>{if($('saveSale').disabled)return;if(!saleContext?.shiftId){$('saleStatus').textContent='Сначала начните смену.';return}if(!saleDraft.length){$('saleStatus').textContent='Добавьте хотя бы одну позицию.';return}const payment=$('salePayment').value;if(!payment){$('saleStatus').textContent='Выберите способ оплаты.';return}const gross=saleGrossTotal(),discountPct=Math.min(100,Math.max(0,Number($('saleDiscountPercent').value)||0)),after=Math.round((gross-Math.round(gross*discountPct)/100)*100)/100,points=salePointsUsed(),max=Math.round(after*.3*100)/100;if(points>max){$('saleStatus').textContent='Нельзя списать больше 30% суммы после скидки: '+salesMoney(max);return}let payments=[];if(payment==='split'){payments=v4SplitRows.filter(x=>Number(x.amount)>0).map(x=>({method:x.method,amount:Math.round(Number(x.amount)*100)/100}));if(payments.length<2||Math.abs(payments.reduce((a,x)=>a+x.amount,0)-Math.max(0,after-points))>.01){$('saleStatus').textContent='Для раздельной оплаты распределите всю сумму заказа.';return}}if((payment==='bank_account'||payments.some(x=>x.method==='bank_account'))&&!$('saleClubEnabled').checked&&!confirm('Оплата «Расчётный счёт» без клубной карты не попадёт в «Долги клиентов». Продолжить без карты?'))return;let loyaltyName=null,loyaltyPhone=null;if($('saleClubEnabled').checked){if(saleClubNeedsSelection){$('saleStatus').textContent='Выберите нужного клиента из результатов поиска перед оформлением.';return}loyaltyName=$('saleClubNewName').value.trim();loyaltyPhone=clubPhoneValue($('saleClubNewPhone').value);if(!saleLoyaltyCustomerId&&(!loyaltyName||!validClubPhone($('saleClubNewPhone').value))){$('saleStatus').textContent='Для клубной карты выберите клиента или укажите имя и 10 цифр номера, начиная с 9. Код +7 уже указан.';return}if(points>0&&!saleLoyaltyCustomerId){$('saleStatus').textContent='Для списания баллов сначала найдите существующего клиента.';return}}const noVariant=saleDraft.find(x=>salesCatalog.find(c=>Number(c.id)===Number(x.catalogId))?.variants?.length&&!x.variantId);if(noVariant){$('saleStatus').textContent='Выберите размер и цвет: «'+(salesCatalog.find(c=>Number(c.id)===Number(noVariant.catalogId))?.name||'')+'».';return}const items=saleDraft.map(x=>({catalog_id:x.catalogId,quantity:Number(x.quantity),unit_price:Number(x.unitPrice),...(x.variantId?{variant_material_id:Number(x.variantId)}:{})}));if(items.some(x=>!(x.quantity>0)||!(x.unit_price>=0))){$('saleStatus').textContent='Проверьте количество и цены.';return}const context={...saleContext};const activeParticipants=context.participants.filter(p=>p.isActive);const selectedCashierId=Number($('saleEmployeeView').value||0);if(activeParticipants.length>1&&!selectedCashierId){$('saleStatus').textContent='Выберите кассира для этой продажи.';$('saleEmployeeView').focus();return;}if(activeParticipants.length>1){const selectedCashier=activeParticipants.find(p=>Number(p.employeeId)===selectedCashierId);if(!selectedCashier){$('saleStatus').textContent='Выберите кассира из участников смены.';$('saleEmployeeView').focus();return;}context.employeeId=selectedCashier.employeeId;context.personId=selectedCashier.personId;context.employeeName=selectedCashier.name;}else{const onlyCashier=activeParticipants[0];if(!onlyCashier){$('saleStatus').textContent='Не найден сотрудник для оформления продажи.';return;}context.employeeId=onlyCashier.employeeId;context.personId=onlyCashier.personId;context.employeeName=onlyCashier.name;}$('saveSale').disabled=true;$('saleEmployeeView').disabled=true;try {$('saleStatus').textContent='Оформляю продажу…';const r=await db.rpc('sales_create_sale',{p_shift_id:context.shiftId,p_employee_id:context.employeeId,p_payment_method:payment,p_comment:$('saleComment').value.trim()||null,p_items:items,p_loyalty_customer_id:saleLoyaltyCustomerId,p_loyalty_points:points,p_loyalty_name:loyaltyName,p_loyalty_phone:loyaltyPhone,p_loyalty_comment:$('saleClubComment').value.trim()||null,p_order_number:window.currentSaleOrderNumber,p_discount_percent:discountPct,p_payments:payments});if(r.error)throw r.error;const orderNo=r.data;localStorage.removeItem('pendingOrder_'+context.branchId);window.currentSaleOrderNumber=null;$('saleOrderPreview').textContent='№ '+orderNo;$('saleStatus').textContent=`Продажа №${orderNo} оформлена.`;if(typeof v5Toast==='function'&&!(typeof pickupLastResult!=='undefined'&&pickupLastResult)&&orderNo!=null)v5Toast(`Продажа №${orderNo} оформлена.`);saleDraft=[];close('saleModal');await openSaleV4()}catch(e){$('saleStatus').textContent='Ошибка: '+e.message;}finally{$('saveSale').disabled=false;$('saleEmployeeView').disabled=false;}};
 
 async function renderSalesCatalogPrice(){
   const q=($('salesCatalogPriceSearch').value||'').trim().toLowerCase();
@@ -4013,7 +4023,7 @@ function drawPickupList(){
   const el=$('pickupList');if(!el)return;
   const words=pickupQuery.toLowerCase().split(/\s+/).filter(Boolean);
   const list=branchPickups().filter(o=>!pickupIsOverdue(o)&&pickupMatches(o,words)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
-  el.innerHTML=list.length?list.map(o=>`<div class="pp-item"><div class="pp-top"><b>№${esc(o.order_number)}</b><b>${salesMoney(o.total)}</b></div><div class="pp-client">${esc(pickupClient(o))}</div><div class="pp-sub">${esc(pickupItemsText(o))}</div><div class="pp-sub">${v5Date(o.created_at)}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — оплатить</button></div>`).join(''):'<div class="pp-sub">Ничего не найдено.</div>';
+  el.innerHTML=list.length?list.map(o=>`<div class="pp-item"><div class="pp-top"><b>№${esc(o.order_number)}</b><b>${salesMoney(o.total)}</b></div><div class="pp-client">${esc(pickupClient(o))}</div><div class="pp-sub">${esc(pickupItemsText(o))}</div><div class="pp-sub">${v5Date(o.created_at)}${o.employee_name?' · '+esc(o.employee_name):''}${o.comment?' · '+esc(o.comment):''}</div><button class="primary small" onclick="startPickupPayment(${o.id})">Клиент пришёл — оплатить</button><button class="danger small" onclick="cancelPickup(${o.id})">Удалить заказ</button></div>`).join(''):'<div class="pp-sub">Ничего не найдено.</div>';
 }
 window.togglePickupPanel=()=>{pickupPanelOpen=!pickupPanelOpen;try{localStorage.setItem('pickupPanelOpen',pickupPanelOpen?'1':'0')}catch(e){}$('pickupPanel').classList.toggle('open',pickupPanelOpen)};
 window.openPickupDebts=()=>{$('debtsBtn').click()};
@@ -5241,6 +5251,7 @@ async function stkSaveOp(){
   if(r.error){st.textContent='Ошибка: '+r.error.message;return}
   stk.opRows=[];await stkLoad();stkDrawOp();
   $('stkOpStatus').textContent=`Сохранено: ${r.data} поз. Остатки обновлены.`;
+  return true;
 }
 
 // --- Кто выполнил заказ ---
@@ -7164,5 +7175,8 @@ $('staffSave').onclick=async()=>{
 <script src="purchase-rounds.js?v=20261112"></script>
 <link rel="stylesheet" href="print-bridge.css">
 <script src="print-bridge.js"></script>
+<link rel="stylesheet" href="cashdesk-workflow.css">
+<script src="workflow-helpers.js"></script>
+<script src="cashdesk-workflow.js"></script>
 </body>
 </html>
