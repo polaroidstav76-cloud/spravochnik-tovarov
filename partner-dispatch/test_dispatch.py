@@ -68,6 +68,23 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual(z.read(names[0]),b'original-tiff')
             self.assertEqual(z.read(names[1]),b'different original')
             self.assertTrue(all(Path(n).name==a['name'] for n in names))
+    def test_partner_package_hides_branches_and_has_no_attachments(self):
+        from services import email_for
+        self.file(name='баннер.tif');self.file(chat=22,name='холст.tif')
+        bid=self.q.claim(CONFIG['recipient'],self.now)
+        self.q.transition(bid,'collecting','packing')
+        archive=build_archive(self.q,bid)
+        self.assertEqual(archive.name,'Полароид.zip')
+        with zipfile.ZipFile(archive) as z:
+            self.assertEqual(set(z.namelist()),{'Полароид/баннер.tif','Полароид/холст.tif'})
+        msg=email_for(CONFIG,{**self.q.batch(bid),'link':'https://example.invalid/archive'},self.q.batch_files(bid))
+        text=msg.get_content()
+        for branch in ['Первый филиал','Второй филиал']:
+            self.assertNotIn(branch,text)
+        self.assertIn('Полароид.zip',text)
+        self.assertIn('https://example.invalid/archive',text)
+        self.assertEqual(list(msg.iter_attachments()),[])
+
     def test_cancel_rebuilds_same_snapshot(self):
         a=self.file();b=self.file(mid=2)
         batch=self.q.claim(CONFIG['recipient'],self.now,manual=True)

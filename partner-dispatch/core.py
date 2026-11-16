@@ -243,10 +243,11 @@ def build_archive(queue:Queue,batchid:str):
     if not rows or any(r['state']!='ready' for r in rows):raise UserError('Не все файлы получены. Дождитесь загрузки или удалите ошибочный файл.')
     required=sum(r['size'] for r in rows)+1024**3
     if shutil.disk_usage(queue.root).free<required:raise UserError('На основном компьютере недостаточно места для ZIP.')
-    dest=queue.root/'archives'/(batchid+'.zip')
+    dest=queue.root/'archives'/batchid/'Полароид.zip'
+    dest.parent.mkdir(parents=True,exist_ok=True)
     temp=dest.with_suffix('.part')
-    manifest=io.StringIO(newline='')
-    writer=csv.writer(manifest,delimiter=';');writer.writerow(['Филиал','Файл','Путь в архиве','SHA256'])
+    counts={}
+    for row in rows:counts[row['name'].casefold()]=counts.get(row['name'].casefold(),0)+1
     try:
         with zipfile.ZipFile(temp,'w',compression=zipfile.ZIP_STORED,allowZip64=True) as archive:
             for index,r in enumerate(rows,1):
@@ -256,10 +257,8 @@ def build_archive(queue:Queue,batchid:str):
                 with source.open('rb') as f:
                     digest=hashlib.file_digest(f,'sha256').hexdigest()
                 if digest!=r['sha256']:raise UserError('Контрольная сумма файла не совпадает. Отправка остановлена.')
-                arc=f'{safe_name(r["branch"])}/{index:04d}/{r["name"]}'
+                arc=('Полароид/'+(f'{index:04d}/' if counts[r['name'].casefold()]>1 else '')+r['name'])
                 archive.write(source,arc)
-                writer.writerow([("'"+str(v)) if str(v).startswith(('=','+','-','@')) else v for v in [r['branch'],r['name'],arc,digest]])
-            archive.writestr('Состав заказа.csv',manifest.getvalue().encode('utf-8-sig'))
         os.replace(temp,dest)
         return dest
     finally:

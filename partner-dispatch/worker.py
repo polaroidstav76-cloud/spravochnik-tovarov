@@ -200,7 +200,7 @@ class Worker:
         try:
             if b.get('remote_path'):await asyncio.to_thread(disk.remove_generated,b['remote_path'])
             archive=await asyncio.to_thread(build_archive,self.q,bid)
-            remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}.zip'
+            remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/Полароид.zip'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
             link=await asyncio.to_thread(disk.upload,archive,remote)
             if not self.q.transition(bid,'uploading','ready',link=link):
