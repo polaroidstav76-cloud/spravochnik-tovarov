@@ -379,11 +379,12 @@ class App:
         for key in existing:self.table.delete(key)
         history_states={'sent':'Письмо принято сервером','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
         old=set(self.history_table.get_children())
-        for batch in self.q.history():
+        history_rows=self.q.history()
+        for batch in history_rows:
             key=batch['id'];values=(datetime.fromtimestamp(batch['created'],MOSCOW).strftime('%d.%m.%Y %H:%M'),history_states.get(batch['state'],batch['state']),batch['file_count'],batch['recipient'])
             if key in old:self.history_table.item(key,values=values);old.remove(key)
             else:self.history_table.insert('','end',iid=key,values=values)
-        for batch in self.q.history():self.history_table.move(batch['id'],'','end')
+        for batch in history_rows:self.history_table.move(batch['id'],'','end')
         for key in old:self.history_table.delete(key)
         free=self.q.setting('disk_free_bytes')
         if free:self.space_status.configure(text=f'Последняя проверка: свободно {int(free)/1024**3:.1f} ГБ')
