@@ -151,16 +151,16 @@ class TestDispatch(unittest.TestCase):
         asyncio.run(features.broadcast(client))
         client.send_message=AsyncMock()
         asyncio.run(features.broadcast(client));asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,2)
-        texts=[call.args[1] for call in client.send_message.await_args_list]
+        self.assertEqual(client.send_message.await_count,4)
+        texts=[call.args[1] for call in client.send_message.await_args_list if 'Широкоформатная печать' in call.args[1]]
         self.assertTrue(all('самоклейка.tif' in t and 'Первый филиал' not in t for t in texts))
         bid=self.q.claim(CONFIG['recipient'],self.now);self.q.transition(bid,'collecting','sent')
         asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,4)
+        self.assertEqual(client.send_message.await_count,6)
         self.assertIn('Файлов, ожидающих отправки, нет',client.send_message.await_args.args[1])
         self.q.db.close();self.q=Queue(self.tmp.name)
         asyncio.run(BotFeatures(self.q).broadcast(client))
-        self.assertEqual(client.send_message.await_count,4)
+        self.assertEqual(client.send_message.await_count,6)
 
     def test_manual_claim_stops_retries_and_is_single_operator(self):
         self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
@@ -398,23 +398,19 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual([r['id'] for r in self.q.batch_files(bid)],[wide['id']])
         self.assertIsNone(self.q.file(dtf['id'])['batch'])
         with self.assertRaises(UserError):self.q.cancel(dtf['id'],direction='wideformat')
-    def test_dtf_placeholder_does_not_accept_files(self):
-        try:import telethon
-        except ImportError:self.skipTest('Install pinned local wheels first')
+    def test_dtf_direction_is_enabled_and_has_copy_button(self):
         from core import DIRECTIONS
         class Event:
-            is_private=True;sender_id=11;chat_id=11;photo=None;document=True
-            def __init__(self,text):self.raw_text=text;self.messages=[]
+            is_private=True;sender_id=11;chat_id=11;photo=None;document=None
+            raw_text=DIRECTIONS['dtf']['label']
+            def __init__(self):self.messages=[]
             async def respond(self,text,**kw):self.messages.append((text,kw))
-        worker=Worker(self.q,{**CONFIG,'owner_code':'owner','join_code':'staff'},self.logs.append)
-        async def check():
-            worker.choose(11,'wideformat')
-            event=Event(DIRECTIONS['dtf']['label']);await worker.on_message(event)
-            self.assertIsNone(worker.direction(11))
-            event=Event('');await worker.on_message(event)
-            self.assertIn('Сначала выберите',event.messages[0][0])
-            self.assertEqual(len(self.q.waiting()),0)
-        asyncio.run(check())
+        worker=Worker(self.q,CONFIG,self.logs.append);event=Event()
+        asyncio.run(worker.on_message(event))
+        self.assertEqual(worker.direction(11),'dtf')
+        keyboard=event.messages[0][1]['buttons']
+        self.assertIn('Количество копий',[b.button.text for row in keyboard for b in row])
+
     def test_test_mode_and_configuration_generation(self):
         from services import email_for
         self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
@@ -438,7 +434,7 @@ class TestDispatch(unittest.TestCase):
         class Value:
             def __init__(self,v):self.v=v
             def get(self):return self.v
-        app=object.__new__(App);app.c={}
+        app=object.__new__(App);app.c={};app.dtf_recipient=Value('')
         app.entries={k:Value('') for k,_,_ in FIELDS}
         app.entries['disk_token']=Value('https://oauth.yandex.ru/verification_code#access_token=fake-token&expires_in=1')
         self.assertEqual(app.config(require_all=False)['disk_token'],'fake-token')

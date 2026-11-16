@@ -21,7 +21,9 @@ class BotFeatures:
     def pending_ids(self,direction):
         return [r['id'] for r in self.snapshot(direction) if r['batch'] is None]
     def request(self,uid,direction):
-        ids=self.pending_ids(direction)
+        rows=[r for r in self.snapshot(direction) if r['batch'] is None]
+        if direction=='dtf' and any(not r['copies_set'] for r in rows):raise UserError('Укажите количество копий для каждого принта ДТФ.')
+        ids=[[r['id'],r['copies']] for r in rows]
         if not ids:return None,0
         token=secrets.token_hex(12)
         with self.q.lock,self.q.db:
@@ -39,6 +41,7 @@ class BotFeatures:
     def status(self,direction):
         rows=self.snapshot(direction)
         lines=[DIRECTIONS[direction]['label'],f'В очереди: {len(rows)} файлов.',f'Сохранено: {sum(r["state"]=="ready" for r in rows)}.']
+        if direction=='dtf':lines.append(f'Копий: {sum(r["copies"] for r in rows if r["copies_set"])}; без указанного количества: {sum(not r["copies_set"] for r in rows)}.')
         with self.q.lock:
             batch=self.q.db.execute("select * from batches where direction=? and state not in ('sent','manual_sent','cancelled') order by created limit 1",(direction,)).fetchone()
         labels={'collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка архива на Диск','ready':'Подготовка письма','submitting':'Передача письма','uncertain':'Нужно проверить получение письма','manual':'Ручная отправка — автоповторы остановлены','invalidated':'Пересборка архива'}
@@ -46,9 +49,10 @@ class BotFeatures:
             lines.append('Заказ: '+labels.get(batch['state'],batch['state']))
             retry=float(self.q.setting('retry_at:'+batch['id'],'0'))
             if batch['state']=='collecting' and retry>time.time():lines.append('Повтор не раньше '+datetime.fromtimestamp(retry,MOSCOW).strftime('%H:%M МСК')+'.')
-        if self.q.setting('automatic','0')=='1':
-            now=datetime.now(MOSCOW);hour,minute=map(int,self.q.setting('dispatch_time','18:00').split(':'))
-            days={int(v) for v in self.q.setting('dispatch_days','0,1,2,3,4,5,6').split(',')}
+        if self.q.setting(('dtf_' if direction=='dtf' else '')+'automatic','0')=='1':
+            prefix='dtf_' if direction=='dtf' else ''
+            now=datetime.now(MOSCOW);hour,minute=map(int,self.q.setting(prefix+'dispatch_time','12:00' if prefix else '18:00').split(':'))
+            days={int(v) for v in self.q.setting(prefix+'dispatch_days','0,3' if prefix else '0,1,2,3,4,5,6').split(',')}
             for offset in range(8):
                 slot=(now+timedelta(days=offset)).replace(hour=hour,minute=minute,second=0,microsecond=0)
                 if slot>now and slot.weekday() in days:
@@ -66,7 +70,7 @@ class BotFeatures:
         for direction,value in DIRECTIONS.items():
             if not value['enabled']:continue
             rows=self.snapshot(direction)
-            revision=hashlib.sha256(json.dumps([(r['id'],r['name']) for r in rows],ensure_ascii=False).encode()).hexdigest()
+            revision=hashlib.sha256(json.dumps([(r['id'],r['name'],r['copies'],r['copies_set']) for r in rows],ensure_ascii=False).encode()).hexdigest()
             pages=list(chunks(r['name'] for r in rows)) or ['Файлов, ожидающих отправки, нет.']
             for uid in users:
                 with self.q.lock:
@@ -75,7 +79,7 @@ class BotFeatures:
                 if start>=len(pages):continue
                 for index in range(start,len(pages)):
                     # Refresh on next cycle if the queue changed while a large list was being sent.
-                    if [(r['id'],r['name']) for r in self.snapshot(direction)]!=[(r['id'],r['name']) for r in rows]:break
+                    if [(r['id'],r['name'],r['copies'],r['copies_set']) for r in self.snapshot(direction)]!=[(r['id'],r['name'],r['copies'],r['copies_set']) for r in rows]:break
                     title=f'Актуальная очередь — {value["label"]}\n'
                     try:await client.send_message(uid,title+pages[index],parse_mode=None)
                     except Exception:break

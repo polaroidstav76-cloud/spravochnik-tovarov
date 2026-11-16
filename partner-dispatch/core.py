@@ -19,7 +19,7 @@ MAX_BYTES = 500 * 1024 * 1024
 BUTTONS = ('Просмотр файлов', 'Отправить сейчас', 'Удалить файл')
 DIRECTIONS = {
     'wideformat': {'label': 'Широкоформатная печать', 'enabled': True},
-    'dtf': {'label': 'ДТФ-печать', 'enabled': False},
+    'dtf': {'label': 'ДТФ-печать', 'enabled': True},
 }
 UPLOAD = 'Загрузить файл'
 BACK = 'Назад'
@@ -91,6 +91,9 @@ class Queue:
             self.db.execute('alter table batches add column test_mode integer not null default 1')
         if 'generation' not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
             self.db.execute('alter table batches add column generation integer not null default 0')
+        for column,definition in [('copies','integer not null default 1'),('copies_set','integer not null default 1')]:
+            if column not in {r[1] for r in self.db.execute('pragma table_info(files)')}:
+                self.db.execute('alter table files add column '+column+' '+definition)
         for column,definition in [('manual_revision','integer not null default 0'),('manual_by','integer'),('needs_revoke','text')]:
             if column not in {r[1] for r in self.db.execute('pragma table_info(batches)')}:
                 self.db.execute('alter table batches add column '+column+' '+definition)
@@ -128,6 +131,7 @@ class Queue:
         name=safe_name(name)
         if Path(name).suffix.lower() not in {'.tif','.tiff','.pdf','.jpg','.jpeg','.png'}:
             raise UserError('Принимаются TIF, TIFF, PDF, JPG и PNG. Отправляйте макеты документом, без сжатия.')
+        if direction=='dtf' and Path(name).suffix.lower() not in {'.png','.tif','.tiff','.jpg','.jpeg'}:raise UserError('Для ДТФ нужен PNG, TIF или JPG с указанным DPI; PDF пересохраните в PNG 300 dpi.')
         if not 0<size<=MAX_BYTES: raise UserError('Размер файла должен быть от 1 байта до 500 МБ.')
         with self.lock,self.db:
             existing=self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone()
@@ -138,7 +142,17 @@ class Queue:
                 raise UserError('Переименуйте файл, так как такой уже существует.')
             self.db.execute('insert or ignore into files(chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?)',
                 (chat,message,sender,branch,name,size,received,due_day(received),direction))
+            if direction=='dtf':self.db.execute('update files set copies_set=0 where chat=? and message=?',(chat,message))
             return dict(self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone())
+
+    def set_copies(self,id,uid,count):
+        if not 1<=count<=999:raise UserError('Укажите целое количество от 1 до 999.')
+        with self.lock,self.db:
+            row=self.file(id)
+            if not row or row['state']=='cancelled' or row['direction']!='dtf':raise UserError('Принт не найден.')
+            if row['sender']!=uid and self.setting('owner')!=str(uid):raise UserError('Количество меняет загрузивший сотрудник или владелец.')
+            if row['batch'] is not None:raise UserError('Заказ уже формируется. Количество менять нельзя; при необходимости удалите и загрузите принт заново.')
+            self.db.execute('update files set copies=?,copies_set=1 where id=?',(count,id))
 
     def file(self,id):
         with self.lock:
@@ -188,9 +202,10 @@ class Queue:
                 if manual:raise UserError('Предыдущая отправка ещё не завершена. Проверьте её состояние на основном компьютере.')
                 return None
             dt=datetime.fromtimestamp(now,MOSCOW)
-            dispatch_time=self.setting('dispatch_time','18:00')
+            prefix='dtf_' if direction=='dtf' else ''
+            dispatch_time=self.setting(prefix+'dispatch_time','12:00' if direction=='dtf' else '18:00')
             hour,minute=map(int,dispatch_time.split(':'))
-            days={int(x) for x in self.setting('dispatch_days','0,1,2,3,4,5,6').split(',') if x}
+            days={int(x) for x in self.setting(prefix+'dispatch_days','0,3' if direction=='dtf' else '0,1,2,3,4,5,6').split(',') if x}
             cutoff=dt.replace(hour=hour,minute=minute,second=0,microsecond=0)
             if not manual and (dt.weekday() not in days or dt<cutoff):return None
             query="select id from files where state!='cancelled' and batch is null and direction=?"
@@ -198,10 +213,14 @@ class Queue:
             if not manual:
                 query+=' and received<?';args.append(cutoff.timestamp())
             ids=[r[0] for r in self.db.execute(query,args)]
-            if expected is not None and sorted(ids)!=sorted(expected):raise UserError('Очередь изменилась. Нажмите «Отправить сейчас» заново и проверьте новый состав.')
+            actual=[[id,self.file(id)['copies']] for id in ids] if expected and isinstance(expected[0],list) else ids
+            if expected is not None and sorted(actual)!=sorted(expected):raise UserError('Очередь изменилась. Нажмите «Отправить сейчас» заново и проверьте новый состав.')
+            if direction=='dtf' and any(not self.file(id)['copies_set'] for id in ids):
+                if manual:raise UserError('Укажите количество копий для каждого принта ДТФ.')
+                return None
             if not ids:return None
             bid=uuid.uuid4().hex
-            self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting('first_test_confirmed','0')!='1'),int(self.setting('generation','0'))))
+            self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting(prefix+'first_test_confirmed','0')!='1'),int(self.setting(prefix+'generation','0'))))
             self.db.executemany('update files set batch=? where id=?',[(bid,i) for i in ids])
             return bid
 

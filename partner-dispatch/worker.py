@@ -12,6 +12,7 @@ from core import Queue, UserError, MOSCOW, BUTTONS, DIRECTIONS, UPLOAD, BACK, bu
 from monitoring import Monitoring
 from handoff import Handoff,MANUAL_MENU
 from bot_features import BotFeatures,STATUS
+from dtf_render import inspect_art,build_sheet
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -42,6 +43,7 @@ class Worker:
                          [Button.text(BUTTONS[0])],[Button.text(BUTTONS[1]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
             else:
                 buttons=[[Button.text(r['label'],resize=True,persistent=True)] for r in DIRECTIONS.values()]
+            if direction=='dtf':buttons.append([Button.text('Количество копий')])
             if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
 
@@ -97,6 +99,14 @@ class Worker:
             direction=self.direction(uid)
             if not direction:
                 await self.reply(event,'Сначала выберите направление печати. Файл пока не принят.');return
+            if direction=='dtf' and (text=='Количество копий' or text=='/copies'):
+                await self.copies_menu(event);return
+            if direction=='dtf' and text.isdigit():
+                pending=self.q.setting('dtf_pending:'+str(uid))
+                if not pending:raise UserError('Сначала выберите принт кнопкой «Количество копий».')
+                self.q.set_copies(int(pending),uid,int(text))
+                self.q.set_setting('dtf_pending:'+str(uid),'')
+                await self.reply(event,f'Количество сохранено: {int(text)} шт.');return
             if text==UPLOAD:
                 await self.reply(event,'Направление: '+DIRECTIONS[direction]['label']+'.\nОтправьте оригинал документом, до 500 МБ.');return
             if text==BUTTONS[0] or text=='/files':
@@ -105,6 +115,7 @@ class Worker:
                 # User-facing list deliberately contains names only.
                 for part in chunks(r['name'] for r in rows):await self.reply(event,part)
             elif text==BUTTONS[1] or text=='/send':
+                if direction=='dtf' and not self.c.get('dtf_recipient'):raise UserError('Укажите тестового получателя ДТФ в программе.')
                 if not self.q.setting('owner'):raise UserError('Сначала подключите владельца на основном компьютере.')
                 from telethon import Button
                 token,count=self.features.request(uid,direction)
@@ -112,7 +123,8 @@ class Worker:
                     await self.reply(event,'Текущий заказ уже обрабатывается. Проверьте «Состояние».' if self.q.waiting(direction) else 'Очередь пуста.');return
                 rows=self.q.waiting(direction)
                 branches=len({r['branch'] for r in rows if r['batch'] is None})
-                await self.reply(event,f'Отправить общую очередь: {count} файлов от {branches} филиалов? Состав фиксируется после подтверждения. Подтверждение действует 5 минут.',[[Button.inline('Подтвердить отправку',('send:'+token).encode()),Button.inline('Отмена',('abort:'+token).encode())]])
+                copy_note=f' Всего копий: {sum(r["copies"] for r in rows if r["batch"] is None)}.' if direction=='dtf' else ''
+                await self.reply(event,f'Отправить общую очередь: {count} файлов от {branches} филиалов?{copy_note} Состав фиксируется после подтверждения. Подтверждение действует 5 минут.',[[Button.inline('Подтвердить отправку',('send:'+token).encode()),Button.inline('Отмена',('abort:'+token).encode())]])
             elif text==STATUS or text=='/status':
                 await self.reply(event,self.features.status(direction))
             elif text==BUTTONS[2] or text=='/delete':
@@ -123,11 +135,25 @@ class Worker:
                 if r['state']=='cancelled':await self.reply(event,'Этот файл ранее удалён.');return
                 self.cached[(r['chat'],r['message'])]=event.message
                 await self.reply(event,f'{DIRECTIONS[direction]["label"]}: получаю «{r["name"]}». Дождитесь подтверждения «Сохранён».')
+                if direction=='dtf':
+                    self.q.set_setting('dtf_pending:'+str(uid),r['id'])
+                    await self.reply(event,'Сколько копий этого принта разместить? Отправьте число от 1 до 999. Для изменения нажмите «Количество копий».')
             elif event.photo:
                 await self.reply(event,'Пришлите макет как файл, без сжатия, чтобы сохранить оригинал для печати.')
             else:
                 await self.reply(event,'Отправьте макет документом (TIF, TIFF, PDF, JPG, PNG), до 500 МБ.')
         except UserError as e:await self.reply(event,str(e))
+
+    def recipient(self,direction):
+        return self.c.get('dtf_recipient','') if direction=='dtf' else self.c['recipient']
+
+    async def copies_menu(self,event):
+        from telethon import Button
+        rows=[r for r in self.q.waiting('dtf') if r['batch'] is None and (r['sender']==event.sender_id or self.q.setting('owner')==str(event.sender_id))]
+        if not rows:await self.reply(event,'Ваших принтов для изменения количества нет.');return
+        for start in range(0,len(rows),20):
+            buttons=[[Button.inline(r['name'][:45]+(f' — {r["copies"]} шт.' if r['copies_set'] else ' — укажите количество'),f'copies:{r["id"]}'.encode())] for r in rows[start:start+20]]
+            await self.reply(event,'Выберите принт для изменения количества:',buttons)
 
     async def delete_menu(self,event,offset,direction):
         from telethon import Button
@@ -145,10 +171,20 @@ class Worker:
             await event.answer('Нет доступа.',alert=True);return
         try:
             data=event.data.decode()
+            if data.startswith('copies:'):
+                row=self.q.file(int(data.split(':')[1]))
+                if not row or row['direction']!='dtf' or row['batch'] is not None or (row['sender']!=event.sender_id and self.q.setting('owner')!=str(event.sender_id)):raise UserError('Принт недоступен для изменения.')
+                self.q.set_setting('dtf_pending:'+str(event.sender_id),row['id'])
+                self.choose(event.sender_id,'dtf')
+                await event.answer();await self.reply(event,'Введите количество копий для «'+row['name']+'» от 1 до 999.');return
             if data.startswith('h:'):
                 await self.handoff.callback(self,event);return
             if data.startswith('send:'):
-                bid=self.features.confirm(data.split(':',1)[1],event.sender_id,self.c['recipient'])
+                token=data.split(':',1)[1]
+                with self.q.lock:confirmation=self.q.db.execute('select direction from send_confirmations where token=?',(token,)).fetchone()
+                recipient=self.recipient(confirmation['direction']) if confirmation else ''
+                if not recipient:raise UserError('Укажите получателя этого направления в программе.')
+                bid=self.features.confirm(token,event.sender_id,recipient)
                 await event.answer('Отправка подтверждена.')
                 await event.edit('Начинаю отправку текущей очереди.' if bid else 'Очередь пуста.',buttons=None);return
             if data.startswith('abort:'):
@@ -177,7 +213,7 @@ class Worker:
         while self.running:
             r=self.q.download_candidate(time.time())
             if not r:await asyncio.sleep(2);continue
-            dest=self.q.path(r);temp=dest.with_suffix(dest.suffix+'.part')
+            dest=self.q.path(r);temp=dest.with_suffix(dest.suffix+'.part');invalid_art=False
             try:
                 if shutil.disk_usage(self.q.root).free<r['size']*2+1024**3:
                     raise UserError('Недостаточно места на основном компьютере.')
@@ -195,10 +231,19 @@ class Worker:
                     with temp.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
                 sha=await asyncio.to_thread(checksum)
                 if self.q.file(r['id'])['state']=='cancelled':continue
+                if r['direction']=='dtf':
+                    try:await asyncio.to_thread(inspect_art,temp)
+                    except UserError:
+                        invalid_art=True;raise
                 os.replace(temp,dest);self.q.downloaded(r['id'],sha)
                 self.log('Сохранён: '+r['name'])
                 try:
-                    schedule='Отправка в выбранные дни в '+self.q.setting('dispatch_time','18:00')+' МСК.' if self.q.setting('automatic','0')=='1' else 'Расписание пока выключено.'
+                    prefix='dtf_' if r['direction']=='dtf' else ''
+                    schedule='Отправка в выбранные дни в '+self.q.setting(prefix+'dispatch_time','12:00' if prefix else '18:00')+' МСК.' if self.q.setting(prefix+'automatic','0')=='1' else 'Расписание пока выключено.'
+                    if prefix:
+                        info=await asyncio.to_thread(inspect_art,dest)
+                        schedule+=f' Размер: {info["width_cm"]:.2f} × {info["height_cm"]:.2f} см.'
+                        if not info['transparent']:schedule+=' Фон исходника непрозрачный и будет сохранён. Для прозрачного фона загрузите PNG с прозрачностью.'
                     await self.client.send_message(r['chat'],f'Сохранён: {r["name"]}\n{schedule} Для теста или срочной отправки нажмите «Отправить сейчас».',parse_mode=None)
                 except Exception:self.log('Не удалось отправить подтверждение загрузки. Файл сохранён.')
             except asyncio.CancelledError:raise
@@ -206,6 +251,9 @@ class Worker:
                 reason=str(e) if isinstance(e,UserError) else 'Не удалось скачать файл. Проверьте связь с Telegram.'
                 retry_note='Будет повтор; состояние видно в программе на основном компьютере.' if self.q.file(r['id'])['attempts']<5 else 'Пять попыток не удались. Удалите эту запись и отправьте исходный файл заново.'
                 self.q.download_failed(r['id'],time.time(),reason)
+                if invalid_art:
+                    with self.q.lock,self.q.db:self.q.db.execute('update files set attempts=5 where id=?',(r['id'],))
+                    retry_note='Удалите этот файл из очереди и загрузите исправленный PNG/TIF с указанным DPI.'
                 self.log(reason+' '+r['name'])
                 if not self.q.file(r['id'])['state']=='cancelled':
                     try:await self.client.send_message(r['chat'],f'Пока не сохранён: {r["name"]}. {reason} {retry_note}',parse_mode=None)
@@ -219,7 +267,7 @@ class Worker:
     async def process_batch(self,b):
         bid=b['id'];disk=Disk(self.c['disk_token'])
         if float(self.q.setting('retry_at:'+bid,'0'))>time.time():return
-        if b['recipient']!=self.c['recipient']:
+        if b['recipient']!=self.recipient(b['direction']):
             self.q.set_setting('retry_at:'+bid,time.time()+600)
             self.log('У незавершённой отправки другой получатель. Отправка остановлена; удалите её файлы из очереди и загрузите заново для нового адреса.')
             return
@@ -233,8 +281,9 @@ class Worker:
         if not self.q.transition(bid,'collecting','packing'):return
         try:
             if b.get('remote_path'):await asyncio.to_thread(disk.remove_generated,b['remote_path'])
-            archive=await asyncio.to_thread(build_archive,self.q,bid)
-            remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/Полароид.zip'
+            artifact='Полароид-ДТФ.png' if b['direction']=='dtf' else 'Полароид.zip'
+            archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid)
+            remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/{artifact}'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
             link=await asyncio.to_thread(disk.upload,archive,remote)
             if not self.q.transition(bid,'uploading','ready',link=link):
@@ -243,6 +292,7 @@ class Worker:
             # Login happens before the irreversible boundary; deletion is still possible here.
             smtp=await asyncio.to_thread(smtp_connect,self.c)
             try:
+                if b['direction']=='dtf':b['layout_description']=self.q.setting('dtf_layout:'+bid)
                 msg=email_for(self.c,b,rows)
                 if not self.q.accept_smtp(bid):return
                 try:
@@ -279,6 +329,7 @@ class Worker:
                 await self.handoff.notify(self,b);continue
             if b['state']=='sent':
                 text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо принято почтовым сервером; получение партнёром не подтверждено.'
+                if b['direction']=='dtf':text=text.replace('Архив:','Холст ДТФ:')+'\n'+self.q.setting('dtf_layout:'+b['id'])
                 chats={r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets()
             else:
                 text='Не удалось подтвердить отправку письма. Проверьте ящик и окно программы на основном компьютере. Автоматический повтор остановлен, чтобы не отправить заказ дважды.'
@@ -299,14 +350,13 @@ class Worker:
                         self.log('Одно уведомление Telegram пока не доставлено. Повторим позже.')
             if complete:self.q.mark_notified(b['id'])
 
-    async def schedule_loop(self):
+    async def schedule_loop(self,direction='wideformat'):
         while self.running:
             try:
-                if self.q.setting('automatic','0')=='1':self.q.claim(self.c['recipient'],time.time())
-                b=self.q.active_batch()
+                prefix='dtf_' if direction=='dtf' else ''
+                if self.q.setting(prefix+'automatic','0')=='1' and self.recipient(direction):self.q.claim(self.recipient(direction),time.time(),direction=direction)
+                b=self.q.active_batch(direction)
                 if b:await self.process_batch(b)
-                await self.notify()
-                await self.handoff.cleanup_links(self)
             except asyncio.CancelledError:raise
             except Exception:self.log('Не удалось выполнить проверку очереди. Повторим через 10 секунд.')
             await asyncio.sleep(10)
@@ -314,6 +364,8 @@ class Worker:
     async def watch_loop(self):
         while self.running:
             try:
+                await self.notify()
+                await self.handoff.cleanup_links(self)
                 await self.monitor.check_delays()
                 await self.monitor.notify(self.client)
                 await self.monitor.check_space(self.c)
@@ -339,7 +391,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
+            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False

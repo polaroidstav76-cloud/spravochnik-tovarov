@@ -105,8 +105,8 @@ class Handoff:
         text=f'Заказ {b["id"][:8]} взят вами. Получатель: {b["recipient"]}.\n'
         if b['test_mode']:text+='ТЕСТОВАЯ ОТПРАВКА — не передавать в производство.\n'
         if b['link'] and not b['needs_revoke']:
-            text+='Готовый архив:\n'+b['link']+'\nОтправьте эту ссылку получателю самостоятельно.'
-        else:text+='Получите оригиналы кнопкой ниже, скачайте их на компьютер, соберите ZIP и отправьте получателю самостоятельно.'
+            text+='Готовый файл:\n'+b['link']+'\nОтправьте эту ссылку получателю самостоятельно.'
+        else:text+=('Получите оригиналы кнопкой ниже и соберите холст PNG RGB с прозрачностью, 56 см, 300 dpi, с указанными копиями. Отправьте ссылку получателю самостоятельно.' if b['direction']=='dtf' else 'Получите оригиналы кнопкой ниже, скачайте их на компьютер, соберите ZIP и отправьте получателю самостоятельно.')
         buttons=[[self.button('Получить все исходники','docs',b)],
                  [self.button('Повторить недоставленные исходники','retrydocs',b)],
                  [self.button('Отправлено вручную','done',b)]]
@@ -203,7 +203,7 @@ class Handoff:
                     document=str(local)
                 latest=self.q.batch(b['id'])
                 if latest['state']!='manual' or latest['manual_by']!=job['user'] or not self.authorized(job['user']) or latest['manual_revision']!=job['revision'] or self.q.file(row['id'])['state']=='cancelled':continue
-                caption=f'Исходник #{row["id"]}: {row["name"]}\nЗаказ {b["id"][:8]}, версия состава {job["revision"]+1}. Не включайте повторные копии одного номера в архив.'
+                caption=f'Исходник #{row["id"]}: {row["name"]}'+(f' — {row["copies"]} копий' if row['direction']=='dtf' else '')+f'\nЗаказ {b["id"][:8]}, версия состава {job["revision"]+1}. Не включайте повторные копии одного номера в архив.'
                 message=await worker.client.send_file(job['user'],document,caption=caption,force_document=True,parse_mode=None)
                 with self.q.lock,self.q.db:self.q.db.execute("update handoff_files set state='done',message=? where id=?",(message.id,job['id']))
             except asyncio.CancelledError:raise

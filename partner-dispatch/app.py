@@ -17,14 +17,14 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox,ttk,filedialog
 import webbrowser
-from core import Queue,UserError,MOSCOW
+from core import Queue,UserError,MOSCOW,DIRECTIONS
 from services import Settings,Disk,smtp_connect,check_dedicated_bot,protect
 from handoff import Handoff
 from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.4'
+VERSION='0.5'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -50,6 +50,7 @@ class App:
         self.c=self.settings.load()
         self.c.setdefault('bot_username','perezakazi_bot')
         self.c.setdefault('recipient','')
+        self.c.setdefault('dtf_recipient',self.c.get('recipient',''))
         self.c.setdefault('sender','')
         self.c.setdefault('owner_code',secrets.token_urlsafe(18))
         self.c.setdefault('join_code',secrets.token_urlsafe(18))
@@ -60,7 +61,7 @@ class App:
         root.geometry(f'{width}x{height}');root.minsize(min(900,width),min(650,height))
         outer=ttk.Frame(root,padding=14);outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='Заказы партнёрам · @perezakazi_bot',font=('Segoe UI',18,'bold')).pack(anchor='w')
-        ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · настраиваемое расписание МСК · ДТФ подключим отдельно').pack(anchor='w',pady=(2,10))
+        ttk.Label(outer,text='Широкоформатная печать · до 500 МБ · настраиваемое расписание МСК · ДТФ: прозрачный PNG 56 см, 300 dpi').pack(anchor='w',pady=(2,10))
         notebook=ttk.Notebook(outer);self.notebook=notebook;notebook.pack(fill='both',expand=True)
         setup=ttk.Frame(notebook,padding=12);main=ttk.Frame(notebook,padding=12)
         self.setup_tab=setup;self.main_tab=main
@@ -114,6 +115,33 @@ class App:
         self.logs=tk.Text(main,height=5,state='disabled',wrap='word');self.logs.pack(fill='x',pady=8)
         ttk.Label(main,text='Файл принят только после ответа бота «Сохранён». Нельзя выключать или усыплять компьютер до завершения отправки.\nФайлы после выбранного времени ждут следующего дня отправки. Архивы и оригиналы автоматически не удаляются.',wraplength=900).pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW',self.close)
+        dtf=ttk.Frame(notebook,padding=12);notebook.add(dtf,text='ДТФ-печать')
+        ttk.Label(dtf,text='Холст: ширина 56 см, рабочая область 55 см; высота от 50 см. Поля 5 мм.\nРазмеры принтов из DPI исходника. PNG RGB с прозрачностью, 300 dpi. Без зеркального отражения.',wraplength=850).pack(anchor='w',pady=8)
+        receiver=ttk.Frame(dtf);receiver.pack(fill='x',pady=5)
+        ttk.Label(receiver,text='Получатель ДТФ (сначала свой адрес):').pack(side='left')
+        self.dtf_recipient=tk.StringVar(value=self.c.get('dtf_recipient',''))
+        ttk.Entry(receiver,textvariable=self.dtf_recipient,width=40).pack(side='left',padx=5)
+        ttk.Button(receiver,text='Сохранить почту',command=self.save_partial).pack(side='left')
+        self.dtf_auto=tk.BooleanVar(value=self.q.setting('dtf_automatic','0')=='1')
+        ttk.Checkbutton(dtf,text='Автоматическая отправка ДТФ включена',variable=self.dtf_auto,command=self.set_dtf_auto).pack(anchor='w',pady=5)
+        dtf_schedule=ttk.Frame(dtf);dtf_schedule.pack(fill='x',pady=5)
+        ttk.Label(dtf_schedule,text='Время МСК:').pack(side='left')
+        self.dtf_time=tk.StringVar(value=self.q.setting('dtf_dispatch_time','12:00'))
+        ttk.Entry(dtf_schedule,textvariable=self.dtf_time,width=6).pack(side='left',padx=4)
+        self.dtf_days=[];selected=self.q.setting('dtf_dispatch_days','0,3').split(',')
+        for index,label in enumerate(('Пн','Вт','Ср','Чт','Пт','Сб','Вс')):
+            var=tk.BooleanVar(value=str(index) in selected);self.dtf_days.append(var)
+            ttk.Checkbutton(dtf_schedule,text=label,variable=var).pack(side='left')
+        ttk.Button(dtf_schedule,text='Сохранить расписание ДТФ',command=self.save_dtf_schedule).pack(side='left',padx=5)
+        dtf_actions=ttk.Frame(dtf);dtf_actions.pack(fill='x',pady=8)
+        ttk.Button(dtf_actions,text='Отправить ДТФ сейчас',command=self.send_dtf).pack(side='left',padx=4)
+        ttk.Button(dtf_actions,text='Тестовое письмо ДТФ проверено',command=self.confirm_dtf_test).pack(side='left',padx=4)
+        self.dtf_status=ttk.Label(dtf,text='');self.dtf_status.pack(anchor='w',pady=6)
+        self.dtf_table=ttk.Treeview(dtf,columns=('name','copies','state'),show='headings',height=8)
+        for key,label,width in [('name','Принт',480),('copies','Копий',80),('state','Состояние',220)]:
+            self.dtf_table.heading(key,text=label);self.dtf_table.column(key,width=width)
+        self.dtf_table.pack(fill='both',expand=True,pady=6)
+        ttk.Label(dtf,text='Количество копий сотрудники задают в боте. Файл без DPI или многостраничный TIFF нужно пересохранить.\nПрозрачность исходников сохраняется; белый фон изображения не удаляется автоматически. Принты могут поворачиваться на 90° для экономии места.',wraplength=850).pack(anchor='w',pady=8)
         history=ttk.Frame(notebook,padding=12);notebook.add(history,text='История и уведомления')
         options=ttk.Frame(history);options.pack(fill='x')
         ttk.Label(options,text='Ответственный филиал:').grid(row=0,column=0,sticky='w')
@@ -130,8 +158,8 @@ class App:
             ttk.Entry(options,textvariable=var,width=8).grid(row=row,column=1,sticky='w',padx=5)
         ttk.Label(history,text='Владелец получает уведомления всегда. Ответственный филиал подключается отдельной командой.\nБез интернета уведомления ожидают восстановления связи. Диск проверяется раз в час.',wraplength=850).pack(anchor='w',pady=6)
         self.space_status=ttk.Label(history,text='Свободное место ещё не проверено');self.space_status.pack(anchor='w')
-        self.history_table=ttk.Treeview(history,columns=('date','state','count','recipient'),show='headings',height=10)
-        for key,label,width in [('date','Создано (МСК)',150),('state','Состояние',230),('count','Файлов',65),('recipient','Получатель',240)]:
+        self.history_table=ttk.Treeview(history,columns=('date','direction','state','count','recipient'),show='headings',height=10)
+        for key,label,width in [('date','Создано (МСК)',145),('direction','Направление',145),('state','Состояние',230),('count','Файлов',65),('recipient','Получатель',240)]:
             self.history_table.heading(key,text=label);self.history_table.column(key,width=width)
         self.history_table.pack(fill='both',expand=True,pady=8)
         history_actions=ttk.Frame(history);history_actions.pack(fill='x')
@@ -149,12 +177,13 @@ class App:
     def config(self,require_all=True):
         c=dict(self.c)
         c.update({key:e.get().strip() for key,e in self.entries.items()})
+        c['dtf_recipient']=self.dtf_recipient.get().strip()
         for key,_,_ in FIELDS:
             if require_all and key!='disk_client_id' and not c[key]:raise UserError('Заполните все обязательные поля настроек.')
         if c['api_id'] and (not c['api_id'].isdigit() or int(c['api_id'])<=0):raise UserError('Telegram API ID должен быть числом.')
         if c['api_hash'] and not re.fullmatch(r'[a-fA-F0-9]{32}',c['api_hash']):raise UserError('API hash должен содержать 32 символа из Telegram.')
         if c['bot_token'] and not re.fullmatch(r'\d+:[A-Za-z0-9_-]+',c['bot_token']):raise UserError('Проверьте токен бота.')
-        for key in ['sender','recipient']:
+        for key in ['sender','recipient','dtf_recipient']:
             if c[key] and not re.fullmatch(r'[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',c[key]):raise UserError('Проверьте почтовые адреса.')
         if c.get('disk_client_id') and not re.fullmatch(r'[a-fA-F0-9]{32}',c['disk_client_id']):raise UserError('Проверьте ClientID приложения Яндекс Диска.')
         if '#access_token=' in c['disk_token']:
@@ -168,6 +197,7 @@ class App:
         try:
             updated=self.config(require_all=require_all)
             changed=any(self.c.get(k,'')!=updated.get(k,'') for k,_,_ in FIELDS if k!='disk_client_id')
+            dtf_changed=self.c.get('dtf_recipient','')!=updated.get('dtf_recipient','') or any(self.c.get(k,'')!=updated.get(k,'') for k in ('api_id','api_hash','bot_token','disk_token','sender','smtp_password'))
             disk_changed=self.c.get('disk_token')!=updated.get('disk_token')
             self.settings.save(updated);self.c=updated
             if disk_changed:
@@ -176,6 +206,9 @@ class App:
                 self.q.set_setting('generation',int(self.q.setting('generation','0'))+1)
                 for key in ('first_test_confirmed','automatic','bot_checked','disk_checked','mail_checked'):self.q.set_setting(key,'0')
                 self.auto.set(False)
+            if dtf_changed:
+                self.q.set_setting('dtf_generation',int(self.q.setting('dtf_generation','0'))+1)
+                self.q.set_setting('dtf_automatic','0');self.q.set_setting('dtf_first_test_confirmed','0');self.dtf_auto.set(False)
         except UserError as e:messagebox.showerror('Настройки',str(e));return False
         self.log('Настройки сохранены на этом компьютере.');return True
 
@@ -217,6 +250,37 @@ class App:
             self.q.set_setting('dispatch_days',','.join(days))
         self.log('Расписание сохранено: '+value+' МСК, '+', '.join(('Пн','Вт','Ср','Чт','Пт','Сб','Вс')[int(i)] for i in days)+'.')
         return True
+
+    def save_dtf_schedule(self):
+        value=self.dtf_time.get().strip();days=[str(i) for i,var in enumerate(self.dtf_days) if var.get()]
+        if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',value) or not days:
+            messagebox.showerror('ДТФ','Укажите время ЧЧ:ММ и хотя бы один день недели.');return False
+        with self.q.lock:
+            self.q.set_setting('dtf_dispatch_time',value);self.q.set_setting('dtf_dispatch_days',','.join(days))
+        self.log('Расписание ДТФ сохранено: '+value+' МСК.');return True
+
+    def set_dtf_auto(self):
+        if self.dtf_auto.get():
+            if not self.save_dtf_schedule() or not self.c.get('dtf_recipient') or self.q.setting('dtf_first_test_confirmed','0')!='1':
+                self.dtf_auto.set(False);messagebox.showinfo('ДТФ','Сначала сохраните получателя ДТФ, отправьте тест и подтвердите тестовое письмо ДТФ.');return
+        self.q.set_setting('dtf_automatic',int(self.dtf_auto.get()))
+
+    def send_dtf(self):
+        if not self.worker or not self.thread or not self.thread.is_alive():messagebox.showinfo('ДТФ','Сначала запустите бота.');return
+        if not self.c.get('dtf_recipient'):messagebox.showinfo('ДТФ','Сохраните тестовую почту ДТФ.');return
+        rows=self.q.waiting('dtf')
+        if not messagebox.askyesno('ДТФ',f'Собрать и отправить общий холст из {len(rows)} принтов с указанными копиями?'):return
+        try:
+            bid=self.q.claim(self.c['dtf_recipient'],datetime.now().timestamp(),manual=True,direction='dtf')
+            self.log('Начинаю сборку холста ДТФ.' if bid else 'Очередь ДТФ пуста.')
+        except UserError as e:messagebox.showinfo('ДТФ',str(e))
+
+    def confirm_dtf_test(self):
+        with self.q.lock:
+            test=self.q.db.execute("select 1 from batches where direction='dtf' and state='sent' and test_mode=1 and generation=? limit 1",(int(self.q.setting('dtf_generation','0')),)).fetchone()
+        if not test:messagebox.showinfo('ДТФ','Сначала отправьте тестовый холст на свою почту.');return
+        if messagebox.askyesno('ДТФ','Вы скачали PNG по ссылке, проверили размеры, количество копий и прозрачность?'):
+            self.q.set_setting('dtf_first_test_confirmed','1');self.log('Тест ДТФ подтверждён. Можно включить расписание ДТФ.')
 
     def set_auto(self):
         if self.auto.get() and not self.save_schedule():
@@ -328,7 +392,7 @@ class App:
 
     def confirm_test(self):
         with self.q.lock:
-            test=self.q.db.execute("select id from batches where state='sent' and test_mode=1 and generation=? order by created desc limit 1",(int(self.q.setting('generation','0')),)).fetchone()
+            test=self.q.db.execute("select id from batches where direction='wideformat' and state='sent' and test_mode=1 and generation=? order by created desc limit 1",(int(self.q.setting('generation','0')),)).fetchone()
         if not test:
             messagebox.showinfo('Сначала отправка','Программа ещё не получила подтверждение приёма тестового письма почтовым сервером. Сначала отправьте тест через бота.');return
         if not messagebox.askyesno('Подтверждение теста','Вы нашли тестовое письмо в своём ящике, скачали ZIP и открыли исходный TIF?'):
@@ -387,6 +451,14 @@ class App:
             try:text=self.messages.get_nowait()
             except threadqueue.Empty:break
             self.logs.configure(state='normal');self.logs.insert('end',datetime.now().strftime('%H:%M:%S')+' '+text+'\n');self.logs.see('end');self.logs.configure(state='disabled')
+        dtf_rows=self.q.waiting('dtf')
+        previous=set(self.dtf_table.get_children())
+        for row in dtf_rows:
+            key=str(row['id']);values=(row['name'],row['copies'] if row['copies_set'] else 'Укажите',{'queued':'Ожидает скачивания','downloading':'Скачивается','ready':'Сохранён','failed':'Ошибка','cancelled':'Удалён'}.get(row['state'],row['state']))
+            if key in previous:self.dtf_table.item(key,values=values);previous.remove(key)
+            else:self.dtf_table.insert('','end',iid=key,values=values)
+        for key in previous:self.dtf_table.delete(key)
+        self.dtf_status.configure(text=f'Принтов: {len(dtf_rows)} · Копий с подтверждённым количеством: {sum(r["copies"] for r in dtf_rows if r["copies_set"])}')
         rows=self.q.waiting()
         existing=set(self.table.get_children())
         states={'queued':'Ожидает скачивания','downloading':'Скачивается','ready':'Сохранён','failed':'Ошибка скачивания'}
@@ -399,7 +471,7 @@ class App:
         old=set(self.history_table.get_children())
         history_rows=self.q.history()
         for batch in history_rows:
-            key=batch['id'];values=(datetime.fromtimestamp(batch['created'],MOSCOW).strftime('%d.%m.%Y %H:%M'),history_states.get(batch['state'],batch['state']),batch['file_count'],batch['recipient'])
+            key=batch['id'];values=(datetime.fromtimestamp(batch['created'],MOSCOW).strftime('%d.%m.%Y %H:%M'),DIRECTIONS.get(batch['direction'],{}).get('label',batch['direction']),history_states.get(batch['state'],batch['state']),batch['file_count'],batch['recipient'])
             if key in old:self.history_table.item(key,values=values);old.remove(key)
             else:self.history_table.insert('','end',iid=key,values=values)
         for batch in history_rows:self.history_table.move(batch['id'],'','end')
@@ -436,6 +508,19 @@ def self_test(report_path):
                 assert len(instance.dispatch_days)==7
                 assert instance.history_table.winfo_exists()
                 assert instance.alert_branch.get()==''
+                assert instance.dtf_time.get()=='12:00'
+                assert [i for i,v in enumerate(instance.dtf_days) if v.get()]==[0,3]
+                from PIL import Image
+                assert Image.new('RGBA',(2,2)).mode=='RGBA'
+                from dtf_render import inspect_art,render_png
+                from dtf_layout import Layout,Placement
+                source=Path(folder)/'source.png';output=Path(folder)/'sheet.png'
+                Image.new('RGBA',(2,3),(255,0,0,255)).save(source,dpi=(300,300))
+                assert inspect_art(source)['width']==2
+                render_png(output,Layout(16,16,1,1,(Placement('test',1,1,2,3,False),)),{'test':source})
+                with Image.open(output) as check:
+                    assert check.mode=='RGBA' and check.getpixel((0,0))==(0,0,0,0) and check.getpixel((1,1))==(255,0,0,255)
+                    assert abs(check.info['dpi'][0]-300)<.01
                 instance.dispatch_time.set('17:45')
                 assert instance.save_schedule()
                 assert instance.q.setting('dispatch_time')=='17:45'
