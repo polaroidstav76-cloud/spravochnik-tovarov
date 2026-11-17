@@ -27,7 +27,7 @@ try{
  }
  $boot=Get-BootTime
  $pending=@()
- if(Test-Path $statePath){try{$pending=@(Get-Content $statePath -Raw|ConvertFrom-Json)}catch{Write-Status 'Не удалось прочитать очередь. Сохранена копия.';Copy-Item $statePath ($statePath+'.invalid') -Force}}
+ if(Test-Path $statePath){try{$decoded=Get-Content $statePath -Raw|ConvertFrom-Json;$pending=@($decoded)}catch{Write-Status 'Не удалось прочитать очередь. Сохранена копия.';Copy-Item $statePath ($statePath+'.invalid') -Force}}
  $pending=@($pending|Where-Object {$_ -and ([DateTimeOffset]::Parse($_)) -gt [DateTimeOffset]::UtcNow.AddDays(-29)})
  if($pending -notcontains $boot){$pending+=,$boot}
  Write-State $pending

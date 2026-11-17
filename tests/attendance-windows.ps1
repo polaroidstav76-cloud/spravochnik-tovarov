@@ -23,13 +23,16 @@ if([Text.Encoding]::UTF8.GetString($plain) -ne 'test-device-token'){throw 'DPAPI
 $statePath=Join-Path $env:TEMP ('attendance-test-'+[guid]::NewGuid()+'.json')
 try{
  Write-State @('2026-11-17T06:50:00.0000000Z')
- $state=@(Get-Content $statePath -Raw|ConvertFrom-Json)
+ $decoded=Get-Content $statePath -Raw|ConvertFrom-Json
+ $state=@($decoded)
  if($state.Count -ne 1 -or $state[0] -ne '2026-11-17T06:50:00.0000000Z'){throw 'Single offline event lost'}
  Write-State @('2026-11-17T06:50:00.0000000Z','2026-11-17T08:00:00.0000000Z')
- $state=@(Get-Content $statePath -Raw|ConvertFrom-Json)
+ $decoded=Get-Content $statePath -Raw|ConvertFrom-Json
+ $state=@($decoded)
  if($state.Count -ne 2){throw 'Offline restart queue lost'}
  Write-State @()
- if(@(Get-Content $statePath -Raw|ConvertFrom-Json).Count -ne 0){throw 'Acknowledged events not removed'}
+ $decoded=Get-Content $statePath -Raw|ConvertFrom-Json
+ if(@($decoded).Count -ne 0){throw 'Acknowledged events not removed'}
 }finally{Remove-Item $statePath -ErrorAction SilentlyContinue}
 # Validate the exact scheduler settings without installing a real agent or making any network calls.
 $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -File "C:\ProgramData\CloudshopAttendance\Agent.ps1"'

@@ -138,7 +138,7 @@ begin
  for r in select * from attendance_private.outbox where sent_at is null and request_id is not null loop
   select * into response from net._http_response where id=r.request_id;
   if found then
-   if response.status_code=200 and case when pg_input_is_valid(response.content,'jsonb') then response.content::jsonb->>'ok'='true' else false end then
+   if response.status_code=200 and (case when pg_input_is_valid(response.content,'jsonb') then response.content::jsonb->>'ok'='true' else false end) then
     update attendance_private.outbox set sent_at=now(),error=null where id=r.id;
    else update attendance_private.outbox set request_id=null,error='Telegram не подтвердил доставку',next_attempt=now()+interval '10 minutes' where id=r.id;end if;
   elsif r.next_attempt<now()-interval '3 minutes' then
