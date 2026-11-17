@@ -104,6 +104,9 @@ class Queue:
         self.db.execute("update batches set state='uncertain',error='Программа закрылась во время передачи письма. Требуется проверить почту.' where state='submitting'")
         self.db.execute("update files set state='queued' where state='downloading'")
         self.db.execute("update batches set state='collecting' where state in ('packing','uploading','ready')")
+        if self.setting('optional_copies_migrated','0')!='1':
+            self.db.execute("update files set copies_set=1 where direction='dtf'")
+            self.set_setting('optional_copies_migrated','1')
         self.db.commit()
 
     def setting(self, key, default=''):
@@ -131,20 +134,20 @@ class Queue:
         branch=self.user(sender)
         if branch is None: raise UserError('Сначала подключитесь с кодом филиала.')
         name=safe_name(name)
-        if Path(name).suffix.lower() not in {'.tif','.tiff','.pdf','.jpg','.jpeg','.png'}:
-            raise UserError('Принимаются TIF, TIFF, PDF, JPG и PNG. Отправляйте макеты документом, без сжатия.')
-        if direction=='dtf' and Path(name).suffix.lower() not in {'.png','.tif','.tiff','.jpg','.jpeg'}:raise UserError('Для ДТФ нужен PNG, TIF или JPG с указанным DPI; PDF пересохраните в PNG 300 dpi.')
+        formats={'wideformat':{'.tif','.tiff'},'dtf':{'.png','.psd','.tif','.tiff'},'photo30':{'.jpg','.jpeg','.png'}}
+        if direction in formats and Path(name).suffix.lower() not in formats[direction]:
+            hint={'wideformat':'TIF / TIFF','dtf':'PNG, PSD, TIF / TIFF','photo30':'JPG / JPEG или PNG'}[direction]
+            raise UserError('Файл не добавлен. Для '+DIRECTIONS[direction]['label']+' нужен '+hint+'. Отправьте оригинал документом.')
         if not 0<size<=MAX_BYTES: raise UserError('Размер файла должен быть от 1 байта до 500 МБ.')
         with self.lock,self.db:
             existing=self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone()
             if existing:return dict(existing)
             active=self.db.execute("select f.name from files f left join batches b on b.id=f.batch where f.state!='cancelled' and f.direction=? and (f.batch is null or b.state not in ('sent','manual_sent','local_saved','cancelled'))",(direction,))
             key=unicodedata.normalize('NFC',name).casefold()
-            if any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
+            if direction!='dtf' and any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
                 raise UserError('Переименуйте файл, так как такой уже существует.')
             self.db.execute('insert or ignore into files(chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?)',
                 (chat,message,sender,branch,name,size,received,due_day(received),direction))
-            if direction=='dtf':self.db.execute('update files set copies_set=0 where chat=? and message=?',(chat,message))
             return dict(self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone())
 
     def set_copies(self,id,uid,count):
@@ -218,9 +221,6 @@ class Queue:
             ids=[r[0] for r in self.db.execute(query,args)]
             actual=[[id,self.file(id)['copies']] for id in ids] if expected and isinstance(expected[0],list) else ids
             if expected is not None and sorted(actual)!=sorted(expected):raise UserError('Очередь изменилась. Нажмите «Отправить сейчас» заново и проверьте новый состав.')
-            if direction=='dtf' and any(not self.file(id)['copies_set'] for id in ids):
-                if manual:raise UserError('Укажите количество копий для каждого принта ДТФ.')
-                return None
             if not ids:return None
             bid=uuid.uuid4().hex
             self.db.execute("insert into batches(id,state,created,recipient,direction,test_mode,generation) values(?,'collecting',?,?,?,?,?)",(bid,now,recipient,direction,int(self.setting(prefix+'first_test_confirmed','0')!='1'),int(self.setting(prefix+'generation','0'))))
@@ -292,7 +292,7 @@ class Queue:
             self.db.execute("update batches set state=?,notified=0 where id=?",('sent' if confirmed_received else 'collecting',id))
 
 
-def build_archive(queue:Queue,batchid:str):
+def build_archive(queue:Queue,batchid:str,progress=None):
     rows=queue.batch_files(batchid)
     if not rows or any(r['state']!='ready' for r in rows):raise UserError('Не все файлы получены. Дождитесь загрузки или удалите ошибочный файл.')
     required=sum(r['size'] for r in rows)+1024**3
@@ -313,6 +313,7 @@ def build_archive(queue:Queue,batchid:str):
                 if digest!=r['sha256']:raise UserError('Контрольная сумма файла не совпадает. Отправка остановлена.')
                 arc=('Полароид/'+(f'{index:04d}/' if counts[r['name'].casefold()]>1 else '')+r['name'])
                 archive.write(source,arc)
+                if progress:progress(index,len(rows))
         os.replace(temp,dest)
         return dest
     finally:

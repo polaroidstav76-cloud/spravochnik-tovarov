@@ -22,7 +22,6 @@ class BotFeatures:
         return [r['id'] for r in self.snapshot(direction) if r['batch'] is None]
     def request(self,uid,direction):
         rows=[r for r in self.snapshot(direction) if r['batch'] is None]
-        if direction=='dtf' and any(not r['copies_set'] for r in rows):raise UserError('Укажите количество копий для каждого принта ДТФ.')
         ids=[[r['id'],r['copies']] for r in rows]
         if not ids:return None,0
         token=secrets.token_hex(12)

@@ -34,10 +34,11 @@ class TestDTF(unittest.TestCase):
         info=inspect_art(self.q.path(row));self.assertEqual((info['width'],info['height']),(100,200))
         row=self.source(mid=2,dpi=None)
         with self.assertRaisesRegex(UserError,'DPI'):inspect_art(self.q.path(row))
-    def test_copies_required_and_only_author_or_owner_can_edit(self):
+    def test_one_copy_default_and_only_author_or_owner_can_edit(self):
         row=self.source(copies=None)
-        self.assertIsNone(self.q.claim('test@example.invalid',self.monday,direction='dtf'))
-        with self.assertRaises(UserError):self.q.claim('test@example.invalid',self.monday,manual=True,direction='dtf')
+        self.assertEqual(row['copies'],1)
+        self.assertEqual(row['copies_set'],1)
+        token,count=BotFeatures(self.q).request(11,'dtf');self.assertEqual(count,1)
         with self.assertRaises(UserError):self.q.set_copies(row['id'],22,3)
         self.q.set_copies(row['id'],11,3)
         bid=self.q.claim('test@example.invalid',self.monday,direction='dtf');self.assertIsNotNone(bid)

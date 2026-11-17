@@ -25,7 +25,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.6'
+VERSION='0.7'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -157,7 +157,7 @@ class App:
         row=ttk.Frame(instant);row.pack(fill='x',pady=10)
         self.bridge_code=ttk.Entry(row,width=42,show='•');self.bridge_code.pack(side='left')
         self.bridge_pair_button=ttk.Button(row,text='Подключить основную программу',command=self.pair_source);self.bridge_pair_button.pack(side='left',padx=6)
-        self.bridge_status=ttk.Label(instant,text='Подключение 30×40: '+self.c.get('bridge_branch','не настроено'));self.bridge_status.pack(anchor='w')
+        self.bridge_status=ttk.Label(instant,text='Клаудшоп (30×40 и VPN): '+self.c.get('bridge_branch','не настроено'));self.bridge_status.pack(anchor='w')
         ttk.Label(instant,text='На другом компьютере приёмник сохраняет файлы в «Рабочий стол → 30х40».\nТолько после сохранения и проверки файла появится уведомление в Клаудшопе. Печать сотрудник запускает сам.',wraplength=850).pack(anchor='w',pady=10)
         self.instant_table=ttk.Treeview(instant,columns=('direction','name','state'),show='headings',height=6)
         for key,label,width in [('direction','Направление',150),('name','Файл',430),('state','Состояние',220)]:
@@ -511,7 +511,7 @@ class App:
             if key in previous:self.instant_table.item(key,values=values);previous.remove(key)
             else:self.instant_table.insert('','end',iid=key,values=values)
         for key in previous:self.instant_table.delete(key)
-        self.bridge_status.configure(text='Подключение 30×40: '+self.c.get('bridge_branch','не настроено'))
+        self.bridge_status.configure(text='Клаудшоп (30×40 и VPN): '+self.c.get('bridge_branch','не настроено'))
         dtf_rows=self.q.waiting('dtf')
         previous=set(self.dtf_table.get_children())
         for row in dtf_rows:
@@ -519,7 +519,7 @@ class App:
             if key in previous:self.dtf_table.item(key,values=values);previous.remove(key)
             else:self.dtf_table.insert('','end',iid=key,values=values)
         for key in previous:self.dtf_table.delete(key)
-        self.dtf_status.configure(text=f'Принтов: {len(dtf_rows)} · Копий с подтверждённым количеством: {sum(r["copies"] for r in dtf_rows if r["copies_set"])}')
+        self.dtf_status.configure(text=f'Принтов: {len(dtf_rows)} · Копий: {sum(r["copies"] for r in dtf_rows if r["copies_set"])}')
         rows=self.q.waiting()
         existing=set(self.table.get_children())
         states={'queued':'Ожидает скачивания','downloading':'Скачивается','ready':'Сохранён','failed':'Ошибка скачивания'}

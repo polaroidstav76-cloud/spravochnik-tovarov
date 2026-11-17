@@ -19,7 +19,7 @@ class TestImmediate(unittest.TestCase):
         self.config={'recipient':'wide@example.invalid','workshop_recipient':'test@example.invalid','dtf_recipient':'dtf@example.invalid','sender':'sender@example.invalid','smtp_password':'test','disk_token':'test','bridge_token':'a'*64}
     def tearDown(self):self.q.db.close();self.tmp.cleanup()
     def file(self,mid=1,direction='workshop',name=None):
-        r=self.q.add(11,mid,11,name or f'print-{mid}.tif',len(self.data),time.time(),direction=direction)
+        r=self.q.add(11,mid,11,name or (f'print-{mid}.png' if direction=='photo30' else f'print-{mid}.tif'),len(self.data),time.time(),direction=direction)
         path=self.q.path(r);path.parent.mkdir(parents=True);path.write_bytes(self.data);self.q.downloaded(r['id'],self.sha);return self.q.file(r['id'])
     def test_workshop_claims_one_ready_file_immediately_without_archive(self):
         self.file();self.file(mid=2)
@@ -29,7 +29,7 @@ class TestImmediate(unittest.TestCase):
         uploaded=[]
         class Disk:
             def __init__(self,t):pass
-            def upload(inner,path,remote):uploaded.append((Path(path).read_bytes(),remote));return 'https://disk.yandex.ru/d/test'
+            def upload(inner,path,remote,progress=None):uploaded.append((Path(path).read_bytes(),remote));return 'https://disk.yandex.ru/d/test'
             def remove_generated(inner,path):pass
         smtp=SimpleNamespace(send_message=lambda msg:None,close=lambda:None)
         with patch('worker.Disk',Disk),patch('worker.smtp_connect',return_value=smtp):asyncio.run(worker.process_batch(self.q.batch(bid)))

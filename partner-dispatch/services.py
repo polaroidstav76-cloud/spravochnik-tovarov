@@ -70,6 +70,13 @@ class Settings:
 
 class RemoteMissing(UserError):pass
 
+class UploadReader:
+    def __init__(self,file,total,progress):self.file=file;self.total=total;self.progress=progress;self.done=0
+    def read(self,size=-1):
+        data=self.file.read(size);self.done+=len(data)
+        if self.progress:self.progress(self.done,self.total)
+        return data
+
 class Disk:
     def __init__(self,token):self.token=token
     def request(self,method,endpoint,**params):
@@ -98,7 +105,7 @@ class Disk:
         try:self.request('DELETE','/resources',path=path,permanently='false')
         except RemoteMissing:pass
 
-    def upload(self,filename,remote):
+    def upload(self,filename,remote,progress=None):
         filename=Path(filename)
         if self.check()<filename.stat().st_size:raise UserError('На Яндекс Диске недостаточно места. Освободите место и повторите.')
         self.request('PUT','/resources',path='disk:/Cloudshop-Print')
@@ -112,7 +119,7 @@ class Disk:
         # Do not send the OAuth header to the upload host; href already contains a scoped capability.
         try:
             with filename.open('rb') as f:
-                req=urllib.request.Request(href,data=f,method='PUT',headers={'Content-Length':str(filename.stat().st_size),'Content-Type':mimetypes.guess_type(remote)[0] or 'application/octet-stream'})
+                req=urllib.request.Request(href,data=UploadReader(f,filename.stat().st_size,progress),method='PUT',headers={'Content-Length':str(filename.stat().st_size),'Content-Type':mimetypes.guess_type(remote)[0] or 'application/octet-stream'})
                 with urllib.request.urlopen(req,timeout=1800) as r:
                     if r.status not in (200,201,202):raise UserError('Не удалось загрузить архив.')
         except (OSError,urllib.error.URLError):raise UserError('Загрузка архива на Диск прервалась. Файлы сохранены.') from None

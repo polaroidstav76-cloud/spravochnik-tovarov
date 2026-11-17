@@ -14,6 +14,9 @@ from handoff import Handoff,MANUAL_MENU
 from bot_features import BotFeatures,STATUS
 from dtf_render import inspect_art,build_sheet
 from local_delivery import LocalDelivery
+from file_formats import validate_content
+from progress_cards import ProgressCards
+from vpn_reminder import VpnReminder
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -21,7 +24,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self)
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self)
 
     def stop(self):
         self.running=False
@@ -40,12 +43,12 @@ class Worker:
         if buttons is None:
             direction=self.direction(event.sender_id)
             if direction:
-                buttons=[[Button.text(UPLOAD,resize=True,persistent=True)],
-                         [Button.text(BUTTONS[0])],[Button.text(BUTTONS[1]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
+                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],
+                         [Button.text("📋 "+BUTTONS[0])],[Button.text("🚀 "+BUTTONS[1]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("⬅️ "+BACK)]]
             else:
-                buttons=[[Button.text(r['label'],resize=True,persistent=True)] for r in DIRECTIONS.values()]
+                buttons=[[Button.text(icon+' '+DIRECTIONS[key]['label'],resize=True,persistent=True) for key,icon in row] for row in [[('wideformat','🖨'),('dtf','👕')],[('workshop','🛠'),('photo30','🖼')]]]
             if direction in ('workshop','photo30'):
-                buttons=[[Button.text(UPLOAD,resize=True,persistent=True)],[Button.text(BUTTONS[0]),Button.text(BUTTONS[2])],[Button.text(STATUS)],[Button.text(BACK)]]
+                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],[Button.text("📋 "+BUTTONS[0]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("⬅️ "+BACK)]]
             if direction=='dtf':buttons.append([Button.text('Количество копий')])
             if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
@@ -53,6 +56,7 @@ class Worker:
     async def on_message(self,event):
         if not event.is_private:return
         text=(event.raw_text or '').strip();uid=event.sender_id
+        text=text.lstrip('🖨👕🛠🖼📥📋🚀🗑📊⬅️ ').strip()
         owner=self.q.setting('owner')
         parts=text.split(maxsplit=1)
         if parts and parts[0].split('@')[0]=='/owner':
@@ -141,12 +145,12 @@ class Worker:
                 self.cached[(r['chat'],r['message'])]=event.message
                 await self.reply(event,f'{DIRECTIONS[direction]["label"]}: получаю «{r["name"]}». Дождитесь подтверждения «Сохранён».')
                 if direction=='dtf':
-                    self.q.set_setting('dtf_pending:'+str(uid),r['id'])
-                    await self.reply(event,'Сколько копий этого принта разместить? Отправьте число от 1 до 999. Для изменения нажмите «Количество копий».')
+                    from telethon import Button
+                    await self.reply(event,'По умолчанию — 1 копия. Если нужно больше, нажмите кнопку у файла.',[[Button.inline('Количество копий · #'+str(r['id']),f'copies:{r["id"]}'.encode())]])
             elif event.photo:
                 await self.reply(event,'Пришлите макет как файл, без сжатия, чтобы сохранить оригинал для печати.')
             else:
-                await self.reply(event,'Отправьте макет документом (TIF, TIFF, PDF, JPG, PNG), до 500 МБ.')
+                await self.reply(event,'Отправьте подходящий для выбранного раздела оригинал документом, до 500 МБ.')
         except UserError as e:await self.reply(event,str(e))
 
     def recipient(self,direction):
@@ -159,7 +163,7 @@ class Worker:
         rows=[r for r in self.q.waiting('dtf') if r['batch'] is None and (r['sender']==event.sender_id or self.q.setting('owner')==str(event.sender_id))]
         if not rows:await self.reply(event,'Ваших принтов для изменения количества нет.');return
         for start in range(0,len(rows),20):
-            buttons=[[Button.inline(r['name'][:45]+(f' — {r["copies"]} шт.' if r['copies_set'] else ' — укажите количество'),f'copies:{r["id"]}'.encode())] for r in rows[start:start+20]]
+            buttons=[[Button.inline(f'#{r["id"]} '+r['name'][:40]+f' — {r["copies"]} шт.',f'copies:{r["id"]}'.encode())] for r in rows[start:start+20]]
             await self.reply(event,'Выберите принт для изменения количества:',buttons)
 
     async def delete_menu(self,event,offset,direction):
@@ -192,6 +196,7 @@ class Worker:
                 recipient=self.recipient(confirmation['direction']) if confirmation else ''
                 if not recipient:raise UserError('Укажите получателя этого направления в программе.')
                 bid=self.features.confirm(token,event.sender_id,recipient)
+                if bid:self.q.set_setting('batch_progress:'+bid,event.sender_id)
                 await event.answer('Отправка подтверждена.')
                 await event.edit('Начинаю отправку текущей очереди.' if bid else 'Очередь пуста.',buttons=None);return
             if data.startswith('abort:'):
@@ -208,6 +213,15 @@ class Worker:
             if action=='page':
                 await event.answer();await self.delete_menu(event,number,direction)
             elif action=='delete':
+                from telethon import Button
+                r=self.q.file(number)
+                if not r or r['direction']!=direction or r['state']=='cancelled':raise UserError('Файл уже удалён или недоступен.')
+                await event.answer()
+                await event.edit(f'Удалить файл #{number}?\n{r["name"]}\nЗагрузил филиал: {r["branch"]}',buttons=[[Button.inline('🗑 Удалить',f'remove:{direction}:{number}'.encode()),Button.inline('Оставить',f'keep:{direction}:{number}'.encode())]],parse_mode=None)
+                return
+            elif action=='keep':
+                await event.answer('Файл оставлен.');await event.edit('Файл оставлен в очереди.',buttons=None);return
+            elif action=='remove':
                 r=self.q.cancel(number,direction=direction)
                 try:self.q.path(r).unlink(missing_ok=True)
                 except OSError:pass # A currently downloading file is removed when download finishes.
@@ -229,6 +243,7 @@ class Worker:
                 if msg is None:msg=await self.client.get_messages(r['chat'],ids=r['message'])
                 if not msg or not msg.document:raise UserError('Исходный файл недоступен в Telegram. Загрузите его заново.')
                 async def progress(received,total):
+                    await self.cards.update('file:'+str(r['id']),r['chat'],'📥 '+r['name'],f'Загрузка: {received/1048576:.1f} из {total/1048576:.1f} МБ',received,total)
                     if self.q.file(r['id'])['state']=='cancelled':raise UserError('Файл удалён из очереди.')
                 await self.client.download_media(msg,file=str(temp),progress_callback=progress)
                 if self.q.file(r['id'])['state']=='cancelled':continue
@@ -238,6 +253,9 @@ class Worker:
                     with temp.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
                 sha=await asyncio.to_thread(checksum)
                 if self.q.file(r['id'])['state']=='cancelled':continue
+                try:await asyncio.to_thread(validate_content,temp,r['direction'],r['name'])
+                except UserError:
+                    invalid_art=True;raise
                 if r['direction']=='dtf':
                     try:await asyncio.to_thread(inspect_art,temp)
                     except UserError:
@@ -253,7 +271,7 @@ class Worker:
                         info=await asyncio.to_thread(inspect_art,dest)
                         schedule+=f' Размер: {info["width_cm"]:.2f} × {info["height_cm"]:.2f} см.'
                         if not info['transparent']:schedule+=' Фон исходника непрозрачный и будет сохранён. Для прозрачного фона загрузите PNG с прозрачностью.'
-                    await self.client.send_message(r['chat'],f'Сохранён: {r["name"]}\n{schedule} Для теста или срочной отправки нажмите «Отправить сейчас».',parse_mode=None)
+                    await self.cards.update('file:'+str(r['id']),r['chat'],'✅ Сохранён: '+r['name'],schedule,force=True)
                 except Exception:self.log('Не удалось отправить подтверждение загрузки. Файл сохранён.')
             except asyncio.CancelledError:raise
             except Exception as e:
@@ -261,12 +279,11 @@ class Worker:
                 retry_note='Будет повтор; состояние видно в программе на основном компьютере.' if self.q.file(r['id'])['attempts']<5 else 'Пять попыток не удались. Удалите эту запись и отправьте исходный файл заново.'
                 self.q.download_failed(r['id'],time.time(),reason)
                 if invalid_art:
-                    with self.q.lock,self.q.db:self.q.db.execute('update files set attempts=5 where id=?',(r['id'],))
-                    retry_note='Удалите этот файл из очереди и загрузите исправленный PNG/TIF с указанным DPI.'
+                    self.q.cancel(r['id'],direction=r['direction'])
+                    retry_note='Файл автоматически убран из рабочей очереди. Загрузите исправленный оригинал.'
                 self.log(reason+' '+r['name'])
-                if not self.q.file(r['id'])['state']=='cancelled':
-                    try:await self.client.send_message(r['chat'],f'Пока не сохранён: {r["name"]}. {reason} {retry_note}',parse_mode=None)
-                    except Exception:pass
+                if invalid_art or self.q.file(r['id'])['state']!='cancelled':
+                    await self.cards.update('file:'+str(r['id']),r['chat'],'❌ '+r['name'],reason+' '+retry_note,force=True)
             finally:
                 temp.unlink(missing_ok=True)
                 if self.q.file(r['id'])['state']=='cancelled':
@@ -290,6 +307,9 @@ class Worker:
             self.q.transition(bid,b['state'],'cancelled');return
         if any(r['state']!='ready' for r in rows):return
         if not self.q.transition(bid,'collecting','packing'):return
+        chat=int(self.q.setting('batch_progress:'+bid,self.q.setting('owner','0')) or 0)
+        title='📦 '+DIRECTIONS[b['direction']]['label']+' · '+str(len(rows))+' файлов'
+        await self.cards.update('batch:'+bid,chat,title,'Подготовка исходников…',force=True)
         try:
             if b.get('remote_path'):await asyncio.to_thread(disk.remove_generated,b['remote_path'])
             artifact=rows[0]['name'] if b['direction']=='workshop' else 'Полароид-ДТФ.png' if b['direction']=='dtf' else 'Полароид.zip'
@@ -299,13 +319,20 @@ class Worker:
                     with archive.open('rb') as file:
                         if archive.stat().st_size!=rows[0]['size'] or hashlib.file_digest(file,'sha256').hexdigest()!=rows[0]['sha256']:raise UserError('Исходник мастерской изменился.')
                 await asyncio.to_thread(verify_original)
-            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid)
+            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'Формирование холста…' if b['direction']=='dtf' else 'Архивирование…'))
+            if b['direction']=='dtf' and self.q.setting('preview_sent:'+bid,'0')!='1':
+                try:
+                    await self.client.send_file(chat,str(archive.with_suffix('.preview.png')),caption='Предпросмотр холста ДТФ. '+self.q.setting('dtf_layout:'+bid))
+                    self.q.set_setting('preview_sent:'+bid,'1')
+                except Exception:pass
             remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/{artifact}'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
-            link=await asyncio.to_thread(disk.upload,archive,remote)
+            await self.cards.update('batch:'+bid,chat,title,'Загрузка на Яндекс Диск…',force=True)
+            link=await asyncio.to_thread(disk.upload,archive,remote,self.cards.thread_callback('batch:'+bid,chat,title,'Загрузка на Яндекс Диск…'))
             if not self.q.transition(bid,'uploading','ready',link=link):
                 await asyncio.to_thread(disk.remove_generated,remote);return
             b=self.q.batch(bid)
+            await self.cards.update('batch:'+bid,chat,title,'✅ Файлы на Диске. Отправляю письмо…',force=True)
             # Login happens before the irreversible boundary; deletion is still possible here.
             smtp=await asyncio.to_thread(smtp_connect,self.c)
             try:
@@ -337,6 +364,14 @@ class Worker:
             self.q.set_setting('retry_at:'+bid,time.time()+600)
             self.log(reason+' Повтор через 10 минут; файлы сохранены.')
             self.monitor.failure(bid,reason)
+
+        current=self.q.batch(bid)
+        stage={'sent':'✅ Заказ отправлен. Письмо принято почтовым сервером.','uncertain':'⚠️ Результат письма не подтверждён. Проверьте почту перед повтором.','collecting':'⏳ Не удалось завершить. Файлы сохранены, повтор через 10 минут.','invalidated':'Состав изменился. Заказ будет пересобран.'}.get(current['state'],'Обработка: '+current['state'])
+        buttons=None
+        if current.get('link') and current['state']=='sent':
+            from telethon import Button
+            buttons=[[Button.url('Открыть заказ',current['link'])]]
+        await self.cards.update('batch:'+bid,chat,title,stage,buttons=buttons,force=True)
 
     async def notify(self):
         owner=self.q.setting('owner')
@@ -421,7 +456,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
+            self.tasks=[asyncio.create_task(self.vpn.run()),asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False

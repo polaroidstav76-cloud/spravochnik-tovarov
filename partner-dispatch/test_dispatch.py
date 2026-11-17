@@ -319,7 +319,7 @@ class TestDispatch(unittest.TestCase):
         class FakeDisk:
             def __init__(self,token):pass
             def remove_generated(self,remote):deleted.append(remote)
-            def upload(self,file,remote):queue.cancel(a['id']);return 'https://disk.yandex.ru/test'
+            def upload(self,file,remote,progress=None):queue.cancel(a['id']);return 'https://disk.yandex.ru/test'
         worker=Worker(self.q,CONFIG,self.logs.append)
         with patch('worker.Disk',FakeDisk),patch('worker.smtp_connect') as smtp:
             asyncio.run(worker.process_batch(self.q.batch(bid)))
@@ -331,7 +331,7 @@ class TestDispatch(unittest.TestCase):
         class FakeDisk:
             def __init__(self,token):pass
             def remove_generated(self,remote):pass
-            def upload(self,file,remote):return 'https://disk.yandex.ru/test'
+            def upload(self,file,remote,progress=None):return 'https://disk.yandex.ru/test'
         class FakeSMTP:
             def send_message(self,msg):raise TimeoutError()
             def close(self):pass
@@ -346,7 +346,7 @@ class TestDispatch(unittest.TestCase):
         class FakeDisk:
             def __init__(self,token):pass
             def remove_generated(self,remote):pass
-            def upload(self,file,remote):return 'https://disk.yandex.ru/test'
+            def upload(self,file,remote,progress=None):return 'https://disk.yandex.ru/test'
         class FakeSMTP:
             def send_message(self,msg):self.msg=msg;return {}
             def close(self):pass
@@ -360,7 +360,7 @@ class TestDispatch(unittest.TestCase):
             asyncio.run(worker.process_batch(self.q.batch(bid)))
         self.assertEqual(self.q.batch(bid)['state'],'sent')
         asyncio.run(worker.notify());asyncio.run(worker.notify())
-        self.assertEqual(len([m for m in sent if m[0]==11]),1)
+        self.assertEqual(len([m for m in sent if m[0]==11 and m[1].startswith('Заказ отправлен на')]),1)
         self.assertNotIn('https://',next(m[1] for m in sent if m[0]==22))
     def test_telegram_buttons_and_names_only(self):
         try:
@@ -375,12 +375,12 @@ class TestDispatch(unittest.TestCase):
         worker=Worker(self.q,{**CONFIG,'owner_code':'owner','join_code':'staff'},self.logs.append)
         async def check():
             event=Event('/start');await worker.on_message(event)
-            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[r['label'] for r in DIRECTIONS.values()]+['Ручная отправка'])
+            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[icon+' '+r['label'] for icon,r in zip(('🖨','👕','🛠','🖼'),DIRECTIONS.values())]+['Ручная отправка'])
             event=Event(DIRECTIONS['wideformat']['label']);await worker.on_message(event)
             event=Event(BUTTONS[0]);await worker.on_message(event)
             self.assertEqual(event.messages[0][0],self.q.waiting()[0]['name'])
             keyboard=event.messages[0][1]['buttons']
-            self.assertEqual([b.button.text for row in keyboard for b in row],[UPLOAD,*BUTTONS,'Состояние',BACK,'Ручная отправка'])
+            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'📊 Состояние','⬅️ '+BACK,'Ручная отправка'])
             event=Event(BUTTONS[2]);await worker.on_message(event)
             button=event.messages[0][1]['buttons'][0][0]
             self.assertTrue(button.type.data.startswith(b'delete:'))
