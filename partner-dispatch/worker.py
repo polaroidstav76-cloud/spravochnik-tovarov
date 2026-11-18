@@ -442,12 +442,14 @@ class Worker:
         from telethon import TelegramClient,events
         self.loop=asyncio.get_running_loop()
         await asyncio.to_thread(check_dedicated_bot,self.c['bot_token'])
+        if not self.running:return
         # Only a bot token is used. No personal Telegram session or phone login.
         self.client=TelegramClient(str(self.q.root/'telegram-bot'),int(self.c['api_id']),self.c['api_hash'],catch_up=True)
         self.client.add_event_handler(self.on_message,events.NewMessage(incoming=True))
         self.client.add_event_handler(self.on_callback,events.CallbackQuery())
         try:
             await self.client.connect()
+            if not self.running:return
             if not await self.client.is_user_authorized():
                 await self.client.sign_in(bot_token=self.c['bot_token'])
             me=await self.client.get_me()

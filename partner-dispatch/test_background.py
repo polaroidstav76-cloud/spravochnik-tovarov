@@ -33,3 +33,15 @@ class BackgroundTests(unittest.TestCase):
         encoded=base64.b64encode(checker.encode('utf-16le')).decode()
         result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,timeout=30)
         self.assertEqual(result.returncode,0)
+
+    def test_stop_during_initial_connection_cannot_start_bot_later(self):
+        import asyncio,tempfile
+        from unittest.mock import patch
+        from core import Queue
+        from worker import Worker
+        with tempfile.TemporaryDirectory() as folder:
+            queue=Queue(folder);worker=Worker(queue,{'bot_token':'123:test'},lambda x:None)
+            def check(token):worker.stop()
+            with patch('worker.check_dedicated_bot',side_effect=check):asyncio.run(worker.run())
+            self.assertIsNone(worker.client)
+            queue.db.close()
