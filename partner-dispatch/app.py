@@ -12,6 +12,8 @@ import re
 import secrets
 import sys
 import threading
+import time
+from background import show_event,event_requested,configure_task
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +27,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.7'
+VERSION='0.8'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -45,7 +47,8 @@ def singleton():
 
 class App:
     def __init__(self,root):
-        self.root=root;self.mutex=singleton()
+        self.root=root;self.mutex=singleton();self.show_handle=show_event(create=True)
+        self.background_mode='--background' in sys.argv;self.want_running=False;self.reconnect_at=0
         folder=Path(os.environ.get('LOCALAPPDATA',str(BASE/'data')))/'CloudshopPrintDispatch'
         self.settings=Settings(folder)
         self.c=self.settings.load()
@@ -87,6 +90,7 @@ class App:
         toolbar=ttk.Frame(main);toolbar.pack(fill='x')
         ttk.Button(toolbar,text='Запустить бота',command=self.start).pack(side='left',padx=3)
         ttk.Button(toolbar,text='Остановить',command=self.stop).pack(side='left',padx=3)
+        ttk.Button(toolbar,text='Завершить программу',command=self.exit_program).pack(side='left',padx=3)
         ttk.Button(toolbar,text='Подключить сотрудников',command=self.pair).pack(side='left',padx=3)
         ttk.Button(toolbar,text='Открыть папку данных',command=lambda:os.startfile(self.q.root)).pack(side='left',padx=3)
         self.auto=tk.BooleanVar(value=self.q.setting('automatic','0')=='1')
@@ -110,7 +114,7 @@ class App:
         ttk.Button(tools,text='Отправить сейчас (вся очередь)',command=self.send).grid(row=0,column=0,sticky='w',padx=3,pady=2)
         ttk.Button(tools,text='Удалить выбранный файл',command=self.delete).grid(row=0,column=1,sticky='w',padx=3,pady=2)
         ttk.Button(tools,text='Проверить неопределённое письмо',command=self.uncertain).grid(row=1,column=0,sticky='w',padx=3,pady=2)
-        ttk.Button(tools,text='Автозапуск при входе Windows',command=self.autostart).grid(row=1,column=1,sticky='w',padx=3,pady=2)
+        ttk.Button(tools,text='Автозапуск в фоне',command=self.autostart).grid(row=1,column=1,sticky='w',padx=3,pady=2)
         verification=ttk.Frame(main);verification.pack(fill='x',pady=5)
         ttk.Button(verification,text='Тестовое письмо проверено',command=self.confirm_test).pack(side='left',padx=3)
         ttk.Button(verification,text='Отчёт без секретов',command=self.export_report).pack(side='left',padx=3)
@@ -191,7 +195,8 @@ class App:
         notebook.insert(0,self.wizard,text='Первый запуск')
         notebook.select(self.wizard if self.q.setting('first_test_confirmed','0')!='1' else main)
         self.refresh()
-        if '--autostart' in sys.argv:root.after(1200,self.start)
+        if self.background_mode:root.withdraw()
+        if '--autostart' in sys.argv:root.after(1200,lambda:self.start(automatic=True))
 
     def log(self,text):self.messages.put(str(text))
 
@@ -250,9 +255,18 @@ class App:
             except Exception:self.log('Проверка не завершена. Проверьте интернет.')
         threading.Thread(target=check,daemon=True).start()
 
-    def start(self):
+    def start(self,automatic=False):
         if self.thread and self.thread.is_alive():return
-        if not self.save():return
+        self.want_running=True;self.reconnect_at=time.monotonic()+60
+        if automatic:
+            try:self.c=self.config()
+            except UserError as e:self.log('Автозапуск ожидает настройки: '+str(e));return
+        elif not self.save():self.want_running=False;return
+        if self.worker is not None:
+            with self.q.lock,self.q.db:
+                self.q.db.execute("update files set state='queued' where state='downloading'")
+                self.q.db.execute("update batches set state='collecting' where state in ('packing','uploading','ready')")
+                self.q.db.execute("update batches set state='uncertain',error='Соединение прервалось при передаче письма. Проверьте почту перед повтором.' where state='submitting'")
         self.worker=Worker(self.q,dict(self.c),self.log)
         def run():
             try:asyncio.run(self.worker.run())
@@ -262,6 +276,7 @@ class App:
         self.log('Подключаю Telegram…')
 
     def stop(self):
+        self.want_running=False
         if self.worker:self.worker.stop()
 
     def save_schedule(self):
@@ -397,15 +412,23 @@ class App:
 
     def autostart(self):
         if os.name!='nt':return
-        target=Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup/CloudshopPrint.cmd'
-        if target.exists():
-            if messagebox.askyesno('Автозапуск','Отключить автозапуск при входе в Windows?'):target.unlink();self.log('Автозапуск отключён.')
-            return
-        if not messagebox.askyesno('Автозапуск','Запускать обработчик автоматически после входа этого пользователя в Windows?'):return
-        # Arguments contain no credentials.
-        command=f'"{sys.executable}" --autostart' if getattr(sys,'frozen',False) else f'"{Path(sys.executable).with_name("pythonw.exe")}" "{BASE / "app.py"}" --autostart'
-        target.write_text('@echo off\r\nchcp 65001 >nul\r\nstart "" '+command+'\r\n',encoding='utf-8')
-        self.log('Автозапуск включён. Программа запускается после входа в Windows, не до него.')
+        enabled=self.q.setting('background_autostart','0')!='1'
+        prompt='Включить автозапуск бота в фоне после входа этого пользователя в Windows? Окно можно будет закрывать, бот продолжит работать.' if enabled else 'Отключить автоматический запуск бота при входе в Windows? Текущую работу можно остановить отдельной кнопкой.'
+        if not messagebox.askyesno('Автозапуск в фоне',prompt):return
+        if enabled and not (self.thread and self.thread.is_alive()) and not self.save():return
+        args='--background --autostart'
+        exe=sys.executable
+        if not getattr(sys,'frozen',False):
+            exe=str(Path(sys.executable).with_name('pythonw.exe'));args='"'+str(BASE/'app.py')+'" '+args
+        try:configure_task(exe,args,enabled)
+        except UserError as e:messagebox.showerror('Автозапуск',str(e));return
+        self.q.set_setting('background_autostart','1' if enabled else '0')
+        self.background_mode=enabled
+        if enabled:
+            self.start()
+            self.log('Автозапуск в фоне включён. Закрытие окна не останавливает бота. START.cmd открывает управление.')
+            messagebox.showinfo('Готово','Автозапуск включён. Можно закрыть это окно: бот продолжит работать. После входа в Windows он запустится сам. Для управления откройте START.cmd.')
+        else:self.log('Автозапуск отключён.')
 
     def wizard_action(self,action):
         if action.startswith('url:'):webbrowser.open(action[4:]);return
@@ -498,6 +521,9 @@ class App:
 
     def refresh(self):
         if not self.root.winfo_exists():return
+        if event_requested(self.show_handle):
+            self.root.deiconify();self.root.lift();self.root.focus_force()
+        if self.want_running and (not self.thread or not self.thread.is_alive()) and time.monotonic()>=self.reconnect_at:self.start(automatic=True)
         while True:
             try:text=self.messages.get_nowait()
             except threadqueue.Empty:break
@@ -546,6 +572,11 @@ class App:
         self.root.after(1500,self.refresh)
 
     def close(self):
+        if self.background_mode:
+            self.root.withdraw();return
+        self.exit_program()
+
+    def exit_program(self):
         if self.thread and self.thread.is_alive():
             if not messagebox.askyesno('Остановить обработчик','При закрытии получение файлов и отправка остановятся. Закрыть программу?'):return
         self.stop();self.root.destroy()
@@ -566,6 +597,13 @@ def self_test(report_path):
                 assert protect(protect(b'Windows encryption test'),decrypt=True)==b'Windows encryption test'
                 root=tk.Tk();root.withdraw();instance=App(root);root.update_idletasks()
                 assert instance.q.setting('automatic','0')=='0'
+                instance.background_mode=True;instance.close();assert root.state()=='withdrawn'
+                assert show_event();assert event_requested(instance.show_handle)
+                instance.background_mode=False
+                from background import task_script
+                ps=task_script('C:/Print/CloudshopPrint.exe','--background --autostart')
+                assert '-LogonType Interactive' in ps and '-RestartCount 999' in ps
+                assert not instance.want_running
                 assert len(instance.dispatch_days)==7
                 assert instance.history_table.winfo_exists()
                 assert instance.alert_branch.get()==''
@@ -610,12 +648,16 @@ if __name__=='__main__':
         try:report_path=sys.argv[sys.argv.index('--report')+1]
         except (ValueError,IndexError):sys.exit(2)
         sys.exit(self_test(report_path))
+    if '--receiver' not in sys.argv and '--self-test' not in sys.argv:
+        if '--background' not in sys.argv and show_event():sys.exit(0)
     root=tk.Tk()
+    if '--background' in sys.argv:root.withdraw()
     try:
         if '--receiver' in sys.argv:
             from receiver import ReceiverApp
             app=ReceiverApp(root)
         else:app=App(root)
     except Exception as e:
+        if '--background' in sys.argv:root.destroy();sys.exit(0 if isinstance(e,UserError) and 'уже запущена' in str(e) else 1)
         messagebox.showerror('Запуск',str(e) if isinstance(e,UserError) else 'Не удалось открыть локальные настройки.');root.destroy();sys.exit(1)
     root.mainloop()
