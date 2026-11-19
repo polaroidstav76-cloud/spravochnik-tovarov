@@ -14,7 +14,7 @@ vm.runInContext(fs.readFileSync('purchase-rounds.js','utf8'),ctx);
  assert(calls.some(c=>c.name==='purchase_free_request_add'&&c.args.p_name==='Товар которого нет'&&c.args.p_qty===null));
  document.querySelector('[data-pick]').onclick();await document.getElementById('prAdd').onclick();
  assert(calls.some(c=>c.name==='purchase_request_add'&&c.args.p_item_id===10));
- document.getElementById('prFreeName').value='Ручное название';await document.getElementById('prAdd').onclick();
+ document.getElementById('prSearch').value='Ручное название';document.getElementById('prSearch').oninput();await document.getElementById('prAdd').onclick();
  assert(calls.some(c=>c.name==='purchase_free_request_add'&&c.args.p_name==='Ручное название'));
  // Receipt input is retained without selecting any dropdown option, including after rerender.
  let combo;ctx.stk={opKind:'receipt',opRows:[{m:'',q:'3',p:'75'}]};

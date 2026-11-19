@@ -2,6 +2,7 @@
 (() => {
   let items=[], requests=[], draft={selected:{},manual:[],notes:''}, key='', busy=false;
   const code=q=>q.supplier_code||q.code||'';
+  const searchKey=value=>String(value??'').toLowerCase().replace(/ё/g,'е').replace(/(\d)\s*[xх×]\s*(?=\d)/g,'$1x').replace(/[^a-zа-я0-9]+/g,' ').trim();
   const archived=q=>q.status==='bought'&&Number.isFinite(Date.parse(q.closed_at))&&Date.now()-Date.parse(q.closed_at)>=14*24*60*60*1000;
   const remaining=q=>q.qty==null?null:Math.max(0,Number(q.qty)-Number(q.ordered_qty||0));
   const save=()=>localStorage.setItem(key,JSON.stringify(draft));
@@ -17,10 +18,10 @@
     if(next!==key){key=next;try{draft=JSON.parse(localStorage.getItem(key))||{selected:{},manual:[],notes:''}}catch{draft={selected:{},manual:[],notes:''}}}
     $('stockBody').innerHTML='<div class="status">Загрузка закупки…</div>';
     const [a,b]=await Promise.all([db.from('purchase_catalog').select('*').order('id'),db.rpc('stock_purchase_live')]);
-    if(a.error||b.error){$('stockBody').textContent='Ошибка загрузки: '+(a.error||b.error).message;return}
+    if(a.error||b.error){$('stockBody').textContent='Ошибка загрузки: '+(a.error||b.error).message;return false}
     items=a.data||[];requests=b.data.requests||[];stk.buy=b.data;stkDrawBadge();
     if(!draft.submitted){for(const id of Object.keys(draft.selected))if(!requests.some(q=>Number(q.id)===Number(id)))delete draft.selected[id];save();}
-    draw();
+    draw();return true;
   };
   // Лексическое имя основной страницы также меняем: обработчик вкладок использует его напрямую.
   stkDrawBuy=window.stkDrawBuy;
@@ -30,7 +31,7 @@
     const bought=requests.filter(archived);
     const visible=[...pending,...requests.filter(q=>q.status==='bought'&&!archived(q))];
     $('stockBody').innerHTML=`<h3>Закупка</h3><div class="stk-sub">Выберите товар из каталога магазина или впишите своё название. Количество — в штуках или упаковках, как указано в названии.</div>
-      ${stkCanWork()?`<div class="block"><label for="prSearch">Найти по коду или названию</label><input id="prSearch" placeholder="Выберите из списка или впишите любой товар"><div id="prCatalog" style="max-height:260px;overflow:auto"></div><div id="prPicked" class="status"></div><div class="row"><div class="field"><label for="prFreeName">Или впишите любой товар вручную</label><input id="prFreeName" maxlength="250" placeholder="Если товара нет в каталоге"></div><div class="field"><label for="prFreeCode">Код (необязательно)</label><input id="prFreeCode" maxlength="50"></div></div><div class="row"><div class="field"><label>Количество (необязательно)</label><input id="prQty" type="number" min="0.001" step="0.001" placeholder="Решает администратор"></div><div class="field"><label>Филиал</label><select id="prBranch">${options()}</select></div><div class="field"><label>Срочность</label><select id="prUrgent"><option value="false">Обычная</option><option value="true">Срочно</option></select></div><div class="field"><label>Комментарий</label><input id="prComment" maxlength="500"></div></div><button id="prAdd" class="primary">Добавить заявку</button></div>`:'<div class="status">Откройте смену, чтобы добавить заявку.</div>'}
+      ${stkCanWork()?`<div class="block"><label for="prSearch">Наименование товара</label><input id="prSearch" maxlength="250" autocomplete="off" placeholder="Например: 21х30 мат"><div class="stk-sub">Начните вводить название и выберите товар из списка. Если его нет — оставьте своё название в этой же строке.</div><div id="prCatalog" style="max-height:260px;overflow:auto"></div><div id="prPicked" class="status" aria-live="polite"></div><div class="row"><div class="field"><label>Количество (необязательно)</label><input id="prQty" type="number" min="0.001" step="0.001" placeholder="Решает администратор"></div><div class="field"><label>Филиал</label>${isAdmin?`<select id="prBranch">${options()}</select>`:`<div id="prAutoBranch" class="status">${esc(stkBranchName(stkMyBranch()))} · из открытой смены</div>`}</div><div class="field"><label>Срочность</label><select id="prUrgent"><option value="false">Обычная</option><option value="true">Срочно</option></select></div><div class="field"><label>Комментарий</label><input id="prComment" maxlength="500"></div></div><button id="prAdd" class="primary">Добавить заявку</button></div>`:'<div class="status">Откройте смену, чтобы добавить заявку.</div>'}
       ${isAdmin?`<details class="block"><summary>Изменить или добавить товары магазина</summary><div class="row"><input id="prItemCode" placeholder="Код"><input id="prItemName" placeholder="Наименование" maxlength="250"></div><input id="prItemId" type="hidden"><button id="prItemSave" class="secondary">Сохранить товар</button><button id="prItemReset">Новый товар</button><div id="prItemStatus" class="status"></div><div style="max-height:220px;overflow:auto">${items.map(i=>`<div style="margin:6px 0"><button data-edit-item="${i.id}" class="small">Изменить</button> ${esc(i.code)} — ${esc(i.name)}${i.active?'':' (скрыт)'}</div>`).join('')}</div><label><input id="prItemActive" type="checkbox" checked style="width:auto"> Доступен сотрудникам</label></details>`:''}
       <div id="prStatus" class="status" role="status"></div><div style="overflow:auto"><table class="customer-table stk-table"><thead><tr>${isAdmin?'<th>Заказать</th>':''}<th>Код / товар</th><th>Куда</th><th>Количество в заявке</th><th>Срочность</th><th>Действия</th></tr></thead><tbody>${visible.map(q=>`<tr style="${q.status==='bought'?'background:#f0fdf4':''}">${isAdmin?`<td><input type="checkbox" data-order="${q.id}" aria-label="Заказать ${esc(q.name)}" ${q.status==='bought'||draft.selected[q.id]?'checked':''} ${locked||q.status==='bought'?'disabled':''} style="width:20px;height:20px">${draft.selected[q.id]?`<div>${esc(draft.selected[q.id])} шт <button class="small" data-quantity="${q.id}" ${locked?'disabled':''}>Изменить</button></div>`:''}</td>`:''}<td><b>${esc(code(q)||'Без кода')}</b> — ${esc(q.name)}<div class="status">${esc(q.person_name||'')}${q.comment?' · '+esc(q.comment):''}</div></td><td>${esc(q.branch_name||stkBranchName(q.branch_id))}</td><td>${q.status==='bought'?'✅ Куплено':remaining(q)??'решает администратор'}${Number(q.ordered_qty)>0?`<div class="status">Заказано ранее: ${esc(q.ordered_qty)}</div>`:''}</td><td>${q.urgent?'🔴 Срочно':'Обычная'}</td><td><button class="danger small" data-delete-request="${q.id}" ${locked?'disabled':''}>Удалить</button></td></tr>`).join('')||`<tr><td colspan="${isAdmin?6:5}">Заявок в общем списке нет.</td></tr>`}</tbody></table></div>
       ${isAdmin?`<div class="block" style="margin-top:16px"><h3>Текущая закупка и развозка</h3><button id="prManualAdd" ${locked?'disabled':''}>＋ Дописать товар вручную</button><div id="prManual">${draft.manual.map((m,i)=>`<div class="row" data-manual="${i}" style="margin-top:10px"><input data-f="code" placeholder="Код" value="${esc(m.code)}" ${locked?'disabled':''}><input data-f="name" placeholder="Наименование" value="${esc(m.name)}" maxlength="250" ${locked?'disabled':''}><input data-f="qty" type="number" min="0.001" step="0.001" value="${esc(m.qty)}" ${locked?'disabled':''}><select data-f="branch_id" ${locked?'disabled':''}>${options()}</select><button data-remove="${i}" ${locked?'disabled':''}>Убрать</button></div>`).join('')}</div><label>Дополнительные записи к списку</label><textarea id="prNotes" maxlength="3000" ${locked?'disabled':''}>${esc(draft.notes)}</textarea><button id="prPreview" class="secondary">Проверить итоговый список</button><button id="prFinish" class="primary">${locked?'Повторить сохранение закупки':'Закупка окончена'}</button><div id="prPreviewText" style="white-space:pre-wrap;margin-top:10px"></div><div class="status">Укажите фактически заказанное количество. Неполностью закупленные заявки останутся сверху. Остатки склада оформляются отдельно.</div></div><details><summary>Последние завершённые закупки</summary><div id="prHistory"></div></details>`:''}
@@ -47,21 +48,44 @@
         delete draft.selected[id];save();await stkDrawBuy();status(r.data?'Позиция удалена из закупки.':'Позиция уже удалена. Список обновлён.');
       }catch(e){el.disabled=false;status('Не удалось удалить: '+e.message);}
     });
-    let picked=null;
+    let picked=null,adding=false;
+    const openedActor=stkActor(),openedBranch=stkMyBranch();
     const catalog=()=>{
-      const q=$('prSearch').value.toLowerCase().trim();
-      $('prCatalog').innerHTML=items.filter(i=>i.active&&(!q||(i.code+' '+i.name).toLowerCase().includes(q))).map(i=>`<button data-pick="${i.id}" class="secondary small" style="display:block;text-align:left;width:100%;margin:4px 0">${esc(i.code)} — ${esc(i.name)}</button>`).join('')||'Товара нет в каталоге. Нажмите «Добавить заявку», чтобы сохранить введённое название.';
-      $('prCatalog').querySelectorAll('[data-pick]').forEach(el=>el.onclick=()=>{picked=items.find(i=>i.id===Number(el.dataset.pick));$('prFreeName').value='';$('prFreeCode').value='';$('prPicked').textContent='Выбрано: '+picked.code+' — '+picked.name});
+      const words=searchKey($('prSearch').value).split(' ').filter(Boolean);
+      const matches=items.filter(i=>i.active&&words.every(word=>searchKey(i.code+' '+i.name).includes(word)));
+      $('prCatalog').innerHTML=matches.map(i=>`<button data-pick="${i.id}" class="secondary small" style="display:block;text-align:left;width:100%;margin:4px 0">${esc(i.name)}${isAdmin?` · ${esc(i.code)}`:''}</button>`).join('')||'<div class="status">Товара нет в каталоге. Название уже введено — нажмите «Добавить заявку».</div>';
+      $('prCatalog').querySelectorAll('[data-pick]').forEach(el=>el.onclick=()=>{
+        picked=items.find(i=>Number(i.id)===Number(el.dataset.pick));
+        $('prSearch').value=picked.name;$('prPicked').textContent='Выбран товар из каталога: '+picked.name;
+        catalog();
+      });
     };
-    if($('prSearch')){catalog();$('prSearch').oninput=()=>{picked=null;$('prPicked').textContent='';catalog()};$('prBranch').value=String(stkMyBranch()||stkBranches()[0]?.id||'')}
+    if($('prSearch')){
+      catalog();$('prSearch').oninput=()=>{picked=null;$('prPicked').textContent='';catalog()};
+      if($('prBranch'))$('prBranch').value=String(stkMyBranch()||stkBranches()[0]?.id||'');
+    }
     bind('prAdd','onclick',async()=>{
-      const freeName=$('prFreeName').value.trim()||(!picked?$('prSearch').value.trim():'');
-      if(!picked&&!freeName){status('Выберите товар из списка или впишите название вручную.');return}
-      const rawQty=$('prQty').value.trim(),qty=rawQty===''?null:Number(rawQty);if(qty!==null&&!(qty>0)){status('Укажите количество больше нуля.');return}
-      $('prAdd').disabled=true;
-      const common={...stkActor(),p_branch_id:Number($('prBranch').value),p_qty:qty,p_urgent:$('prUrgent').value==='true',p_comment:$('prComment').value||null};
-      const r=freeName?await db.rpc('purchase_free_request_add',{...common,p_name:freeName,p_code:$('prFreeCode').value.trim()||null}):await db.rpc('purchase_request_add',{...common,p_item_id:picked.id});
-      if(r.error){$('prAdd').disabled=false;status(r.error.message);return}await stkDrawBuy();
+      if(adding)return;
+      const name=$('prSearch').value.trim();
+      if(!name){status('Введите наименование товара.');$('prSearch').focus();return}
+      const actor=stkActor(),branch=isAdmin?Number($('prBranch').value):Number(stkMyBranch());
+      if(!branch||(!isAdmin&&(!actor.p_shift_id||actor.p_shift_id!==openedActor.p_shift_id||branch!==Number(openedBranch)))){status('Смена изменилась или закрыта. Откройте закупку заново, чтобы выбрать правильный филиал.');return}
+      const exact=items.filter(i=>i.active&&searchKey(i.name)===searchKey(name));
+      const item=picked&&picked.name===name?picked:exact.length===1?exact[0]:null;
+      const rawQty=$('prQty').value.trim(),qty=rawQty===''?null:Number(rawQty);
+      if(qty!==null&&(!Number.isFinite(qty)||qty<=0)){status('Укажите количество больше нуля.');return}
+      adding=true;$('prAdd').disabled=true;$('prAdd').textContent='Добавляю…';status('Сохраняю заявку…');
+      try{
+        const common={...actor,p_branch_id:branch,p_qty:qty,p_urgent:$('prUrgent').value==='true',p_comment:$('prComment').value||null};
+        const r=item?await db.rpc('purchase_request_add',{...common,p_item_id:item.id}):await db.rpc('purchase_free_request_add',{...common,p_name:name,p_code:null});
+        if(r.error)throw new Error(r.error.message);
+        const text='✅ Заявка «'+(item?.name||name)+'» добавлена. Филиал: '+stkBranchName(branch)+'.';
+        try{await stkDrawBuy();}catch{}
+        const banner=document.createElement('div');banner.setAttribute('role','status');banner.id='prAdded';banner.style.cssText='padding:14px;margin:12px 0;border:1px solid #86b89a;border-radius:10px;background:#eaf8ee;color:#14532d;font-weight:600';banner.textContent=text;
+        const anchor=$('prAdd');if(anchor)anchor.insertAdjacentElement('afterend',banner);else $('stockBody').prepend(banner);
+        if(typeof v5Toast==='function')v5Toast(text);$('prSearch')?.focus();
+      }catch(e){status('Заявка не добавлена: '+e.message);if($('prAdd')){$('prAdd').disabled=false;$('prAdd').textContent='Добавить заявку';}}
+      finally{adding=false;}
     });
     document.querySelectorAll('[data-edit-item]').forEach(el=>el.onclick=()=>{const i=items.find(i=>i.id===Number(el.dataset.editItem));$('prItemId').value=i.id;$('prItemCode').value=i.code;$('prItemName').value=i.name;$('prItemActive').checked=i.active});
     bind('prItemReset','onclick',()=>{$('prItemId').value='';$('prItemCode').value='';$('prItemName').value='';$('prItemActive').checked=true});
