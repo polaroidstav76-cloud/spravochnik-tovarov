@@ -10,6 +10,6 @@ vm.createContext(ctx);vm.runInContext(code,ctx);
  assert.equal(calls.length,0);
  const req=new Request('https://example.com',{method:'POST',headers:{'x-device-token':'a'.repeat(64)},body:JSON.stringify({action:'report',payload:{boot_at:'2026-11-17T07:00:00Z'}})});
  const response=await handler(req);assert.equal(response.status,200);assert.equal(calls[0][0],'attendance_device_api');assert.equal(calls[0][1].p_token,'a'.repeat(64));
- assert.equal((await handler(new Request('https://example.com',{method:'POST',body:'a'.repeat(4097)}))).status,413);
+ assert.equal((await handler(new Request('https://example.com',{method:'POST',body:'a'.repeat(24577)}))).status,413);
  console.log('PASS attendance Edge API: method, size, action and token checks; authenticated device RPC only');
 })().catch(e=>{console.error(e);process.exitCode=1;});

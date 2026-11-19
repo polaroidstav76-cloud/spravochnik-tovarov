@@ -9,7 +9,7 @@ async function harness(role='admin'){
  switch(args.p_action){case 'settings':data={branches:[{id:5,name:'<img src=x>',enabled:true,opening:'10:00:00',closing:'20:00:00',monitor_from:'2026-11-17'}],devices:[]};break;
  case 'pair':data={code:'a'.repeat(32)};break;
  case 'exclude':excluded=args.p_payload.excluded;data={saved:true};break;
- case 'report':data={days:[{branch_id:5,branch:'<img src=x>',day:'2026-11-17',person_id:2,person:'<script>x</script>',opening:'10:00:00',boot_at:'2026-11-17T07:15:00Z',minutes_late:15,counted:!excluded,excluded,note:excluded?'Ремонт':'',schedule_status:'scheduled'},
+ case 'report':data={days:[{branch_id:5,branch:'<img src=x>',day:'2026-11-17',person_id:2,person:'<script>x</script>',opening:'10:00:00',boot_at:'2026-11-17T07:15:00Z',minutes_late:15,counted:!excluded,excluded,note:excluded?'Ремонт':'',schedule_status:'scheduled',shutdown_at:'2026-11-17T17:05:00Z',power_events:[{kind:'shutdown',at:'2026-11-17T17:05:00Z',source:'test'}]},
  {branch_id:6,branch:'Branch 2',day:'2026-11-17',person_id:3,person:'Helper',opening:'10:00:00',boot_at:null,counted:false,schedule_status:'scheduled',continuous:true}],delivery_errors:0};break;
  default:data={saved:true};}
  return {data};}}};vm.createContext(ctx);vm.runInContext(source,ctx);return {document,ctx,calls,intervals};
@@ -17,7 +17,7 @@ async function harness(role='admin'){
 (async()=>{
  const staff=await harness('staff');assert(staff.document.getElementById('attendanceMonitorBtn').hidden);await staff.document.getElementById('attendanceMonitorBtn').onclick();assert.equal(staff.calls.length,0);
  const h=await harness();assert(!h.document.getElementById('attendanceMonitorBtn').hidden);await h.document.getElementById('attendanceMonitorBtn').onclick();assert(h.document.getElementById('attendanceModal').classList.contains('show'));
- assert.equal(h.document.querySelector('img'),null);assert.equal(h.document.querySelector('script'),null);assert(h.document.getElementById('amSummary').textContent.includes('15'));assert(!h.document.getElementById('amSummary').textContent.includes('Helper'));
+ assert(h.document.getElementById('amDays').textContent.includes('Завершение работы Windows'));assert(!h.document.getElementById('amDays').textContent.includes('Не выключался'));assert.equal(h.document.querySelector('img'),null);assert.equal(h.document.querySelector('script'),null);assert(h.document.getElementById('amSummary').textContent.includes('15'));assert(!h.document.getElementById('amSummary').textContent.includes('Helper'));
  await h.document.querySelector('[data-pair]').onclick();await h.document.getElementById('amCopy').onclick();assert.equal(h.ctx.copied,'a'.repeat(32));
  await h.document.querySelector('[data-am-exclude]').onclick();assert(h.calls.some(x=>x.p_action==='exclude'&&x.p_payload.excluded));assert(h.document.getElementById('amSummary').textContent.includes('нет дней'));
  h.ctx.staffAccount={user_id:'two',role:'staff'};h.intervals[0]();assert(h.document.getElementById('attendanceMonitorBtn').hidden);assert.equal(h.document.getElementById('amPair').textContent,'');assert(!h.document.getElementById('attendanceModal').classList.contains('show'));

@@ -6,12 +6,23 @@ foreach($name in @('Install.ps1','Agent.ps1')){
  $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)
  if($errors.Count){throw ($errors|Out-String)}
  if($name -eq 'Agent.ps1'){
-  $bootFunction=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-BootTime'},$true)
-  Invoke-Expression $bootFunction.Extent.Text
+  foreach($functionName in @('Convert-PowerEvent','Get-PowerEvents','Get-BootTime','Event-Key','Write-State')){
+   $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $functionName},$true)
+   if(-not $definition){throw ('Missing function: '+$functionName)}
+   Invoke-Expression $definition.Extent.Text
+  }
   $time=[DateTimeOffset]::Parse((Get-BootTime))
   if($time -gt [DateTimeOffset]::UtcNow.AddMinutes(2) -or $time -lt [DateTimeOffset]'2000-01-01'){throw 'Invalid boot time'}
-  $writeState=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Write-State'},$true)
-  Invoke-Expression $writeState.Extent.Text
+  $old=[PSCustomObject]@{kind='boot';at='2026-11-18T06:44:00Z'}
+  $resume=[PSCustomObject]@{kind='resume';at='2026-11-19T06:48:00Z'}
+  if((Get-BootTime @($old,$resume)) -ne $resume.at){throw 'Cached boot not replaced by new resume'}
+  $shutdown=Convert-PowerEvent ([PSCustomObject]@{ProviderName='Microsoft-Windows-Kernel-General';Id=13;TimeCreated=[datetime]'2026-11-18T17:03:00Z';RecordId=100})
+  if($shutdown.kind -ne 'shutdown' -or -not $shutdown.at.StartsWith('2026-11-18T17:03:00')){throw 'Shutdown event lost'}
+  $sleep=Convert-PowerEvent ([PSCustomObject]@{ProviderName='Microsoft-Windows-Kernel-Power';Id=42;TimeCreated=[datetime]'2026-11-18T17:04:00Z';RecordId=101})
+  if($sleep.kind -ne 'suspend'){throw 'Hibernate/sleep event lost'}
+  $unexpected=Convert-PowerEvent ([PSCustomObject]@{ProviderName='Microsoft-Windows-Kernel-Power';Id=41;TimeCreated=[datetime]'2026-11-19T06:48:00Z';RecordId=102})
+  if($unexpected.kind -ne 'unexpected_restart'){throw 'Power loss incorrectly labeled shutdown'}
+
  }
 }
 # Machine-bound protected credentials survive a separate powershell process running as the same machine.
@@ -43,4 +54,4 @@ $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatter
 $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest -LogonType ServiceAccount
 $task=New-ScheduledTask -Action $action -Trigger @($trigger,$login,$repeat) -Settings $settings -Principal $principal
 if(-not $task){throw 'Scheduled task definition failed'}
-Write-Host 'PASS: Windows PowerShell syntax, actual Windows boot timestamp, DPAPI, durable offline queue and SYSTEM task definition'
+Write-Host 'PASS: Windows PowerShell syntax, fresh boot/resume, shutdown and hibernation events, actual Windows boot timestamp, DPAPI, durable offline queue and SYSTEM task definition'

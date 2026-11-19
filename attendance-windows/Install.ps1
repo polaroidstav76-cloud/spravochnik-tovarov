@@ -20,13 +20,18 @@ try{
  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
  $endpoint='https://tmxluzvymwldtxbaiekn.supabase.co/functions/v1/attendance-device'
  Write-Host 'КЛАУДШОП - УЧЁТ ВКЛЮЧЕНИЙ КОМПЬЮТЕРА'
- Write-Host 'В админке откройте «Приход сотрудников», сохраните настройки филиала и получите код.'
+ Write-Host 'В админке откройте «Включения и опоздания», сохраните настройки филиала и получите код.'
+ if(Test-Path (Join-Path $installRoot 'device.bin')){
+  $response=[PSCustomObject]@{result=[PSCustomObject]@{branch='прежнее подключение сохранено';token=$null}}
+  Write-Host 'Обновляю программу. Повторный код подключения не нужен.'
+ }else{
  $pairCode=(Read-Host 'Вставьте код подключения (32 символа)').Trim().ToLowerInvariant()
  if($pairCode -notmatch '^[a-f0-9]{32}$'){throw 'Неверный формат кода. Скопируйте код целиком.'}
  # The one-time code is consumed only after the server verifies that this branch has no active device.
  $body=@{action='pair';payload=@{code=$pairCode;label=$env:COMPUTERNAME}}|ConvertTo-Json -Compress
  $response=Invoke-RestMethod -Uri $endpoint -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 30
  if(-not $response.result.token){throw 'Сервер не подтвердил подключение.'}
+ }
  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
  New-Item -ItemType Directory -Path $installRoot -Force|Out-Null
  # Protect both machine-bound DPAPI credentials and state from ordinary Windows accounts.
@@ -34,12 +39,12 @@ try{
  if($LASTEXITCODE -ne 0){throw 'Не удалось защитить папку настроек.'}
  Copy-Item (Join-Path $PSScriptRoot 'Agent.ps1') (Join-Path $installRoot 'Agent.ps1') -Force
  Add-Type -AssemblyName System.Security
- $protected=[Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($response.result.token),$null,[Security.Cryptography.DataProtectionScope]::LocalMachine)
- [IO.File]::WriteAllBytes((Join-Path $installRoot 'device.bin'),$protected)
+ if($response.result.token){$protected=[Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($response.result.token),$null,[Security.Cryptography.DataProtectionScope]::LocalMachine)}
+ if($response.result.token){[IO.File]::WriteAllBytes((Join-Path $installRoot 'device.bin'),$protected)}
  $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+(Join-Path $installRoot 'Agent.ps1')+'"')
  $trigger=New-ScheduledTaskTrigger -AtStartup
  $login=New-ScheduledTaskTrigger -AtLogOn
- $repeat=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+ $repeat=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
  $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigger,$login,$repeat) -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force|Out-Null
  Start-ScheduledTask -TaskName $taskName
