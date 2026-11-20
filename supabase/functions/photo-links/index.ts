@@ -15,7 +15,7 @@ async function disk(token:string,path:string,params:Record<string,string>={},met
  if(method==='PUT'&&path==='/resources'&&r.status===409)return {};
  if(!r.ok){await r.body?.cancel();if(r.status===404)throw new Problem('Файл ещё не найден на Диске. Повторите загрузку.',404);throw new Problem(r.status===401?'Доступ к Яндекс Диску истёк. Сообщите сотруднику фотоцентра.':r.status===507?'На Диске закончилось место. Сообщите сотруднику фотоцентра.':'Не удалось выполнить операцию на Яндекс Диске. Повторите чуть позже.',r.status===401?503:502)}
  if(r.status===204)return {};
- return await r.json();
+ const text=await r.text();return text?JSON.parse(text):{};
 }
 function trustedHref(value:unknown):string{
  try{const u=new URL(String(value));if(u.protocol==='https:'&&['yandex.net','yandex.ru','yandex.com','yadi.sk'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d)))return u.href;}catch{}
@@ -32,7 +32,41 @@ async function writeText(token:string,path:string,text:string){
  let r:Response;try{r=await fetch(trustedHref(slot.href),{method:'PUT',body:new TextEncoder().encode(text),signal:AbortSignal.timeout(25000)});}catch{throw new Problem('Не удалось сохранить комментарий. Повторите завершение загрузки.',503)}
  if(!r.ok){await r.body?.cancel();throw new Problem('Не удалось сохранить комментарий. Повторите завершение загрузки.',502)}
 }
-const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download']);
+async function operation(token:string,result:any){
+ if(!result.href||!String(result.href).includes('/operations/'))return;
+ const href=trustedHref(result.href);const u=new URL(href);if(u.hostname!=='cloud-api.yandex.net')throw new Problem('Некорректный адрес операции Диска',502);
+ for(let i=0;i<35;i++){
+  let r;try{r=await fetch(href,{headers:{Authorization:'OAuth '+token},signal:AbortSignal.timeout(10000)});}catch{throw new Problem('Диск ещё сохраняет JPG. Повторите сохранение.',503);}
+  if(!r.ok)throw new Problem('Не удалось проверить сохранение JPG. Повторите.',503);
+  const value=await r.json();if(value.status==='success')return;if(value.status==='failed')throw new Problem('Диск не сохранил JPG. Повторите.',502);
+  await new Promise(resolve=>setTimeout(resolve,600));
+ }
+ throw new Problem('Диск ещё сохраняет JPG. Подождите немного и повторите.',503);
+}
+function jpegHeader(bytes:Uint8Array){
+ if(bytes[0]!==255||bytes[1]!==216)throw new Problem('Ожидался файл JPG');
+ let pos=2,width=0,height=0,dpi=false;
+ while(pos+4<bytes.length&&bytes[pos]===255){
+  const marker=bytes[pos+1],length=(bytes[pos+2]<<8)|bytes[pos+3];if(marker===0xda||marker===0xd9)break;if(length<2||pos+length+2>bytes.length)break;
+  if(marker===0xe0&&length>=16&&bytes[pos+4]===74&&bytes[pos+5]===70&&bytes[pos+6]===73&&bytes[pos+7]===70&&bytes[pos+11]===1)dpi=((bytes[pos+12]<<8)|bytes[pos+13])===300&&((bytes[pos+14]<<8)|bytes[pos+15])===300;
+  if([0xc0,0xc1,0xc2].includes(marker)){height=(bytes[pos+5]<<8)|bytes[pos+6];width=(bytes[pos+7]<<8)|bytes[pos+8];}
+  pos+=length+2;
+ }
+ return {width,height,dpi};
+}
+async function verifyJpeg(token:string,render:any){
+ const meta=await disk(token,'/resources',{path:render.path,fields:'size,type'});
+ if(meta.type!=='file'||Number(meta.size)!==Number(render.size))throw new Problem('JPG загрузился не полностью. Повторите сохранение.');
+ const download=await disk(token,'/resources/download',{path:render.path});
+ const response=await fetch(trustedHref(download.href),{headers:{Range:'bytes=0-262143'},signal:AbortSignal.timeout(20000)});
+ if(!response.ok||!response.body)throw new Problem('Не удалось проверить JPG. Повторите сохранение.',503);
+ const reader=response.body.getReader(),chunks:Uint8Array[]=[];let total=0;
+ try{while(total<262144){const next=await reader.read();if(next.done)break;const chunk=next.value.slice(0,262144-total);chunks.push(chunk);total+=chunk.length;}}finally{await reader.cancel();}
+ const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+ const header=jpegHeader(bytes);if(!header.dpi||header.width!==render.width||header.height!==render.height)throw new Problem('JPG должен соответствовать выбранному размеру и иметь 300 dpi');
+}
+
+const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download','crop_enable','crop_draft','crop_source','crop_reserve','crop_complete','crop_clear']);
 const staffActions=new Set(['list','configure']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
@@ -71,13 +105,42 @@ Deno.serve(async(req:Request)=>{
    }
    return reply(await rpc('create',data,actor));
   }
-  if(['manifest','mode','reopen','group'].includes(action)){
+  if(['manifest','mode','reopen','group','crop_enable','crop_draft'].includes(action)){
    const result=await rpc(action,data);
    if(action==='manifest')result.configured=!!(await rpc('secret')).token;
    return reply(result);
   }
   const secret=await rpc('secret');if(!secret.token)throw new Problem('Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',503);
   const token=secret.token;
+  if(action==='crop_source'){
+   const f=await rpc('crop_source',data),download=await disk(token,'/resources/download',{path:f.path});return reply({href:trustedHref(download.href)});
+  }
+  if(action==='crop_reserve'){
+   if(!Number.isSafeInteger(data.size)||data.size<=0||data.size>=60000000)throw new Problem('JPG слишком большой');
+   const render=await rpc('crop_reserve',data);if(render.status==='ready')return reply({ready:true});
+   await folders(token,render.path.slice(0,render.path.lastIndexOf('/')));
+   const slot=await disk(token,'/resources/upload',{path:render.path,overwrite:'true'});return reply({href:trustedHref(slot.href)});
+  }
+  if(action==='crop_complete'){
+   const render=await rpc('crop_render',data);
+   if(render.status==='ready'&&render.current_render_id===render.id)return reply({ok:true});
+   await verifyJpeg(token,render);await rpc('crop_publish',data);
+   await folders(token,render.target.slice(0,render.target.lastIndexOf('/')));
+   await operation(token,await disk(token,'/resources/copy',{from:render.path,path:render.target,overwrite:'true'},'POST'));
+   const target=await disk(token,'/resources',{path:render.target,fields:'size,type'});if(Number(target.size)!==Number(render.size))throw new Problem('Диск ещё готовит JPG. Повторите сохранение.',503);
+   return reply(await rpc('crop_commit',data));
+  }
+  if(action==='crop_clear'){
+   const active=await rpc('crop_clear_begin',data);
+   if(active.target){
+    const order=await rpc('internal',data),path='disk:/Cloudshop-Client-Crops/'+order.id;
+    await folders(token,path);
+    try{await operation(token,await disk(token,'/resources/move',{from:active.target,path:path+'/removed_'+String(data.operation_id)+'.jpg',overwrite:'true'},'POST'));}
+    catch(e){if(!(e instanceof Problem)||e.status!==404)throw e;}
+   }
+   return reply(await rpc('crop_clear',data));
+  }
+
   if(action==='reserve'){
    if(!/\.(jpe?g|png|heic|heif|tiff?|webp|avif|bmp|dng|cr2|nef|arw)$/i.test(String(data.name||'')))throw new Problem('Выберите оригиналы фотографий: JPG, PNG, HEIC, TIFF, WEBP или RAW');
    if(!Number.isSafeInteger(data.size)||data.size<=0||data.size>536870912)throw new Problem('Размер одного фото — до 512 МБ');
@@ -103,7 +166,8 @@ Deno.serve(async(req:Request)=>{
    if(meta.type!=='file'||Number(meta.size)!==Number(f.size))throw new Problem('Файл загрузился не полностью. Нажмите «Повторить».');
    await rpc('complete_file',data);return reply({ok:true});
   }
-  const order=await rpc('internal',data),root='disk:/Cloudshop-Client-Photos/'+order.id;
+  const order=await rpc('internal',data);let root='disk:/Cloudshop-Client-Photos/'+order.id;
+  if(action==='download'&&data.variant==='print'){const ready=await rpc('crop_download_check',data);if(!ready.count)throw new Problem('Кадрированные JPG ещё не сохранены');root='disk:/Cloudshop-Client-Ready/'+order.id;}
   if(action==='finish'){
    const m=await rpc('manifest',data);
    if(!m.files.some((x:any)=>x.status==='ready')||m.files.some((x:any)=>x.status==='pending'))throw new Problem('Дождитесь загрузки всех фото или исключите файлы с ошибкой');

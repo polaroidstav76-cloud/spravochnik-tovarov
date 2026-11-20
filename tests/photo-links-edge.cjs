@@ -10,12 +10,16 @@ const db={auth:{getUser:async jwt=>({data:{user:jwt==='valid-admin'?{id:'admin'}
   case 'reserve':data={id:d.id,path:'disk:/Cloudshop-Client-Photos/order1/01_10x15/f1_photo.jpg',size:d.size,status:'pending'};break;
   case 'file':data={path:'disk:/Cloudshop-Client-Photos/order1/01_10x15/f1_photo.jpg',size:123};break;
   case 'internal':data={id:'order1'};break;
+  case 'crop_reserve':case 'crop_render':data={id:'r1',path:'disk:/Cloudshop-Client-Crops/order1/r1.jpg',target:'disk:/Cloudshop-Client-Ready/order1/r1.jpg',size:123,width:1772,height:1181,status:'pending'};break;
+  case 'crop_source':data={path:'disk:/original.jpg'};break;
  }
  return {data,error:null};
 }};
 const context={console,Request,Response,Headers,URL,URLSearchParams,TextEncoder,AbortSignal,crypto:require('node:crypto').webcrypto,createClient:()=>db,Deno:{env:{get:()=>''},serve:h=>handler=h},fetch:async(url,opt={})=>{
  fetches.push({url:String(url),opt});const u=new URL(url);let body={};
+ if(u.hostname==='download.disk.yandex.net'){const data=new Uint8Array([255,216,255,224,0,16,74,70,73,70,0,1,2,1,1,44,1,44,0,0,255,192,0,17,8,4,157,6,236,3,1,17,0,2,17,0,3,17,0,255,218,0,2]);if(diskMode==='bad-dpi')data[15]=96;return new Response(data,{status:206});}
  if(u.pathname.endsWith('/disk/'))body={user:{uid:'disk-owner'},total_space:2000000000000,used_space:100};
+ else if(u.pathname==='/v1/disk/resources/download')body={href:'https://download.disk.yandex.net/original.jpg'};
  else if(u.pathname.endsWith('/resources/upload'))body={href:'https://upload.disk.yandex.net/signed-one-file'};
  else if(u.pathname.endsWith('/public/resources/download'))body={href:'https://download.disk.yandex.net/folder.zip'};
  else if(u.pathname.endsWith('/resources')&&opt.method!=='PUT')body={type:'file',size:diskMode==='wrong-size'?999:123,public_url:'https://disk.yandex.ru/d/order1',public_key:'public-key'};
@@ -48,5 +52,9 @@ async function call(action,data={},jwt='',customOrigin=origin){currentAction=act
  assert.deepEqual(Array.from(rpcs.find(x=>x.p_action==='finish').p_data.snapshot),['f1']);
  const archive=await call('download',{token});assert.equal(archive.b.href,'https://download.disk.yandex.net/folder.zip');
  assert.ok(fetches.some(x=>x.url.includes('/public/resources/download?')));
+ assert.equal((await call('crop_source',{token,id})).b.href,'https://download.disk.yandex.net/original.jpg');
+ assert.equal((await call('crop_reserve',{token,id,render_id:'r1',size:123})).r.status,200);
+ diskMode='bad-dpi';assert.equal((await call('crop_complete',{token,id,render_id:'r1'})).r.status,400);diskMode='normal';
+ assert.equal((await call('crop_complete',{token,id,render_id:'r1'})).r.status,200);assert.ok(rpcs.some(x=>x.p_action==='crop_commit'));
  console.log('Photo links Edge: auth, CORS, secret isolation, storage setup, upload slots, size verification, skip safety, finish snapshot and ZIP passed.');
 })().catch(e=>{console.error(e);process.exit(1)});

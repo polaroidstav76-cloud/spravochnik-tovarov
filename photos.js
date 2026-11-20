@@ -1,13 +1,14 @@
 (async()=>{
  const {api,el,button,size,validPhoto,put}=PhotoLinks,app=document.getElementById('photoApp'),error=document.getElementById('photoError');
- let token=location.hash.slice(1),manifest=null,queue=[],working=false,active=0,modeBusy=false,currentGroup='',commentDraft=null,renderVersion=0;
+ let token=location.hash.slice(1),manifest=null,queue=[],working=false,active=0,modeBusy=false,currentGroup='',commentDraft=null,renderVersion=0,persisting=0;
  const params=new URLSearchParams(location.search),slug=params.get('branch');
  function fail(e){error.textContent=e.message||String(e);error.hidden=false;error.scrollIntoView({block:'nearest'});}
  function clearError(){error.hidden=true;}
  async function call(action,data={}){return api(action,{...data,token});}
  async function safe(fn,b){if(b)b.disabled=true;clearError();try{await fn();}catch(e){fail(e);}finally{if(b?.isConnected)b.disabled=false;}}
  function action(text,fn,primary=false){let b=button(text,()=>safe(()=>fn(b),b),primary);return b;}
- async function refresh(){manifest=await call('manifest');render();}
+ function announce(){window.dispatchEvent(new CustomEvent('photo:manifest',{detail:manifest}));}
+ async function refresh(){manifest=await call('manifest');render();announce();}
  function showLink(){const p=el('p','Эта ссылка принадлежит вашему заказу. Не отправляйте её посторонним.',{class:'photo-muted'});app.append(p);}
  async function offline(){
   const state=await api('branches',{slug}),branch=state.branches[0];
@@ -31,7 +32,7 @@
    const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сохранено: '+readyFiles().length+' фото. Сотрудник фотоцентра увидит вашу загрузку.'));app.append(success);
    for(const g of manifest.groups){const row=el('div',null,{class:'photo-summary'});row.append(el('span',g.label),el('b',readyFiles(g.id).length+' фото'));app.append(row);}
    if(manifest.comment)app.append(el('p','Комментарий: '+manifest.comment));
-   const actions=el('div',null,{class:'photo-actions'});actions.append(action('Добавить ещё фото',async()=>{await call('reopen');queue=[];await refresh();},true),action('Скачать все фото ZIP',download));app.append(actions);showLink();return;
+   const actions=el('div',null,{class:'photo-actions'});actions.append(action('Добавить ещё фото',async()=>{await call('reopen');queue=[];await refresh();},true),action(manifest.crop_count?'Скачать готовые JPG':'Скачать оригиналы ZIP',()=>download(manifest.crop_count?'print':'originals')));app.append(actions);showLink();return;
   }
   if(!manifest.mode){
    app.append(el('h2','Какие размеры фотографий?'));
@@ -51,7 +52,7 @@
   }
   const label=el('label','Комментарий к заказу (необязательно)',{for:'photoComment'}),comment=el('textarea',null,{id:'photoComment',maxlength:'3000',rows:'3',placeholder:'Например: печатать без полей…'});comment.value=commentDraft??manifest.comment;comment.oninput=()=>commentDraft=comment.value;app.append(label,comment);
   const bar=el('div',null,{class:'photo-sticky'}),summary=el('p','',{id:'photoUploadSummary',class:'photo-muted'});
-  const finish=action('Завершить загрузку фото',async()=>{if(working||queue.some(f=>f.state==='error'))throw new Error('Дождитесь загрузки фото. Файлы с ошибкой можно повторить или исключить.');await call('finish',{comment:comment.value});commentDraft=null;queue=[];await refresh();},true);finish.id='photoFinish';
+  const finish=action('Завершить загрузку фото',async()=>{if(working||queue.some(f=>f.state==='error'))throw new Error('Дождитесь загрузки фото. Файлы с ошибкой можно повторить или исключить.');PhotoLinks.beforePhotoFinish?.();await call('finish',{comment:comment.value});commentDraft=null;queue=[];await refresh();},true);finish.id='photoFinish';
   bar.append(summary,finish);app.append(bar);updateSummary();
  }
  function renderGroup(g){
@@ -72,16 +73,18 @@
   if(['uploading','queued'].includes(f.state)){const p=el('progress',null,{max:'1',value:String(f.progress)});row.append(p);}
   if(f.state==='error'){
    row.append(el('span',f.error||'Проверьте интернет',{class:'photo-error'}));const buttons=el('div');
-   buttons.append(button('Повторить',()=>{f.state='queued';f.error='';drawFile(f);pump();}),action('Исключить',async()=>{if(f.reserved)await call('skip',{id:f.id});queue=queue.filter(x=>x!==f);row.remove();await refresh();}));row.append(buttons);
+   buttons.append(button('Повторить',()=>{f.state='queued';f.error='';drawFile(f);pump();}),action('Исключить',async()=>{if(f.reserved)await call('skip',{id:f.id});queue=queue.filter(x=>x!==f);row.remove();await PhotoLinks.local.remove(token,f.id,'original').catch(()=>{});await refresh();}));row.append(buttons);
   }
  }
- function addFiles(files,group_id){
+ async function addFiles(files,group_id){
   clearError();const rejected=[];
   for(const file of Array.from(files||[])){
    if(!validPhoto(file)||file.name.length>180){rejected.push(file.name);continue;}
    if(queue.some(q=>q.group_id===group_id&&q.file.name===file.name&&q.file.size===file.size&&q.file.lastModified===file.lastModified))continue;
    const pending=manifest.files.find(f=>f.status==='pending'&&f.group_id===group_id&&f.name===file.name&&f.size===file.size&&!queue.some(q=>q.id===f.id));
-   const f={id:pending?.id||crypto.randomUUID(),group_id,file,state:'queued',progress:0,reserved:!!pending};queue.push(f);drawFile(f);
+   const f={id:pending?.id||crypto.randomUUID(),group_id,file,state:'queued',progress:0,reserved:!!pending};persisting++;
+   try{await PhotoLinks.local.put(token,f.id,'original',{file,group_id,pending:true});}catch{fail(new Error('На устройстве не хватает места для черновика. Загрузка продолжится, но до её завершения не закрывайте браузер.'));}finally{persisting--;}
+   queue.push(f);drawFile(f);pump();
   }
   if(rejected.length)fail(new Error('Не добавлены: '+rejected.slice(0,5).join(', ')+'. Нужен поддерживаемый формат фото, до 512 МБ, имя до 180 символов.'));
   pump();
@@ -92,14 +95,15 @@
   for(let attempt=0;attempt<3;attempt++)try{
    const r=await call('reserve',{id:f.id,group_id:f.group_id,name:f.file.name,size:f.file.size});f.reserved=true;
    if(!r.ready){await put(r.href,f.file,p=>{f.progress=p;drawFile(f);});await call('complete_file',{id:f.id});}
-   f.state='ready';f.progress=1;drawFile(f);return;
+   f.state='ready';f.progress=1;await PhotoLinks.local.put(token,f.id,'original',{file:f.file,group_id:f.group_id,pending:false}).catch(()=>{});drawFile(f);return;
   }catch(e){if(attempt<2){await new Promise(r=>setTimeout(r,1000*(attempt+1)));continue;}f.state='error';f.error=e.message;drawFile(f);}
  }
  async function pump(){if(working)return;working=true;updateSummary();
   const worker=async()=>{while(true){const f=queue.find(x=>x.state==='queued');if(!f)break;f.state='uploading';active++;updateSummary();try{await upload(f);}finally{active--;updateSummary();}}};
-  try{await Promise.all([worker(),worker(),worker()]);}finally{working=false;try{manifest=await call('manifest');}catch(e){fail(e);}updateSummary();if(queue.some(f=>f.state==='queued'))pump();}
+  try{await Promise.all([worker(),worker(),worker()]);}finally{working=false;try{manifest=await call('manifest');announce();}catch(e){fail(e);}updateSummary();if(queue.some(f=>f.state==='queued'))pump();}
  }
- async function download(){const win=window.open('about:blank','_blank');if(win)win.opener=null;try{const r=await call('download');if(win)win.location=r.href||r.folder;else{const a=el('a','Скачать фото',{href:r.href||r.folder,target:'_blank',rel:'noopener',class:'photo-button'});app.append(a);}if(r.message)fail(new Error(r.message));}catch(e){win?.close();throw e;}}
- window.addEventListener('beforeunload',e=>{if(working){e.preventDefault();e.returnValue='';}});
- try{if(/^[a-f0-9]{64}$/.test(token))await refresh();else if(slug)await offline();else{app.replaceChildren(el('h2','Нужна ваша личная ссылка'),el('p','Попросите сотрудника фотоцентра прислать ссылку для фото или отсканируйте QR-код в филиале.'));}}catch(e){app.replaceChildren(el('h2','Не удалось открыть загрузку'),action('Попробовать ещё раз',()=>location.reload(),true));fail(e);}
+ async function download(variant){const win=window.open('about:blank','_blank');if(win)win.opener=null;try{const r=await call('download',{variant:variant||'originals'});if(win)win.location=r.href||r.folder;else{const a=el('a','Скачать фото',{href:r.href||r.folder,target:'_blank',rel:'noopener',class:'photo-button'});app.append(a);}if(r.message)fail(new Error(r.message));}catch(e){win?.close();throw e;}}
+ window.addEventListener('photo:refresh',()=>refresh().catch(fail));
+ window.addEventListener('beforeunload',e=>{if(working||persisting){e.preventDefault();e.returnValue='';}});
+ try{if(/^[a-f0-9]{64}$/.test(token)){await refresh();const originals=await PhotoLinks.local.list(token,'original').catch(()=>[]);for(const row of originals){if(row.value.pending&&manifest.groups.some(g=>g.id===row.value.group_id)&&!manifest.files.some(f=>f.id===row.id&&f.status==='ready')){queue.push({id:row.id,group_id:row.value.group_id,file:row.value.file,state:'queued',progress:0,reserved:manifest.files.some(f=>f.id===row.id)});}}if(queue.length){render();pump();}}else if(slug)await offline();else{app.replaceChildren(el('h2','Нужна ваша личная ссылка'),el('p','Попросите сотрудника фотоцентра прислать ссылку для фото или отсканируйте QR-код в филиале.'));}}catch(e){app.replaceChildren(el('h2','Не удалось открыть загрузку'),action('Попробовать ещё раз',()=>location.reload(),true));fail(e);}
 })();
