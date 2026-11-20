@@ -27,6 +27,7 @@
     .adminbar{display:none;background:#fff;border:1px solid var(--line);padding:14px;border-radius:14px;margin-bottom:18px}
     .adminbar.show{display:flex;gap:8px;flex-wrap:wrap}
     .modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
+    body.staff-locked>:not(#loginModal):not(script):not(style):not(link){visibility:hidden!important;pointer-events:none!important}
     body.staff-locked>header,body.staff-locked>main,body.staff-locked #closeLogin,body.staff-locked #closeLogin_sticky{display:none!important}
     .modal.show{display:flex}.dialog{background:white;border-radius:16px;max-width:650px;width:100%;max-height:calc(100vh - 40px);overflow:auto;padding:22px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}
@@ -1072,12 +1073,14 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 <div class="modal" id="summaryModal"><div class="dialog" style="max-width:1200px"><h2 style="margin-top:0">Сводка</h2>
 <div class="sum-controls"><div class="sum-seg" id="sumSeg" role="group" aria-label="Период"><button data-p="day">День</button><button data-p="week">Неделя</button><button data-p="month">Месяц</button><button data-p="quarter">Квартал</button><button data-p="year">Год</button><button data-p="custom">Свой период</button></div><button id="sumPrev" class="secondary" aria-label="Предыдущий период">←</button><input id="sumDate" type="date"><span id="sumCustom" class="sum-custom" hidden><span>с</span><input id="sumFrom" type="date" aria-label="Начало периода"><span>по</span><input id="sumTo" type="date" aria-label="Конец периода"></span><button id="sumNext" class="secondary" aria-label="Следующий период">→</button><select id="sumBranch"><option value="">Все филиалы</option></select><button id="sumCompare" class="secondary" aria-pressed="false">Сравнить филиалы</button><button id="sumReload" class="secondary">Обновить</button></div>
 <div id="sumBody"></div><div class="actions"><button id="closeSummary">Закрыть</button></div></div></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0"></script>
 <script src="config.js"></script>
 <script src="formula.js"></script>
+<script src="staff-session.js?v=20261120"></script>
 <script>
 const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+if(STAFF_LOGIN_REQUIRED)document.body.classList.add('staff-locked');
 let products = [], isAdmin = false;
 let priceEdit = {type:null,id:null};
 
@@ -1199,16 +1202,17 @@ $('search').oninput=render; $('category').onchange=render; $('clearBtn').onclick
 $('loginBtn').onclick=()=>open('loginModal'); $('closeLogin').onclick=()=>{if(!document.body.classList.contains('staff-locked'))close('loginModal')};
 function staffLoginEmail(login){login=String(login||'').trim().toLowerCase();return login.includes('@')?login:login+'@'+STAFF_EMAIL_DOMAIN}
 $('doLogin').onclick=async()=>{
+  const previousUser=staffLastUserId;
   $('loginError').textContent='Выполняется вход…';
-  const {error}=await db.auth.signInWithPassword({email:staffLoginEmail($('email').value),password:$('password').value});
+  const {data,error}=await db.auth.signInWithPassword({email:staffLoginEmail($('email').value),password:$('password').value});
   if(error){$('loginError').textContent=/invalid/i.test(error.message)?'Неверный логин или пароль.':error.message;return}
   $('password').value='';
-  // После входа при обязательном входе перезагружаем страницу: все данные загрузятся уже от имени сотрудника.
-  if(document.body.classList.contains('staff-locked')){location.reload();return}
+  // Первый вход или другой сотрудник требуют новой страницы; повторный вход того же сотрудника сохраняет черновик.
+  if(STAFF_LOGIN_REQUIRED&&!CloudshopStaffSession.canResume(previousUser,data.user?.id)){location.reload();return}
   close('loginModal'); await refreshAuth();
 };
 $('password').addEventListener('keydown',e=>{if(e.key==='Enter')$('doLogin').click()});
-$('logoutBtn').onclick=async()=>{await db.auth.signOut();if(STAFF_LOGIN_REQUIRED){location.reload();return}await refreshAuth()};
+$('logoutBtn').onclick=async()=>{await db.auth.signOut({scope:'local'});if(STAFF_LOGIN_REQUIRED){location.reload();return}await refreshAuth()};
 $('refreshBtn').onclick=load; $('pricesBtn').onclick=openPriceAdmin; $('reportsBtn').onclick=openReports; $('testsBtn').onclick=openTestAdmin; $('customersBtn').onclick=openCustomersAdmin; $('openTraineeTests').onclick=openTraineeTests; $('clubBtn').onclick=()=>open('clubModal'); $('closeTest').onclick=()=>close('testModal'); $('closeTestAdmin').onclick=()=>close('testAdminModal');
 $('clubRedeemCalcBtn').onclick=()=>{const amount=Number($('clubRedeemCalcAmount').value);if(!(amount>0)){ $('clubRedeemCalcResult').value=''; $('clubRedeemCalcStatus').textContent='Введите сумму заказа больше 0 ₽.'; return; } const max=Math.round(amount*0.30*100)/100; $('clubRedeemCalcResult').value=loyaltyMoney(max); $('clubRedeemCalcStatus').textContent='Максимально можно списать 30% от суммы заказа.';};
 
@@ -2366,19 +2370,32 @@ $('customerAdminRefresh').onclick=loadCustomerAdminRows;
 $('customerAdminSearch').addEventListener('input',()=>loadCustomerAdminRows());
 async function openCustomersAdmin(){if(!isAdmin){open('loginModal');return}await loadCustomerAdminRows();await loadGiftRules();open('customersModal')}
 
-let staffAccount=null;
-async function refreshAuth(){
-  const {data}=await db.auth.getUser(); staffAccount=null;
-  if(data.user){const r=await db.from('staff_accounts').select('user_id,login,name,role,active').eq('user_id',data.user.id).maybeSingle();if(!r.error&&r.data?.active)staffAccount=r.data}
+let staffAccount=null,staffLastUserId=null,staffLoadedUserId=null;
+function staffCanUse(){return !STAFF_LOGIN_REQUIRED||!!staffAccount;}
+function applyStaffAuth(account,state){
+  if(account&&staffLastUserId&&account.user_id!==staffLastUserId){staffAccount=null;isAdmin=false;document.body.classList.add('staff-locked');$('loginError').textContent='Выполнен вход другого сотрудника. Обновите страницу, чтобы продолжить.';$('loginModal').style.zIndex='1000000';open('loginModal');return;}
+  const wasLocked=document.body.classList.contains('staff-locked');
+  staffAccount=account;if(account)staffLastUserId=account.user_id;
   isAdmin=staffAccount?.role==='admin';
-  const signedIn=!!data.user, locked=STAFF_LOGIN_REQUIRED&&!staffAccount;
+  const signedIn=state.signedIn, locked=STAFF_LOGIN_REQUIRED&&!staffAccount;
   document.body.classList.toggle('staff-locked',locked);
-  if(locked){$('loginError').textContent=signedIn?'Учётная запись отключена. Обратитесь к администратору.':'';open('loginModal')}
+  if(account&&wasLocked)close('loginModal');
+  if(locked){$('loginError').textContent=signedIn?'Учётная запись отключена или недоступна. Обратитесь к администратору.':staffLastUserId?'Вход завершён. Войдите снова — открытая смена и черновик продажи сохранены.':'Войдите под своим логином.';$('loginModal').style.zIndex='1000000';open('loginModal')}
   $('loginBtn').style.display=signedIn?'none':'inline-block'; $('logoutBtn').style.display=signedIn?'inline-block':'none';
   $('payrollBtn').style.display=isAdmin?'inline-block':'none'; $('staffAccountsBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=staffAccount?(staffAccount.name+(isAdmin?' · администратор':'')):'';
   $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; $('salesAdminBtn').style.display=isAdmin?'inline-block':'none'; $('reportsBtn').style.display=isAdmin?'inline-block':'none'; render();
+  if(account&&staffLoadedUserId!==account.user_id){staffLoadedUserId=account.user_id;setTimeout(()=>loadStaffWorkspace(account.user_id),0);}
 }
+const staffSessionController=CloudshopStaffSession.controller({
+  auth:db.auth,
+  readAccount:id=>db.from('staff_accounts').select('user_id,login,name,role,active').eq('user_id',id).maybeSingle(),
+  apply:applyStaffAuth,
+  onTransient:()=>{
+    if(!staffAccount&&STAFF_LOGIN_REQUIRED){document.body.classList.add('staff-locked');$('loginError').textContent='Нет связи с сервером. Проверьте интернет и повторите вход.';$('loginModal').style.zIndex='1000000';open('loginModal');}
+  }
+});
+async function refreshAuth(){return staffSessionController.refresh();}
 window.editProduct=async id=>{
   const p=products.find(x=>x.id===id);
   $('productId').value=p?.id||''; $('pName').value=p?.name||''; $('pSku').value=p?.sku||'';
@@ -2763,7 +2780,11 @@ window.deleteSalesEmployee=async personId=>{
 
   await loadSalesSetup();
 };
-db.auth.onAuthStateChange(()=>refreshAuth());
+db.auth.onAuthStateChange(()=>{staffSessionController.changed();});
+// Callback returns immediately; verification runs outside the SDK's internal auth lock.
+const staffResumeCheck=()=>{if(!document.hidden)void refreshAuth();};
+window.addEventListener('focus',staffResumeCheck);window.addEventListener('online',staffResumeCheck);
+document.addEventListener('visibilitychange',staffResumeCheck);setInterval(()=>{if(staffAccount)staffResumeCheck();},60000);
 // Инициализация выполняется после регистрации итоговых обработчиков v4/v5.
 </script>
 <script>
@@ -3546,6 +3567,7 @@ window.deletePersonTask=async id=>{if(!confirm('Удалить задание?')
 window.taskBannerState={branch:[],personal:[]};
 let taskBannerSeq=0,taskBannerCollapsed=false;
 async function refreshTaskBanner(){
+  if(typeof staffCanUse==='function'&&!staffCanUse())return ;
   const seq=++taskBannerSeq,sess=salesSession;
   if(!sess?.shiftId){window.taskBannerState={branch:[],personal:[]};drawTaskBanner();return}
   try{
@@ -3590,8 +3612,13 @@ setInterval(()=>{if(salesSession?.shiftId&&!document.hidden)refreshTaskBanner()}
 
 async function initializePolaroid() {
   persistSalesSession(); updateSalesSessionUI();
-  const results=await Promise.allSettled([refreshAuth(),load(),loadPriceRules(),loadSalesSetup()]);
+  await refreshAuth();
+}
+async function loadStaffWorkspace(userId){
+  if(staffAccount?.user_id!==userId)return;
+  const results=await Promise.allSettled([load(),loadPriceRules(),loadSalesSetup()]);
   results.forEach(r=>{if(r.status==='rejected') console.error(r.reason);});
+  if(staffAccount?.user_id!==userId)return;
   try {await validateSalesSession();}
   catch(e) {$('salesSessionStatus').textContent='Не удалось проверить смену: '+e.message;}
 }
@@ -3992,6 +4019,7 @@ function branchPayReminders(){return branchPickups().filter(o=>pickupRemindStep(
 function pickupMatches(o,words){const hay=[o.order_number,o.client_order_ref,o.customer_name,o.customer_phone,o.client_name,o.client_phone,o.comment,o.branch_name,pickupItemsText(o)].join(' ').toLowerCase();return words.every(w=>hay.includes(w))}
 function branchPickups(){const b=salesSession?.branchId;return pickupOrders.filter(o=>o.status==='pending'&&(!b||Number(o.branch_id)===Number(b)))}
 async function loadPickups(){
+  if(typeof staffCanUse==='function'&&!staffCanUse())return false;
   let r=await db.rpc('pickup_list_v3',{p_branch_id:null,p_include_closed:false});
   if(r.error)r=await db.rpc('pickup_list_v2',{p_branch_id:null,p_include_closed:false});
   if(r.error){console.warn('pickup_list',r.error);return false}
@@ -4447,7 +4475,7 @@ $('startShiftBtn').onclick=async()=>{
 const v5BaseUpdateSessionUI=updateSalesSessionUI;
 updateSalesSessionUI=function(){v5BaseUpdateSessionUI();drawPickupPanel();drawPickupBadge()};
 // Realtime доставляет срочное поверх рабочего окна. Проверка страхует обрыв связи.
-function checkUrgentAnnouncements(){if(!document.hidden&&salesSession?.shiftId)showAnnouncements(true)}
+function checkUrgentAnnouncements(){if(staffCanUse()&&!document.hidden&&salesSession?.shiftId)showAnnouncements(true)}
 db.channel('urgent-announcements').on('postgres_changes',{event:'*',schema:'public',table:'announcements'},payload=>{
   if(payload.new?.is_active&&payload.new?.is_urgent)checkUrgentAnnouncements();
 }).subscribe(status=>{if(status==='SUBSCRIBED')checkUrgentAnnouncements()});
@@ -4945,6 +4973,7 @@ function kqQueueCount(shiftId){return kqRead().filter(x=>!shiftId||Number(x.shif
 
 // Отправка сохранённых продаж. Одновременно работает только одна вкладка (navigator.locks), а повтор всё равно безопасен.
 async function kqSync(){
+  if(typeof staffCanUse==='function'&&!staffCanUse())return ;
   if(kqSyncing||!kqRead().length){kqDrawBar();return}
   const run=async()=>{
     kqSyncing=true;kqDrawBar();
@@ -4997,7 +5026,7 @@ $('closeShiftBtn').onclick=closeCurrentSalesShift;
 
 window.addEventListener('online',()=>kqSync());
 window.addEventListener('storage',e=>{if(e.key===KQ_KEY)kqDrawBar()});
-setInterval(()=>{if(kqRead().length)kqSync();else if(kassaOffline)Promise.resolve(db.from('sales_branches').select('id').limit(1)).then(r=>{if(!r.error||!kqIsNetErr(r.error,r.status))kqSetOffline(false)}).catch(()=>{})},30000);
+setInterval(()=>{if(!staffCanUse())return;if(kqRead().length)kqSync();else if(kassaOffline)Promise.resolve(db.from('sales_branches').select('id').limit(1)).then(r=>{if(!r.error||!kqIsNetErr(r.error,r.status))kqSetOffline(false)}).catch(()=>{})},30000);
 setTimeout(()=>{kqDrawBar();kqSync()},1500);
 </script>
 <div class="modal" id="stockModal"><div class="dialog" style="max-width:1250px">
@@ -5081,6 +5110,7 @@ function stkToday(){const d=new Date();return `${d.getFullYear()}-${String(d.get
 function stkOpts(list,sel,empty){return (empty?`<option value="">${esc(empty)}</option>`:'')+list.map(b=>`<option value="${b.id}" ${Number(sel)===Number(b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}
 
 async function stkLoad(){
+  if(typeof staffCanUse==='function'&&!staffCanUse())return false;
   const r=await db.rpc('stock_state',{p_days:30});
   if(r.error){console.warn('stock_state',r.error);return false}
   stk.data=r.data||{materials:[],balances:[],usage:[]};
@@ -7155,7 +7185,7 @@ $('staffSave').onclick=async()=>{
   const seen=new Set();let shift=null,first=true;
   function beep(){try{const a=new (window.AudioContext||window.webkitAudioContext)();[0,0.25].forEach(t=>{const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=0.15;o.connect(g);g.connect(a.destination);o.start(a.currentTime+t);o.stop(a.currentTime+t+0.15)});setTimeout(()=>a.close(),1000)}catch(e){}}
   async function check(){
-    const id=salesSession?.shiftId;if(!id)return;
+    const id=salesSession?.shiftId;if(!id||!staffCanUse())return;
     if(id!==shift){shift=id;seen.clear();first=true}
     const r=await db.from('sales').select('id,order_number,comment,total').eq('shift_id',id).like('comment','Сайт, заказ%').neq('status','deleted');
     if(r.error||!r.data)return;
