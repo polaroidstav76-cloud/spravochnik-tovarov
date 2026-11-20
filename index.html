@@ -2385,7 +2385,7 @@ function applyStaffAuth(account,state){
   $('payrollBtn').style.display=isAdmin?'inline-block':'none'; $('staffAccountsBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=staffAccount?(staffAccount.name+(isAdmin?' · администратор':'')):'';
   $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; $('salesAdminBtn').style.display=isAdmin?'inline-block':'none'; $('reportsBtn').style.display=isAdmin?'inline-block':'none'; render();
-  if(account&&staffLoadedUserId!==account.user_id){staffLoadedUserId=account.user_id;setTimeout(()=>loadStaffWorkspace(account.user_id),0);}
+  if(account&&staffLoadedUserId!==account.user_id){staffLoadedUserId=account.user_id;const ready=()=>loadStaffWorkspace(account.user_id);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else setTimeout(ready,0);}
 }
 const staffSessionController=CloudshopStaffSession.controller({
   auth:db.auth,
