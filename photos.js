@@ -30,7 +30,7 @@
   if(!manifest.configured){app.append(el('div','Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',{class:'photo-notice'}));return;}
   if(manifest.status==='complete'){
    const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сохранено: '+readyFiles().length+' фото. Сотрудник фотоцентра увидит вашу загрузку.'));app.append(success);
-   for(const g of manifest.groups){const row=el('div',null,{class:'photo-summary'});row.append(el('span',g.label),el('b',readyFiles(g.id).length+' фото'));app.append(row);}
+   for(const g of manifest.groups){const row=el('div',null,{class:'photo-summary'});row.append(el('span',g.label),el('b',readyFiles(g.id).length+' фото'));app.append(row);const gallery=el('div',null,{class:'photo-gallery'});for(const f of readyFiles(g.id)){const tile=el('div',null,{class:'photo-tile'}),image=el('img',null,{alt:'Отправленная фотография',loading:'lazy'});tile.append(image);gallery.append(tile);PhotoLinks.showPhotoPreview?.(image,f,token);}app.append(gallery);}
    if(manifest.comment)app.append(el('p','Комментарий: '+manifest.comment));
    const actions=el('div',null,{class:'photo-actions'});actions.append(action('Добавить ещё фото',async()=>{await call('reopen');queue=[];await refresh();},true),action(manifest.crop_count?'Скачать готовые JPG':'Скачать оригиналы ZIP',()=>download(manifest.crop_count?'print':'originals')));app.append(actions);showLink();return;
   }
