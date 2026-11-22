@@ -30,7 +30,7 @@
  function render(){
   renderVersion++;app.replaceChildren();
   app.append(el('p',manifest.branch+(manifest.order_number?' · Заказ '+manifest.order_number:'')+' · телефон …'+manifest.phone_hint,{class:'photo-muted'}));
-  if(manifest.source==='offline')support(app,manifest.contacts,manifest.branch);advice(app,manifest.needs_size_advice,async needed=>{await call('consultation',{needed});await refresh();});
+  if(manifest.source==='offline'){support(app,manifest.contacts,manifest.branch);advice(app,manifest.needs_size_advice,async needed=>{await call('consultation',{needed});await refresh();});}
   if(!manifest.configured){app.append(el('div','Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',{class:'photo-notice'}));return;}
   if(manifest.status==='complete'){
    const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сотрудник фотоцентра свяжется с вами в ближайшее время для оформления заказа.'),el('p','Сохранено: '+readyFiles().length+' фото.'));app.append(success);

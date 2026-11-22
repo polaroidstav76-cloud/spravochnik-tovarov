@@ -75,11 +75,14 @@ ${url}
   lastOrders=r.orders;const box=panel.querySelector('#photoHistory');if(!box)return;box.replaceChildren();
   if(!lastOrders.length)box.append(el('p','Ссылок пока нет.',{class:'photo-muted'}));
   for(const o of lastOrders){
-   const card=el('article',null,{class:'photo-order'}),title=el('strong',(o.source==='offline'?'ОФЛАЙН-ЗАКАЗ · ':'')+o.phone+(o.order_number?' · заказ '+o.order_number:''));card.append(title);const viewed=el('span',o.is_new===false?'Просмотрена':'Новая',{class:o.is_new===false?'photo-viewed':'photo-new'});card.append(viewed);if(o.needs_size_advice)card.append(el('p','Нужна консультация по размеру',{class:'photo-advice-note'}));
+   const card=el('article',null,{class:'photo-order'}),title=el('strong',(o.source==='offline'?'ОФЛАЙН-ЗАКАЗ · ':'')+o.phone+(o.order_number?' · заказ '+o.order_number:''));card.append(title);const viewed=el('span',o.is_new===false?'Просмотрена':'Новая',{class:o.is_new===false?'photo-viewed':'photo-new'});card.append(viewed);if(o.source==='offline'&&o.needs_size_advice)card.append(el('p','Нужна консультация по размеру',{class:'photo-advice-note'}));
    card.append(el('p',o.branch_name+' · '+(o.employee_name||'Клиент по QR')+' · '+new Date(o.updated_at).toLocaleString('ru-RU'),{class:'photo-muted'}));
    card.append(el('p',(o.status==='complete'?'✓ Загрузка завершена':'Клиент загружает фото')+' · '+o.file_count+' фото · '+size(Number(o.bytes))+(o.messenger?' · '+(o.messenger==='max'?'MAX':'WhatsApp'):'')));
    if(o.comment)card.append(el('p','Комментарий: '+o.comment));
-   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);const openPhoto=el('a','Открыть фото',{href:url,target:'_blank',rel:'noopener',class:'photo-button'});openPhoto.onclick=()=>{request('seen',{id:o.id,updated_at:o.updated_at}).then(()=>{o.is_new=false;viewed.textContent='Просмотрена';viewed.className='photo-viewed';poll();}).catch(report);};actions.append(openPhoto);
+   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);const openPhoto=el('a','Открыть фото',{href:url,target:'_blank',rel:'noopener',class:'photo-button'});openPhoto.onclick=()=>{request('seen',{id:o.id,updated_at:o.updated_at}).then(()=>{o.is_new=false;viewed.textContent='Просмотрена';viewed.className='photo-viewed';poll();}).catch(report);};actions.append(openPhoto,act('Удалить ссылку',async()=>{
+    if(!confirm('Удалить ссылку для клиента '+o.phone+'? Она перестанет открываться у клиента и исчезнет из списка сотрудников. Фотографии на Яндекс Диске сохранятся.'))return;
+    await request('delete_link',{id:o.id});await history();const status=panel.querySelector('#photoStaffStatus');status.textContent='✓ Ссылка удалена. Фотографии на Диске сохранены.';status.className='photo-panel-status photo-success';
+   }));
    card.append(actions);box.append(card);
   }
  }

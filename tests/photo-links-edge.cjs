@@ -33,6 +33,7 @@ const origin='https://polaroidstav76-cloud.github.io',token='a'.repeat(64);
 async function call(action,data={},jwt='',customOrigin=origin){currentAction=action;const r=await handler(new Request('https://edge.example/photo-links',{method:'POST',headers:{'Content-Type':'application/json',Origin:customOrigin,...(jwt?{Authorization:'Bearer '+jwt}:{})},body:JSON.stringify({action,data})}));const b=await r.json();assert.ok(!JSON.stringify(b).includes(fakeToken));return {r,b};}
 (async()=>{
  assert.equal((await call('list')).r.status,401);assert.equal((await call('seen',{id:'o1'})).r.status,401);assert.equal((await call('seen',{id:'o1',updated_at:new Date().toISOString()},'valid-admin')).r.status,200);assert.equal((await call('consultation',{token,needed:true})).r.status,200);assert.equal((await call('contacts_save',{branch_id:1,links:{}},'valid-admin')).r.status,200);
+ assert.equal((await call('delete_link',{id:'o1'})).r.status,401);assert.equal((await call('delete_link',{id:'o1'},'valid-admin')).r.status,200);assert.ok(rpcs.some(x=>x.p_action==='delete_link'&&x.p_actor==='admin'));
  assert.equal((await call('branches',{},'invalid')).r.status,401);
  assert.equal((await call('branches',{},'', 'https://evil.example')).r.status,403);
  const branch=await call('branches');assert.equal(branch.r.headers.get('Access-Control-Allow-Origin'),origin);assert.equal(branch.b.configured,true);

@@ -1,0 +1,26 @@
+begin;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+do $$declare owner uuid;worker uuid;outsider uuid;bid bigint;o jsonb;t text;oid uuid;m jsonb;blocked boolean;slug text;begin
+ select user_id into owner from public.staff_accounts where active and role='admin' limit 1;
+ select user_id into worker from public.staff_accounts where active and role='staff' limit 1;
+ select user_id into outsider from public.staff_accounts where active and role='staff' and user_id<>worker limit 1;
+ assert owner is not null and worker is not null and outsider is not null;
+ select branch_id,b.slug into bid,slug from photo_private.branches b limit 1;
+ o:=public.photo_links_api('create',jsonb_build_object('phone','79000000009','branch_id',bid,'request_id',gen_random_uuid()),owner);t:=o->>'token';oid:=(o->>'id')::uuid;
+ update photo_private.orders set created_by=worker,needs_size_advice=true where id=oid;
+ m:=public.photo_links_api('manifest',jsonb_build_object('token',t));assert (m->>'needs_size_advice')::boolean=false;
+ blocked:=false;begin perform public.photo_links_api('consultation',jsonb_build_object('token',t,'needed',true));exception when sqlstate 'PT403' then blocked:=true;end;assert blocked;
+ blocked:=false;begin perform public.photo_links_api('delete_link',jsonb_build_object('id',oid));exception when sqlstate 'PT401' then blocked:=true;end;assert blocked;
+ blocked:=false;begin perform public.photo_links_api('delete_link',jsonb_build_object('id',oid),outsider);exception when sqlstate 'PT403' then blocked:=true;end;assert blocked;
+ perform public.photo_links_api('delete_link',jsonb_build_object('id',oid),worker);
+ perform public.photo_links_api('delete_link',jsonb_build_object('id',oid),worker);
+ assert exists(select 1 from photo_private.orders where id=oid and deleted_at is not null and deleted_by=worker);
+ blocked:=false;begin perform public.photo_links_api('manifest',jsonb_build_object('token',t));exception when sqlstate 'PT404' then blocked:=true;end;assert blocked;
+ blocked:=false;begin perform public.photo_links_api('internal',jsonb_build_object('token',t));exception when sqlstate 'PT404' then blocked:=true;end;assert blocked;
+ m:=public.photo_links_api('list',jsonb_build_object('search','79000000009'),owner);assert not exists(select 1 from jsonb_array_elements(m->'orders')x where x->>'id'=oid::text);
+ o:=public.photo_links_api('create',jsonb_build_object('phone','79000000008','slug',slug,'messenger','whatsapp','request_id',gen_random_uuid()));
+ perform public.photo_links_api('consultation',jsonb_build_object('token',o->>'token','needed',true));
+ m:=public.photo_links_api('manifest',jsonb_build_object('token',o->>'token'));assert (m->>'needs_size_advice')::boolean;
+ perform public.photo_links_api('delete_link',jsonb_build_object('id',o->>'id'),owner);
+end $$;
+rollback;
