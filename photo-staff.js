@@ -3,6 +3,7 @@
  const launch=document.getElementById('photoLinksBtn');if(!launch)return;
  const panel=el('dialog',null,{class:'photo-panel'});document.body.append(panel);
  let state={},lastOrders=[],ctx='',loading=false,searchTimer=null,notice=null;
+ function setLaunchLabel(text){const label=launch.querySelector('.tile-name')||launch;label.textContent=text;}
  function session(){return typeof salesSession==='undefined'?null:salesSession;}
  async function jwt(){const r=await db.auth.getSession();const token=r.data?.session?.access_token;if(!token)throw new Error('Войдите в Клаудшоп');return token;}
  async function request(action,data={}){return api(action,{...data,shift_id:session()?.shiftId||null},await jwt());}
@@ -89,11 +90,11 @@ ${url}
  let pollBusy=false;
  async function poll(){
   const a=typeof staffAccount==='undefined'?null:staffAccount,key=(a?.user_id||'')+':'+(session()?.branchId||'');
-  if(ctx!==key){const changed=!!ctx;ctx=key;notice?.remove();notice=null;launch.textContent='Ссылка для фото';if(changed&&panel.open)panel.close();}
+  if(ctx!==key){const changed=!!ctx;ctx=key;notice?.remove();notice=null;setLaunchLabel('Ссылка для фото');if(changed&&panel.open)panel.close();}
   if(!a||document.hidden||pollBusy||panel.open)return;pollBusy=true;
   try{
    const r=await request('list'),fresh=r.orders.filter(o=>o.status==='complete'&&o.is_new!==false);
-   if(fresh.length){launch.textContent='Фото клиентов · '+fresh.length;if(!notice){notice=el('div',null,{class:'photo-notice'});launch.closest('.desk-group')?.prepend(notice);}notice.replaceChildren(el('b','Новые фотографии клиентов: '+fresh.length),button('Открыть ссылки',show));}else{launch.textContent='Ссылка для фото';notice?.remove();notice=null;}
+   if(fresh.length){setLaunchLabel('Фото клиентов · '+fresh.length);if(!notice){notice=el('div',null,{class:'photo-notice'});launch.closest('.desk-group')?.prepend(notice);}notice.replaceChildren(el('b','Новые фотографии клиентов: '+fresh.length),button('Открыть ссылки',show));}else{setLaunchLabel('Ссылка для фото');notice?.remove();notice=null;}
   }catch{}finally{pollBusy=false;}
  }
  launch.onclick=show;setInterval(poll,30000);setTimeout(poll,3000);window.addEventListener('focus',poll);
