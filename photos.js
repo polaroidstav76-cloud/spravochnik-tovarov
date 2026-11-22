@@ -57,18 +57,18 @@
  }
  function renderGroup(g){
   const card=el('section',null,{class:'photo-group',id:'group-'+g.id});card.append(el('h3',g.label));
-  const ready=readyFiles(g.id);if(ready.length){const d=el('details'),summary=el('summary','Сохранено '+ready.length+' фото · '+size(ready.reduce((a,f)=>a+f.size,0)));d.append(summary);const list=el('div',null,{class:'photo-mini-list'});for(const f of ready)list.append(el('div',f.name));d.append(list);card.append(d);}
+  const ready=readyFiles(g.id);if(ready.length){const list=el('div',null,{class:'photo-gallery'});for(const f of ready){const tile=button('',()=>window.dispatchEvent(new CustomEvent('photo:edit',{detail:f.id})));tile.className='photo-tile';tile.setAttribute('aria-label','Обрезать фото и добавить поля');const image=el('img',null,{alt:'Загруженная фотография',loading:'lazy'});tile.append(image,el('span',f.render_id?'✓ Подготовлено':'✓ Загружено'));list.append(tile);PhotoLinks.showPhotoPreview?.(image,f,token);}card.append(el('p','Сохранено '+ready.length+' фото',{class:'photo-muted'}),list);}
   const pending=manifest.files.filter(f=>f.group_id===g.id&&f.status==='pending'&&!queue.some(q=>q.id===f.id));
   if(pending.length){card.append(el('p','Эти файлы не завершили загрузку. Выберите их снова для повтора или исключите из заказа.',{class:'photo-muted'}));for(const f of pending){const row=el('div',null,{class:'photo-file'});row.append(el('span',f.name),action('Исключить',async()=>{await call('skip',{id:f.id});await refresh();}));card.append(row);}}
   const drop=el('div',null,{class:'photo-drop'}),input=el('input',null,{type:'file',multiple:'',accept:'.jpg,.jpeg,.png,.heic,.heif,.tif,.tiff,.webp,.avif,.bmp,.dng,.cr2,.nef,.arw',hidden:true});
   const choose=button('Выбрать фото',()=>input.click(),true);drop.append(choose,el('p','или перетащите фотографии сюда',{class:'photo-muted'}),input);
   input.onchange=()=>{addFiles(input.files,g.id);input.value='';};drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragover');};drop.ondragleave=()=>drop.classList.remove('dragover');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragover');addFiles(e.dataTransfer.files,g.id);};card.append(drop);
   if(manifest.mode==='different')card.append(button('Размер загружен · добавить другой',()=>{app.querySelector('form input')?.focus();app.querySelector('form')?.scrollIntoView({behavior:'smooth',block:'center'});}));
-  const list=el('div',null,{id:'queue-'+g.id});card.append(list);app.append(card);for(const f of queue.filter(f=>f.group_id===g.id&&!(f.state==='ready'&&manifest.files.some(x=>x.id===f.id&&x.status==='ready'))))drawFile(f);
+  const list=el('div',null,{id:'queue-'+g.id,class:'photo-gallery'});card.append(list);app.append(card);for(const f of queue.filter(f=>f.group_id===g.id&&!(f.state==='ready'&&manifest.files.some(x=>x.id===f.id&&x.status==='ready'))))drawFile(f);
  }
  function drawFile(f){
   let row=document.getElementById('upload-'+f.id);if(!row){row=el('div',null,{class:'photo-file',id:'upload-'+f.id});document.getElementById('queue-'+f.group_id)?.append(row);}
-  row.replaceChildren(el('span',f.file.name));
+  const preview=row.querySelector('img')||el('img',null,{alt:'Выбранная фотография',class:'upload-preview'});row.replaceChildren(preview);if(!preview.src&&/^image\//.test(f.file.type)){const url=URL.createObjectURL(f.file);preview.onload=preview.onerror=()=>URL.revokeObjectURL(url);preview.src=url;}
   const status=f.state==='ready'?'✓ Сохранено':f.state==='error'?'Не загружено':f.state==='queued'?'В очереди':f.progress>=1?'Проверяем файл…':Math.round(f.progress*100)+'%';row.append(el('span',status));
   if(['uploading','queued'].includes(f.state)){const p=el('progress',null,{max:'1',value:String(f.progress)});row.append(p);}
   if(f.state==='error'){
@@ -95,7 +95,7 @@
   for(let attempt=0;attempt<3;attempt++)try{
    const r=await call('reserve',{id:f.id,group_id:f.group_id,name:f.file.name,size:f.file.size});f.reserved=true;
    if(!r.ready){await put(r.href,f.file,p=>{f.progress=p;drawFile(f);});await call('complete_file',{id:f.id});}
-   f.state='ready';f.progress=1;await PhotoLinks.local.put(token,f.id,'original',{file:f.file,group_id:f.group_id,pending:false}).catch(()=>{});drawFile(f);return;
+   f.state='ready';f.progress=1;await PhotoLinks.local.put(token,f.id,'original',{file:f.file,group_id:f.group_id,pending:false}).catch(()=>{});drawFile(f);try{manifest=await call('manifest');render();announce();}catch{}return;
   }catch(e){if(attempt<2){await new Promise(r=>setTimeout(r,1000*(attempt+1)));continue;}f.state='error';f.error=e.message;drawFile(f);}
  }
  async function pump(){if(working)return;working=true;updateSummary();

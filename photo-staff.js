@@ -70,10 +70,10 @@
    card.append(el('p',o.branch_name+' · '+(o.employee_name||'Клиент по QR')+' · '+new Date(o.updated_at).toLocaleString('ru-RU'),{class:'photo-muted'}));
    card.append(el('p',(o.status==='complete'?'✓ Загрузка завершена':'Клиент загружает фото')+' · '+o.file_count+' фото · '+size(Number(o.bytes))+(o.messenger?' · '+(o.messenger==='max'?'MAX':'WhatsApp'):'')));
    if(o.comment)card.append(el('p','Комментарий: '+o.comment));
-   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);linkBox(url,actions);actions.append(button('Открыть фото',()=>openLink(url)));
+   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);linkBox(url,actions);actions.append(el('a','Открыть фото',{href:url,target:'_blank',rel:'noopener',class:'photo-button'}));
    if(o.file_count)for(const variant of (o.crop_count?['print','originals']:['originals']))actions.append(act(variant==='print'?'Готовые JPG ZIP':'Оригиналы ZIP',async()=>{
     const win=window.open('about:blank','_blank');if(win)win.opener=null;
-    try{const r=await api('download',{token:o.token,variant});if(win)win.location=r.href||r.folder;else openLink(r.href||r.folder);if(r.message)panel.querySelector('#photoStaffStatus').textContent=r.message;}catch(e){win?.close();throw e;}
+    try{const r=await api('download',{token:o.token,variant});const href=r.href||r.folder;if(!href)throw new Error('Ссылка на скачивание пока не готова. Повторите ещё раз.');if(win)win.location.href=href;const direct=el('a','Скачать '+(variant==='print'?'JPG':'оригиналы'),{href,target:'_blank',rel:'noopener',class:'photo-button'});actions.append(direct);if(!win)direct.focus();if(r.message)panel.querySelector('#photoStaffStatus').textContent=r.message;}catch(e){win?.close();throw e;}
    }));card.append(actions);box.append(card);
   }
  }
