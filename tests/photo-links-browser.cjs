@@ -55,7 +55,7 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  const batch=Array.from({length:100},(_,i)=>({name:'Фото '+i+'.jpg',mimeType:'image/jpeg',buffer:original}));
  await d.page.locator('input[type=file]').setInputFiles(batch);
  await d.page.waitForFunction(()=>document.querySelector('#photoUploadSummary')?.textContent.includes('Сохранено 100 фото')&&!document.querySelector('#photoFinish').disabled,{},{timeout:30000});
- assert.equal(d.uploads.length,100);assert.ok(d.maxActive<=3);checks+=2;
+ assert.equal(d.uploads.length,100);assert.ok(d.maxActive>3 && d.maxActive<=100);checks+=2;
  await sizeInput.fill('21×30');await d.page.getByRole('button',{name:'Добавить размер',exact:true}).click();await d.page.getByRole('heading',{name:'21×30',exact:true}).waitFor();assert.equal(d.state.groups.length,2);checks++;
  await d.page.screenshot({path:'/tmp/cloudshop-photos-desktop.png',fullPage:true});
  const o=await fixture({offline:true});await o.page.goto(base+'/photos.html?branch=branch1');await o.page.locator('#offlinePhone').fill('89001231234');await o.page.locator('#offlineMessenger').selectOption('max');await o.page.getByRole('button',{name:'Перейти к фотографиям'}).click();await o.page.getByRole('heading',{name:'Какие размеры фотографий?'}).waitFor();

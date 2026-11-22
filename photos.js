@@ -89,7 +89,7 @@
   if(rejected.length)fail(new Error('Не добавлены: '+rejected.slice(0,5).join(', ')+'. Нужен поддерживаемый формат фото, до 512 МБ, имя до 180 символов.'));
   pump();
  }
- function updateSummary(){const e=document.getElementById('photoUploadSummary');if(e){const saved=readyFiles().length+queue.filter(f=>f.state==='ready'&&!manifest.files.some(x=>x.id===f.id&&x.status==='ready')).length;e.textContent='Сохранено '+saved+' фото'+(working?' · загружается '+active:'')+(queue.some(f=>f.state==='error')?' · есть незагруженные файлы':'');}const finish=document.getElementById('photoFinish');if(finish)finish.disabled=working||queue.some(f=>f.state==='error')||manifest.files.some(f=>f.status==='pending'&&!queue.some(q=>q.id===f.id&&q.state==='ready'))||readyFiles().length+queue.filter(f=>f.state==='ready').length===0;}
+ function updateSummary(){const e=document.getElementById('photoUploadSummary');if(e){const saved=readyFiles().length+queue.filter(f=>f.state==='ready'&&!manifest.files.some(x=>x.id===f.id&&x.status==='ready')).length;e.textContent='Сохранено '+saved+' фото'+(working?' · загружается '+active:'')+(queue.some(f=>f.state==='error')?' · есть незагруженные файлы':'');}const finish=document.getElementById('photoFinish');if(finish)finish.disabled=working||PhotoLinks.cropsPending||queue.some(f=>f.state==='error')||manifest.files.some(f=>f.status==='pending'&&!queue.some(q=>q.id===f.id&&q.state==='ready'))||readyFiles().length+queue.filter(f=>f.state==='ready').length===0;}
  async function upload(f){
   f.state='uploading';f.progress=0;drawFile(f);
   for(let attempt=0;attempt<3;attempt++)try{
@@ -98,11 +98,9 @@
    f.state='ready';f.progress=1;await PhotoLinks.local.put(token,f.id,'original',{file:f.file,group_id:f.group_id,pending:false}).catch(()=>{});drawFile(f);try{manifest=await call('manifest');render();announce();}catch{}return;
   }catch(e){if(attempt<2){await new Promise(r=>setTimeout(r,1000*(attempt+1)));continue;}f.state='error';f.error=e.message;drawFile(f);}
  }
- async function pump(){if(working)return;working=true;updateSummary();
-  const worker=async()=>{while(true){const f=queue.find(x=>x.state==='queued');if(!f)break;f.state='uploading';active++;updateSummary();try{await upload(f);}finally{active--;updateSummary();}}};
-  try{await Promise.all([worker(),worker(),worker()]);}finally{working=false;try{manifest=await call('manifest');announce();}catch(e){fail(e);}updateSummary();if(queue.some(f=>f.state==='queued'))pump();}
- }
+ function pump(){const jobs=queue.filter(f=>f.state==='queued');for(const f of jobs){f.state='uploading';active++;working=true;updateSummary();upload(f).finally(()=>{active--;working=active>0;updateSummary();if(!working)call('manifest').then(m=>{manifest=m;announce();updateSummary();}).catch(fail);});}updateSummary();}
  async function download(variant){const win=window.open('about:blank','_blank');if(win)win.opener=null;try{const r=await call('download',{variant:variant||'originals'});if(win)win.location=r.href||r.folder;else{const a=el('a','Скачать фото',{href:r.href||r.folder,target:'_blank',rel:'noopener',class:'photo-button'});app.append(a);}if(r.message)fail(new Error(r.message));}catch(e){win?.close();throw e;}}
+ window.addEventListener('photo:saving',updateSummary);
  window.addEventListener('photo:refresh',()=>refresh().catch(fail));
  window.addEventListener('beforeunload',e=>{if(working||persisting){e.preventDefault();e.returnValue='';}});
  try{if(/^[a-f0-9]{64}$/.test(token)){await refresh();const originals=await PhotoLinks.local.list(token,'original').catch(()=>[]);for(const row of originals){if(row.value.pending&&manifest.groups.some(g=>g.id===row.value.group_id)&&!manifest.files.some(f=>f.id===row.id&&f.status==='ready')){queue.push({id:row.id,group_id:row.value.group_id,file:row.value.file,state:'queued',progress:0,reserved:manifest.files.some(f=>f.id===row.id)});}}if(queue.length){render();pump();}}else if(slug)await offline();else{app.replaceChildren(el('h2','Нужна ваша личная ссылка'),el('p','Попросите сотрудника фотоцентра прислать ссылку для фото или отсканируйте QR-код в филиале.'));}}catch(e){app.replaceChildren(el('h2','Не удалось открыть загрузку'),action('Попробовать ещё раз',()=>location.reload(),true));fail(e);}
