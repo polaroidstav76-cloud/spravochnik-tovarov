@@ -68,7 +68,6 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  await s.page.getByLabel('Телефон клиента',{exact:true}).fill('89001231234');await s.page.getByRole('button',{name:'Получить ссылку'}).click();await s.page.getByText('✓ Ссылка создана. Отправьте её клиенту.').waitFor();assert.ok(s.calls.find(x=>x.action==='create'));checks++;
 
  assert.ok((await s.page.getByRole('link',{name:'Открыть фото',exact:true}).getAttribute('href')).endsWith('/photos.html#'+'a'.repeat(64)));checks++;
- await s.page.evaluate(()=>window.open=()=>null);await s.page.getByRole('button',{name:'Оригиналы ZIP',exact:true}).click();await s.page.getByRole('link',{name:'Скачать оригиналы',exact:true}).waitFor();assert.equal(await s.page.getByRole('link',{name:'Скачать оригиналы',exact:true}).getAttribute('href'),'https://download.disk.yandex.net/photos.zip');checks++;
- await s.page.getByRole('button',{name:'Готовые JPG ZIP',exact:true}).click();await s.page.getByRole('link',{name:'Скачать JPG',exact:true}).waitFor();assert.ok(s.calls.find(x=>x.action==='download'&&x.data.variant==='print'&&x.data.token==='a'.repeat(64)));checks++;
+ assert.equal(await s.page.locator('.photo-order button').count(),0);assert.equal(await s.page.locator('.photo-order a').count(),1);assert.equal(s.calls.some(x=>x.action==='download'),false);checks+=3;
  await browser.close();console.log('Photo links browser: '+checks+' assertions passed (mobile, originals, 100 files, parallelism, extra photos, sizes, offline, staff and QR).');
 })().catch(e=>{console.error(e);process.exit(1)});
