@@ -1,0 +1,46 @@
+begin;
+do $$declare worker uuid;admin uuid;person bigint;bid bigint;otherbid bigint;eid bigint;sid bigint;rid bigint;otherid bigint;batch uuid:=gen_random_uuid();batch2 uuid:=gen_random_uuid();m jsonb;blocked boolean;begin
+ select user_id,person_id into worker,person from public.staff_accounts where active and role='staff' and person_id is not null limit 1;
+ select user_id into admin from public.staff_accounts where active and role='admin' limit 1;
+ select id into bid from public.sales_branches where is_active and not is_test and not is_workshop order by id limit 1;
+ select id into otherbid from public.sales_branches where is_active and id<>bid order by id limit 1;
+ select id into eid from public.sales_employees where branch_id=bid and person_id=person limit 1;
+ if eid is null then insert into public.sales_employees(branch_id,name,person_id) values(bid,'__purchase_scope_test',person) returning id into eid;end if;
+ select id into sid from public.sales_shifts where branch_id=bid and status='open' and ended_at is null limit 1;
+ if sid is null then insert into public.sales_shifts(branch_id,employee_id,status) values(bid,eid,'open') returning id into sid;end if;
+ insert into public.sales_shift_employees(shift_id,employee_id,is_lead) values(sid,eid,false) on conflict(shift_id,employee_id) do nothing;
+ insert into public.stock_requests(branch_id,name,qty) values(bid,'__own_scope',10) returning id into rid;
+ insert into public.stock_requests(branch_id,name,qty) values(otherbid,'__other_scope',20) returning id into otherid;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated')::text,true);
+ execute 'set local role authenticated';
+ m:=public.purchase_branch_view(sid);assert exists(select 1 from jsonb_array_elements(m->'requests')x where (x->>'id')::bigint=rid);assert not exists(select 1 from jsonb_array_elements(m->'requests')x where (x->>'id')::bigint=otherid);
+ assert not exists(select 1 from public.stock_requests where id=otherid);
+ blocked:=false;begin perform public.stock_request_delete(otherid,'open',0);exception when sqlstate 'PT403' then blocked:=true;end;assert blocked;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin,'role','authenticated')::text,true);
+ execute 'set local role authenticated';
+ -- pg_net sends only after COMMIT; this entire transaction is rolled back.
+ perform public.purchase_finish(batch,jsonb_build_array(jsonb_build_object('request_id',rid,'qty',7),jsonb_build_object('request_id',otherid,'qty',3)));
+ assert exists(select 1 from public.stock_requests where id=otherid);
+ execute 'reset role';
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated')::text,true);
+ execute 'set local role authenticated';
+ m:=public.purchase_branch_view(sid);assert m->'last_batch'->>'id'=batch::text;assert (m->'last_batch'->>'snapshot_available')::boolean;
+ assert exists(select 1 from jsonb_array_elements(m->'last_batch'->'requested')x where x->>'name'='__own_scope' and (x->>'qty')::numeric=10 and (x->>'ordered_qty')::numeric=0);
+ assert exists(select 1 from jsonb_array_elements(m->'last_batch'->'ordered')x where x->>'name'='__own_scope' and (x->>'qty')::numeric=7);
+ assert not (m::text like '%__other_scope%');
+ execute 'reset role';
+ -- A later admin purchase replaces the prior one even when nothing was ordered for this branch.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin,'role','authenticated')::text,true);
+ execute 'set local role authenticated';
+ perform public.purchase_finish(batch2,jsonb_build_array(jsonb_build_object('request_id',otherid,'qty',1)));
+ execute 'reset role';
+ update public.purchase_batches set created_at=now()+interval '1 second' where id=batch2;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated')::text,true);
+ execute 'set local role authenticated';
+ m:=public.purchase_branch_view(sid);assert m->'last_batch'->>'id'=batch2::text;assert jsonb_array_length(m->'last_batch'->'ordered')=0;
+ assert jsonb_array_length((public.purchase_branch_view(-1))->'requests')=0;
+ execute 'reset role';
+ assert not has_function_privilege('anon','public.purchase_branch_view(bigint)','execute');
+end $$;
+rollback;
