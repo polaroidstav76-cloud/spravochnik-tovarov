@@ -1,0 +1,20 @@
+begin;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+do $$declare owner uuid;other_staff uuid;bid bigint;o jsonb;t text;m jsonb;id uuid;version text;denied boolean;begin
+ select user_id into owner from staff_accounts where active and role='admin' limit 1;
+ select branch_id into bid from photo_private.contacts limit 1;
+ o:=public.photo_links_api('create',jsonb_build_object('phone','79000000003','branch_id',bid,'request_id',gen_random_uuid()),owner);t:=o->>'token';id:=(o->>'id')::uuid;
+ m:=public.photo_links_api('manifest',jsonb_build_object('token',t));assert m->'contacts'->>'whatsapp' like 'https://wa.me/%';assert (m->>'needs_size_advice')::boolean=false;
+ perform public.photo_links_api('consultation',jsonb_build_object('token',t,'needed',true));
+ m:=public.photo_links_api('list',jsonb_build_object('search','79000000003'),owner);select value into o from jsonb_array_elements(m->'orders') where value->>'token'=t;
+ assert (o->>'is_new')::boolean;assert (o->>'needs_size_advice')::boolean;version:=o->>'updated_at';
+ denied:=false;begin perform public.photo_links_api('seen',jsonb_build_object('id',id,'updated_at',version));exception when sqlstate 'PT401' then denied:=true;end;assert denied;
+ select user_id into other_staff from staff_accounts where active and role='staff' and user_id<>owner limit 1;
+ if other_staff is not null then denied:=false;begin perform public.photo_links_api('seen',jsonb_build_object('id',id,'updated_at',version),other_staff);exception when sqlstate 'PT403' then denied:=true;end;assert denied,'unrelated staff cannot mark viewed';end if;
+ perform public.photo_links_api('seen',jsonb_build_object('id',id,'updated_at',version),owner);
+ m:=public.photo_links_api('list',jsonb_build_object('search','79000000003'),owner);select value into o from jsonb_array_elements(m->'orders') where value->>'token'=t;assert not (o->>'is_new')::boolean;
+ update photo_private.orders set updated_at=now()+interval '1 second' where token=t;
+ perform public.photo_links_api('seen',jsonb_build_object('id',id,'updated_at',version),owner);
+ m:=public.photo_links_api('list',jsonb_build_object('search','79000000003'),owner);select value into o from jsonb_array_elements(m->'orders') where value->>'token'=t;assert (o->>'is_new')::boolean,'newer changes stay unread after a stale click';
+end $$;
+rollback;

@@ -46,7 +46,7 @@
    const search=field('Найти по телефону или номеру заказа',el('input',null,{type:'search',placeholder:'Телефон или номер заказа',id:'photoHistorySearch'}),hist);search.id='photoHistorySearch';
    search.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>history().catch(report),350);};
    hist.append(el('div',null,{id:'photoHistory'}));panel.append(hist);
-   if(!panel.open)panel.showModal();await history();markRead();
+   if(!panel.open)panel.showModal();await history();
   }catch(e){if(panel.open)report(e);else alert(e.message);}finally{loading=false;}
  }
  function settings(){
@@ -66,26 +66,24 @@
   lastOrders=r.orders;const box=panel.querySelector('#photoHistory');if(!box)return;box.replaceChildren();
   if(!lastOrders.length)box.append(el('p','Ссылок пока нет.',{class:'photo-muted'}));
   for(const o of lastOrders){
-   const card=el('article',null,{class:'photo-order'}),title=el('strong',(o.source==='offline'?'ОФЛАЙН-ЗАКАЗ · ':'')+o.phone+(o.order_number?' · заказ '+o.order_number:''));card.append(title);
+   const card=el('article',null,{class:'photo-order'}),title=el('strong',(o.source==='offline'?'ОФЛАЙН-ЗАКАЗ · ':'')+o.phone+(o.order_number?' · заказ '+o.order_number:''));card.append(title);const viewed=el('span',o.is_new===false?'Просмотрена':'Новая',{class:o.is_new===false?'photo-viewed':'photo-new'});card.append(viewed);if(o.needs_size_advice)card.append(el('p','Нужна консультация по размеру',{class:'photo-advice-note'}));
    card.append(el('p',o.branch_name+' · '+(o.employee_name||'Клиент по QR')+' · '+new Date(o.updated_at).toLocaleString('ru-RU'),{class:'photo-muted'}));
    card.append(el('p',(o.status==='complete'?'✓ Загрузка завершена':'Клиент загружает фото')+' · '+o.file_count+' фото · '+size(Number(o.bytes))+(o.messenger?' · '+(o.messenger==='max'?'MAX':'WhatsApp'):'')));
    if(o.comment)card.append(el('p','Комментарий: '+o.comment));
-   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);actions.append(el('a','Открыть фото',{href:url,target:'_blank',rel:'noopener',class:'photo-button'}));
+   const actions=el('div',null,{class:'photo-actions'}),url=link(o.token);const openPhoto=el('a','Открыть фото',{href:url,target:'_blank',rel:'noopener',class:'photo-button'});openPhoto.onclick=()=>{request('seen',{id:o.id,updated_at:o.updated_at}).then(()=>{o.is_new=false;viewed.textContent='Просмотрена';viewed.className='photo-viewed';poll();}).catch(report);};actions.append(openPhoto);
    card.append(actions);box.append(card);
   }
  }
- function seenKey(){const a=typeof staffAccount==='undefined'?null:staffAccount;return 'photo-seen:'+a?.user_id+':'+(session()?.branchId||'all');}
- function markRead(){const seen=Object.fromEntries(lastOrders.filter(o=>o.status==='complete').map(o=>[o.id,o.completed_at]));try{localStorage.setItem(seenKey(),JSON.stringify(seen));}catch{}launch.textContent='Ссылка для фото';notice?.remove();notice=null;}
  let pollBusy=false;
  async function poll(){
   const a=typeof staffAccount==='undefined'?null:staffAccount,key=(a?.user_id||'')+':'+(session()?.branchId||'');
-  if(ctx!==key){ctx=key;notice?.remove();notice=null;launch.textContent='Ссылка для фото';if(panel.open)panel.close();}
+  if(ctx!==key){const changed=!!ctx;ctx=key;notice?.remove();notice=null;launch.textContent='Ссылка для фото';if(changed&&panel.open)panel.close();}
   if(!a||document.hidden||pollBusy||panel.open)return;pollBusy=true;
   try{
-   const r=await request('list'),seen=JSON.parse(localStorage.getItem(seenKey())||'{}'),fresh=r.orders.filter(o=>o.status==='complete'&&seen[o.id]!==o.completed_at);
-   if(fresh.length){launch.textContent='Фото клиентов · '+fresh.length;if(!notice){notice=el('div',null,{class:'photo-notice'});launch.closest('.desk-group')?.prepend(notice);}notice.replaceChildren(el('b','Новые фотографии клиентов: '+fresh.length),button('Открыть ссылки',show));}
+   const r=await request('list'),fresh=r.orders.filter(o=>o.status==='complete'&&o.is_new!==false);
+   if(fresh.length){launch.textContent='Фото клиентов · '+fresh.length;if(!notice){notice=el('div',null,{class:'photo-notice'});launch.closest('.desk-group')?.prepend(notice);}notice.replaceChildren(el('b','Новые фотографии клиентов: '+fresh.length),button('Открыть ссылки',show));}else{launch.textContent='Ссылка для фото';notice?.remove();notice=null;}
   }catch{}finally{pollBusy=false;}
  }
  launch.onclick=show;setInterval(poll,30000);setTimeout(poll,3000);window.addEventListener('focus',poll);
- panel.addEventListener('close',()=>{for(const input of panel.querySelectorAll('input[type=password]'))input.value='';});
+ panel.addEventListener('close',()=>{for(const input of panel.querySelectorAll('input[type=password]'))input.value='';poll();});
 })();

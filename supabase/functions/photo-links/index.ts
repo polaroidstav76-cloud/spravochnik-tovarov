@@ -66,8 +66,8 @@ async function verifyJpeg(token:string,render:any){
  const header=jpegHeader(bytes);if(!header.dpi||header.width!==render.width||header.height!==render.height)throw new Problem('JPG должен соответствовать выбранному размеру и иметь 300 dpi');
 }
 
-const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download','crop_enable','crop_draft','crop_source','crop_reserve','crop_complete','crop_clear']);
-const staffActions=new Set(['list','configure']);
+const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download','crop_enable','crop_draft','crop_source','crop_reserve','crop_complete','crop_clear','consultation']);
+const staffActions=new Set(['list','configure','seen','contacts_save']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
  const headers:Record<string,string>={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','Access-Control-Allow-Headers':'authorization, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
@@ -86,8 +86,8 @@ Deno.serve(async(req:Request)=>{
   if(jwt){const {data,error}=await db.auth.getUser(jwt);if(error||!data.user)throw new Problem('Войдите в Клаудшоп повторно',401);actor=data.user.id;}
   if(staffActions.has(action)&&!actor)throw new Problem('Требуется вход сотрудника',401);
   const data=(b.data&&typeof b.data==='object'&&!Array.isArray(b.data))?b.data:{};
-  if(!['branches','create','list','configure'].includes(action)&&!/^[a-f0-9]{64}$/.test(data.token||''))throw new Problem('Скопируйте ссылку целиком',404);
-  if(action==='branches'||action==='list')return reply(await rpc(action,data,actor));
+  if(!['branches','create','list','configure','seen','contacts_save'].includes(action)&&!/^[a-f0-9]{64}$/.test(data.token||''))throw new Problem('Скопируйте ссылку целиком',404);
+  if(action==='branches'||action==='list'||action==='seen'||action==='contacts_save'||action==='consultation')return reply(await rpc(action,data,actor));
   if(action==='configure'){
    const state=await rpc('branches',{},actor);if(!state.admin)throw new Problem('Только администратор',403);
    const token=String(data.token||'').trim();if(token.length<20||token.length>1000)throw new Problem('Вставьте OAuth-токен Яндекс Диска');

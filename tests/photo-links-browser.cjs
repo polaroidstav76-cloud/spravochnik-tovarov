@@ -6,15 +6,16 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  let checks=0;
  async function fixture({offline=false,mobile=false}={}){
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1100,height:900}});
-  const state={id:'order1',branch:'Тухачевского 26/4',phone_hint:'1234',order_number:'',source:offline?'offline':'staff',status:'uploading',mode:null,comment:'',groups:[],files:[],configured:true,revision:0};
+  const state={id:'order1',branch:'Тухачевского 26/4',phone_hint:'1234',order_number:'',source:offline?'offline':'staff',status:'uploading',mode:null,comment:'',groups:[],files:[],configured:true,revision:0,needs_size_advice:false,contacts:{whatsapp:'https://wa.me/79000000001',telegram:'https://t.me/test_branch'}};
   const uploads=[],calls=[];let simultaneous=0,maxActive=0;
   await page.route('**/upload.disk.yandex.net/**',async route=>{simultaneous++;maxActive=Math.max(maxActive,simultaneous);uploads.push(route.request().postDataBuffer());await new Promise(r=>setTimeout(r,25));await route.fulfill({status:201,body:''});simultaneous--;});
   await page.route('**/functions/v1/photo-links',async route=>{
    const b=route.request().postDataJSON();calls.push(b);const d=b.data;let result={ok:true};
    switch(b.action){
-    case 'branches':result={branches:[{id:5,name:'Тухачевского 26/4',slug:'branch1'}],configured:true,admin:true};break;
+    case 'branches':result={branches:[{id:5,name:'Тухачевского 26/4',slug:'branch1',contacts:{whatsapp:'https://wa.me/79000000001',telegram:'https://t.me/test_branch'}}],configured:true,admin:true};break;
     case 'create':result={id:'order1',token:'a'.repeat(64)};break;
     case 'manifest':result=state;break;
+    case 'consultation':state.needs_size_advice=d.needed;break;
     case 'mode':state.mode=d.mode;break;
     case 'group':{let g=state.mode==='same'&&state.groups[0];if(!g){g={id:'g'+(state.groups.length+1),label:d.label||'Фотографии',position:state.groups.length+1};state.groups.push(g);}result=g;break;}
     case 'reserve':if(!state.files.some(f=>f.id===d.id))state.files.push({...d,status:'pending'});result={id:d.id,href:'https://upload.disk.yandex.net/'+d.id};break;
@@ -58,16 +59,17 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  assert.equal(d.uploads.length,100);assert.ok(d.maxActive>3 && d.maxActive<=100);checks+=2;
  await sizeInput.fill('21×30');await d.page.getByRole('button',{name:'Добавить размер',exact:true}).click();await d.page.getByRole('heading',{name:'21×30',exact:true}).waitFor();assert.equal(d.state.groups.length,2);checks++;
  await d.page.screenshot({path:'/tmp/cloudshop-photos-desktop.png',fullPage:true});
- const o=await fixture({offline:true});await o.page.goto(base+'/photos.html?branch=branch1');await o.page.locator('#offlinePhone').fill('89001231234');await o.page.locator('#offlineMessenger').selectOption('max');await o.page.getByRole('button',{name:'Перейти к фотографиям'}).click();await o.page.getByRole('heading',{name:'Какие размеры фотографий?'}).waitFor();
- assert.equal(o.calls.find(x=>x.action==='create').data.messenger,'max');assert.equal(new URL(o.page.url()).search,'');assert.equal(new URL(o.page.url()).hash.length,65);checks+=3;
+ const o=await fixture({offline:true});await o.page.goto(base+'/photos.html?branch=branch1');await o.page.locator('.photo-support summary').click();assert.equal(await o.page.getByRole('link',{name:'WhatsApp',exact:true}).getAttribute('href'),'https://wa.me/79000000001');checks++;await o.page.getByRole('button',{name:'Нужна консультация по размеру',exact:true}).click();await o.page.locator('#offlinePhone').fill('89001231234');await o.page.locator('#offlineMessenger').selectOption('max');await o.page.getByRole('button',{name:'Перейти к фотографиям'}).click();await o.page.getByRole('heading',{name:'Какие размеры фотографий?'}).waitFor();
+ assert.equal(o.calls.find(x=>x.action==='create').data.needs_size_advice,true);assert.equal(o.calls.find(x=>x.action==='create').data.messenger,'max');assert.equal(new URL(o.page.url()).search,'');assert.equal(new URL(o.page.url()).hash.length,65);checks+=3;
  // Staff UI uses a signed employee session, while the public page never needs one.
  const s=await fixture();await s.page.route('**/staff-fixture.html',r=>r.fulfill({contentType:'text/html',body:`<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="photo-links.css"></head><body><div class="desk-group"><button id="photoLinksBtn">Ссылка для фото</button></div><script>var staffAccount={user_id:'staff1'};var salesSession={shiftId:1,branchId:5,branchName:'Тухачевского 26/4'};var db={auth:{getSession:async()=>({data:{session:{access_token:'test-staff-jwt'}}})}};</script><script src="vendor/qrcode.js"></script><script src="photo-common.js"></script><script src="photo-staff.js"></script></body></html>`}));
 
- await s.page.route('**/functions/v1/photo-links',async route=>{const b=route.request().postDataJSON();if(b.action!=='list')return route.fallback();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({orders:[{id:'offline1',token:'a'.repeat(64),phone:'79001231234',source:'offline',branch_name:'Тестовый филиал',status:'complete',file_count:2,crop_count:1,bytes:2048,updated_at:new Date().toISOString()}]})});});
+ await s.page.route('**/functions/v1/photo-links',async route=>{const b=route.request().postDataJSON();if(b.action!=='list')return route.fallback();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({orders:[{id:'offline1',token:'a'.repeat(64),phone:'79001231234',source:'offline',branch_name:'Тестовый филиал',status:'complete',file_count:2,crop_count:1,bytes:2048,is_new:true,needs_size_advice:true,updated_at:new Date().toISOString()}]})});});
  await s.page.goto(base+'/staff-fixture.html');await s.page.locator('#photoLinksBtn').click();await s.page.getByRole('heading',{name:'Ссылки для фото',exact:true}).waitFor();assert.ok(await s.page.getByAltText('QR: загрузить фото · Тухачевского 26/4').getAttribute('src'));checks++;
  await s.page.getByLabel('Телефон клиента',{exact:true}).fill('89001231234');await s.page.getByRole('button',{name:'Получить ссылку'}).click();await s.page.getByText('✓ Ссылка создана. Отправьте её клиенту.').waitFor();assert.ok(s.calls.find(x=>x.action==='create'));checks++;
 
  assert.ok((await s.page.getByRole('link',{name:'Открыть фото',exact:true}).getAttribute('href')).endsWith('/photos.html#'+'a'.repeat(64)));checks++;
+ assert.equal(await s.page.locator('.photo-new').count(),1);assert.equal(await s.page.locator('.photo-advice-note').count(),1);await s.page.evaluate(()=>document.querySelector('.photo-order a').addEventListener('click',e=>e.preventDefault()));await s.page.getByRole('link',{name:'Открыть фото',exact:true}).click();await s.page.locator('.photo-viewed').waitFor();assert.ok(s.calls.some(x=>x.action==='seen'&&x.data.id==='offline1'));checks+=3;
  assert.equal(await s.page.locator('.photo-order button').count(),0);assert.equal(await s.page.locator('.photo-order a').count(),1);assert.equal(s.calls.some(x=>x.action==='download'),false);checks+=3;
  await browser.close();console.log('Photo links browser: '+checks+' assertions passed (mobile, originals, 100 files, parallelism, extra photos, sizes, offline, staff and QR).');
 })().catch(e=>{console.error(e);process.exit(1)});

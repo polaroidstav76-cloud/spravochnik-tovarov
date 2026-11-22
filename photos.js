@@ -1,6 +1,6 @@
 (async()=>{
  const {api,el,button,size,validPhoto,put}=PhotoLinks,app=document.getElementById('photoApp'),error=document.getElementById('photoError');
- let token=location.hash.slice(1),manifest=null,queue=[],working=false,active=0,modeBusy=false,currentGroup='',commentDraft=null,renderVersion=0,persisting=0;
+ let offlineAdvice=false;let token=location.hash.slice(1),manifest=null,queue=[],working=false,active=0,modeBusy=false,currentGroup='',commentDraft=null,renderVersion=0,persisting=0;
  const params=new URLSearchParams(location.search),slug=params.get('branch');
  function fail(e){error.textContent=e.message||String(e);error.hidden=false;error.scrollIntoView({block:'nearest'});}
  function clearError(){error.hidden=true;}
@@ -10,23 +10,27 @@
  function announce(){window.dispatchEvent(new CustomEvent('photo:manifest',{detail:manifest}));}
  async function refresh(){manifest=await call('manifest');render();announce();}
  function showLink(){const p=el('p','Эта ссылка принадлежит вашему заказу. Не отправляйте её посторонним.',{class:'photo-muted'});app.append(p);}
+ function support(parent,contacts,branch){const box=el('section',null,{class:'photo-support'}),details=el('details');details.append(el('summary','Написать в фотоцентр'));details.append(el('p',branch,{class:'photo-muted'}));const actions=el('div',null,{class:'photo-actions'});for(const [key,name]of [['whatsapp','WhatsApp'],['telegram','Telegram'],['max','MAX']]){const href=contacts?.[key];if(typeof href==='string'&&/^https:\/\//.test(href)){const url=new URL(href);if((key==='whatsapp'&&['wa.me','api.whatsapp.com'].includes(url.hostname))||(key==='telegram'&&url.hostname==='t.me')||(key==='max'&&url.hostname==='max.ru'))actions.append(el('a',name,{href,target:'_blank',rel:'noopener',class:'photo-button'}));}}if(!actions.children.length)actions.append(el('a','Контакты фотоцентра',{href:'https://foto-26.ru/contacts',target:'_blank',rel:'noopener',class:'photo-button'}));details.append(actions);box.append(details);parent.append(box);}
+ function advice(parent,needed,change){const b=action(needed?'✓ Нужна консультация по размеру':'Нужна консультация по размеру',async()=>{const next=!needed;await change(next);needed=next;b.textContent=needed?'✓ Нужна консультация по размеру':'Нужна консультация по размеру';b.setAttribute('aria-pressed',String(needed));});b.setAttribute('aria-pressed',String(!!needed));b.classList.add('photo-advice');parent.append(b);}
  async function offline(){
   const state=await api('branches',{slug}),branch=state.branches[0];
   if(!branch)throw new Error('Ссылка филиала не найдена. Попросите сотрудника показать актуальный QR-код.');
   app.replaceChildren(el('h2','Фото для печати'),el('p',branch.name,{class:'photo-muted'}));
   if(!state.configured){app.append(el('p','Фотоцентр подключает хранилище. Пожалуйста, обратитесь к сотруднику.',{class:'photo-notice'}));return;}
+  support(app,branch.contacts,branch.name);advice(app,offlineAdvice,async value=>{offlineAdvice=value;});
   const form=el('form'),phone=el('input',null,{type:'tel',autocomplete:'tel',inputmode:'tel',placeholder:'+7 999 123-45-67',required:'',maxlength:'30',id:'offlinePhone'});
   const messenger=el('select',null,{id:'offlineMessenger'});for(const [v,t]of [['','Выберите мессенджер'],['whatsapp','WhatsApp'],['max','MAX']])messenger.append(el('option',t,{value:v}));messenger.required=true;
   const trap=el('input',null,{type:'text',tabindex:'-1',autocomplete:'off',class:'photo-honeypot','aria-hidden':'true'});
   form.append(el('label','Ваш телефон',{for:'offlinePhone'}),phone,el('label','Где с вами связаться',{for:'offlineMessenger'}),messenger,trap,el('p','Номер нужен, чтобы сотрудник нашёл ваши фотографии и связался с вами по заказу.',{class:'photo-muted'}));
   const submit=button('Перейти к фотографиям',()=>{},true);submit.type='submit';form.append(submit);
-  form.onsubmit=e=>{e.preventDefault();safe(async()=>{const r=await api('create',{slug,phone:phone.value,messenger:messenger.value,request_id:requestId,website:trap.value});token=r.token;history.replaceState(null,'',PhotoLinks.link(token));await refresh();},submit);};
+  form.onsubmit=e=>{e.preventDefault();safe(async()=>{const r=await api('create',{slug,phone:phone.value,messenger:messenger.value,request_id:requestId,website:trap.value,needs_size_advice:offlineAdvice});token=r.token;history.replaceState(null,'',PhotoLinks.link(token));await refresh();},submit);};
   const requestId=crypto.randomUUID();app.append(form);
  }
  function readyFiles(g){return manifest.files.filter(f=>f.status==='ready'&&(!g||f.group_id===g));}
  function render(){
   renderVersion++;app.replaceChildren();
   app.append(el('p',manifest.branch+(manifest.order_number?' · Заказ '+manifest.order_number:'')+' · телефон …'+manifest.phone_hint,{class:'photo-muted'}));
+  support(app,manifest.contacts,manifest.branch);advice(app,manifest.needs_size_advice,async needed=>{await call('consultation',{needed});await refresh();});
   if(!manifest.configured){app.append(el('div','Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',{class:'photo-notice'}));return;}
   if(manifest.status==='complete'){
    const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сохранено: '+readyFiles().length+' фото. Сотрудник фотоцентра увидит вашу загрузку.'));app.append(success);
@@ -41,6 +45,7 @@
     const b=action(t,async()=>{if(modeBusy)return;modeBusy=true;try{await call('mode',{mode:v});await refresh();}finally{modeBusy=false;}},true);b.append(el('small',s));choices.append(b);
    }app.append(choices);return;
   }
+  app.append(el('p','При желании вы можете сами обрезать фотографии и выбрать, какая часть снимка попадёт на печать. Это необязательно — сотрудник фотоцентра подготовит фотографии за вас.',{class:'photo-crop-optional'}));
   app.append(el('h2',manifest.mode==='same'?'Добавьте фотографии':'Фотографии по размерам'));
   app.append(el('p','JPG, PNG, HEIC, TIFF, WEBP и RAW — без сжатия и изменения качества. До 512 МБ на файл, до 4,5 ГБ на ссылку.',{class:'photo-muted'}));
   if(manifest.mode==='same'&&!manifest.groups.length){safe(async()=>{await call('group');await refresh();});return;}
