@@ -14,7 +14,7 @@ async function context(){const ctx=await chromium.launchPersistentContext(profil
    case 'crop_draft':if(offlineDraft){await r.abort();return;}if(d.revision!==(target.crop_revision||0)){await r.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'Конфликт черновика'})});return;}target.crop_draft=d.settings;target.crop_revision=(target.crop_revision||0)+1;state.status='uploading';out={revision:target.crop_revision};break;
    case 'crop_reserve':renders[d.render_id]=d;out={href:'https://upload.disk.yandex.net/crop/'+d.render_id};break;
    case 'crop_complete':target.render_id=d.render_id;target.render_settings=renders[d.render_id].settings;state.crop_count=1;break;
-   case 'crop_clear':target.render_id=target.crop_draft=target.render_settings=null;target.crop_revision=(target.crop_revision||0)+1;state.crop_count=0;break;
+   case 'remove_photo':state.files=state.files.filter(x=>x.id!==d.id);break;case 'crop_clear':target.render_id=target.crop_draft=target.render_settings=null;target.crop_revision=(target.crop_revision||0)+1;state.crop_count=0;break;
    case 'download':out={href:'https://download.disk.yandex.net/ready.zip'};break;
   }await r.fulfill({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':base},body:JSON.stringify(out)});
  });return ctx;}
@@ -37,6 +37,8 @@ function jpegMeta(bytes){let i=2,w,h,dpi;while(i+4<bytes.length&&bytes[i]===255)
  originalsFail=false;ctx=await context();page=await ctx.newPage();await page.goto(base+'/photos.html#'+token);await page.waitForFunction(()=>document.querySelector('#photoUploadSummary')?.textContent.includes('Сохранено 2 фото'),{},{timeout:20000});assert.deepEqual(originalUploads.at(-1),original,'pending original resumes automatically with identical bytes after browser restart');
 
  await page.locator('button.photo-tile').first().click();
+
+ const countBefore=state.files.length;state.files.push({...f,id:'44444444-4444-4444-8444-444444444444',name:'Догруженное.png',crop_revision:0,crop_draft:null,render_id:null,render_settings:null});await page.evaluate(()=>window.dispatchEvent(new Event('photo:refresh')));await page.waitForFunction(n=>document.querySelector('.photo-crop-dialog h2')?.textContent.endsWith('из '+n),countBefore+1);assert.equal(await page.locator('.photo-crop-dialog').count(),1,'editor updates file count without closing');
  await page.getByRole('combobox',{name:'Размер фото'}).selectOption('custom');
  await page.getByRole('spinbutton',{name:'Ширина в сантиметрах'}).fill('12');await page.getByRole('spinbutton',{name:'Высота в сантиметрах'}).fill('18');
  await page.getByRole('button',{name:'Белые поля',exact:true}).click();
@@ -49,6 +51,8 @@ function jpegMeta(bytes){let i=2,w,h,dpi;while(i+4<bytes.length&&bytes[i]===255)
 
  state.files.push({...f,id:'33333333-3333-4333-8333-333333333333',name:'Позже загруженное.png',crop_revision:0,crop_draft:null,render_id:null,render_settings:null});await page.evaluate(()=>window.dispatchEvent(new Event('photo:refresh')));await page.waitForFunction(()=>PhotoLinks.cropsPending);
  for(let i=0;i<60&&!state.files.at(-1).render_id;i++)await page.waitForTimeout(250);assert.equal(state.files.at(-1).render_settings?.fit,'blur','bulk settings automatically apply to later uploads');
+
+ await page.waitForFunction(()=>!PhotoLinks.cropsPending);page.once('dialog',d=>d.accept());await page.locator('.photo-tile-item').last().getByRole('button',{name:'Удалить',exact:true}).click();for(let i=0;i<30&&state.files.some(x=>x.id==='33333333-3333-4333-8333-333333333333');i++)await page.waitForTimeout(100);assert.equal(state.files.some(x=>x.id==='33333333-3333-4333-8333-333333333333'),false,'client can remove an unwanted ready photo');
  state.status='complete';await page.reload();await page.waitForTimeout(400);assert.equal(await page.getByRole('button',{name:'Обрезать фото и добавить поля',exact:true}).count(),0,'no crop offer on completed/main screen');
  await ctx.close();fs.rmSync(profile,{recursive:true,force:true});console.log('PASS crop: optional per-photo editor, automatic landscape, rotation, browser restart with unsaved draft/original, JPG pixel dimensions and 300 dpi, Polaroid frames, 11 formats, original retention and mobile layout.');
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -66,7 +66,7 @@ async function verifyJpeg(token:string,render:any){
  const header=jpegHeader(bytes);if(!header.dpi||header.width!==render.width||header.height!==render.height)throw new Problem('JPG должен соответствовать выбранному размеру и иметь 300 dpi');
 }
 
-const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download','crop_enable','crop_draft','crop_source','crop_reserve','crop_complete','crop_clear','consultation']);
+const publicActions=new Set(['branches','create','manifest','mode','reopen','group','reserve','complete_file','skip','finish','download','crop_enable','crop_draft','crop_source','crop_reserve','crop_complete','crop_clear','consultation','remove_photo']);
 const staffActions=new Set(['list','configure','seen','contacts_save']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
@@ -112,6 +112,15 @@ Deno.serve(async(req:Request)=>{
   }
   const secret=await rpc('secret');if(!secret.token)throw new Problem('Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',503);
   const token=secret.token;
+  if(action==='remove_photo'){
+   const f=await rpc('remove_begin',data);if(f.removed)return reply(f);
+   const root='disk:/Cloudshop-Client-Removed/'+f.order_id;await folders(token,root);
+   for(const [path,destination]of [[f.path,root+'/'+String(data.id)+'_original_'+String(f.path).split('/').pop()],[f.target,root+'/'+String(data.id)+'_print.jpg']]){
+    if(!path)continue;
+    try{await operation(token,await disk(token,'/resources/move',{from:path,path:destination,overwrite:'true'},'POST'));}catch(e){if(!(e instanceof Problem)||e.status!==404)throw e;}
+   }
+   return reply(await rpc('remove_commit',data));
+  }
   if(action==='crop_source'){
    const f=await rpc('crop_source',data),download=await disk(token,'/resources/download',{path:f.path});return reply({href:trustedHref(download.href)});
   }

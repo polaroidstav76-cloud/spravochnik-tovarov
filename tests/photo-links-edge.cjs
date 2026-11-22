@@ -4,6 +4,7 @@ const fakeToken='test-storage-token-never-return-this';
 const db={auth:{getUser:async jwt=>({data:{user:jwt==='valid-admin'?{id:'admin'}:null},error:jwt==='valid-admin'?null:{message:'invalid'}})},rpc:async(name,args)=>{
  rpcs.push(args);const d=args.p_data;let data={ok:true};
  switch(args.p_action){
+  case 'remove_begin':data={order_id:'order1',path:'disk:/Cloudshop-Client-Photos/order1/photo.jpg',target:'disk:/Cloudshop-Client-Ready/order1/photo.jpg'};break;
   case 'secret':data={token:fakeToken};break;
   case 'branches':data={admin:args.p_actor==='admin',branches:[],configured:true};break;
   case 'manifest':data={id:'order1',branch:'Branch',order_number:'1',source:'staff',groups:[{id:'g1',label:'10x15'}],files:[{id:'f1',group_id:'g1',status:'ready',size:123}]};break;
@@ -56,5 +57,6 @@ async function call(action,data={},jwt='',customOrigin=origin){currentAction=act
  assert.equal((await call('crop_reserve',{token,id,render_id:'r1',size:123})).r.status,200);
  diskMode='bad-dpi';assert.equal((await call('crop_complete',{token,id,render_id:'r1'})).r.status,400);diskMode='normal';
  assert.equal((await call('crop_complete',{token,id,render_id:'r1'})).r.status,200);assert.ok(rpcs.some(x=>x.p_action==='crop_commit'));
+ assert.equal((await call('remove_photo',{token,id,operation_id:id})).r.status,200);assert.ok(rpcs.some(x=>x.p_action==='remove_commit'));
  console.log('Photo links Edge: auth, CORS, secret isolation, storage setup, upload slots, size verification, skip safety, finish snapshot and ZIP passed.');
 })().catch(e=>{console.error(e);process.exit(1)});

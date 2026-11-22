@@ -30,10 +30,10 @@
  function render(){
   renderVersion++;app.replaceChildren();
   app.append(el('p',manifest.branch+(manifest.order_number?' · Заказ '+manifest.order_number:'')+' · телефон …'+manifest.phone_hint,{class:'photo-muted'}));
-  support(app,manifest.contacts,manifest.branch);advice(app,manifest.needs_size_advice,async needed=>{await call('consultation',{needed});await refresh();});
+  if(manifest.source==='offline')support(app,manifest.contacts,manifest.branch);advice(app,manifest.needs_size_advice,async needed=>{await call('consultation',{needed});await refresh();});
   if(!manifest.configured){app.append(el('div','Фотоцентр ещё подключает хранилище. Ссылка сохранена — вернитесь к ней позже.',{class:'photo-notice'}));return;}
   if(manifest.status==='complete'){
-   const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сохранено: '+readyFiles().length+' фото. Сотрудник фотоцентра увидит вашу загрузку.'));app.append(success);
+   const success=el('div',null,{class:'photo-success'});success.append(el('strong','Фотографии отправлены!'),el('p','Сотрудник фотоцентра свяжется с вами в ближайшее время для оформления заказа.'),el('p','Сохранено: '+readyFiles().length+' фото.'));app.append(success);
    for(const g of manifest.groups){const row=el('div',null,{class:'photo-summary'});row.append(el('span',g.label),el('b',readyFiles(g.id).length+' фото'));app.append(row);const gallery=el('div',null,{class:'photo-gallery'});for(const f of readyFiles(g.id)){const tile=el('div',null,{class:'photo-tile'}),image=el('img',null,{alt:'Отправленная фотография',loading:'lazy'});tile.append(image);gallery.append(tile);PhotoLinks.showPhotoPreview?.(image,f,token);}app.append(gallery);}
    if(manifest.comment)app.append(el('p','Комментарий: '+manifest.comment));
    const actions=el('div',null,{class:'photo-actions'});actions.append(action('Добавить ещё фото',async()=>{await call('reopen');queue=[];await refresh();},true),action(manifest.crop_count?'Скачать готовые JPG':'Скачать оригиналы ZIP',()=>download(manifest.crop_count?'print':'originals')));app.append(actions);showLink();return;
@@ -57,12 +57,12 @@
   }
   const label=el('label','Комментарий к заказу (необязательно)',{for:'photoComment'}),comment=el('textarea',null,{id:'photoComment',maxlength:'3000',rows:'3',placeholder:'Например: печатать без полей…'});comment.value=commentDraft??manifest.comment;comment.oninput=()=>commentDraft=comment.value;app.append(label,comment);
   const bar=el('div',null,{class:'photo-sticky'}),summary=el('p','',{id:'photoUploadSummary',class:'photo-muted'});
-  const finish=action('Завершить загрузку фото',async()=>{if(working||queue.some(f=>f.state==='error'))throw new Error('Дождитесь загрузки фото. Файлы с ошибкой можно повторить или исключить.');PhotoLinks.beforePhotoFinish?.();await call('finish',{comment:comment.value});commentDraft=null;queue=[];await refresh();},true);finish.id='photoFinish';
+  const finish=action('Завершить загрузку фото',async()=>{if(working||queue.some(f=>f.state==='error'))throw new Error('Дождитесь загрузки фото. Файлы с ошибкой можно повторить или исключить.');PhotoLinks.beforePhotoFinish?.();await call('finish',{comment:comment.value});commentDraft=null;queue=[];await refresh();document.querySelector('.photo-success')?.scrollIntoView({behavior:'smooth',block:'start'});document.querySelector('.photo-success')?.setAttribute('tabindex','-1');document.querySelector('.photo-success')?.focus({preventScroll:true});},true);finish.id='photoFinish';
   bar.append(summary,finish);app.append(bar);updateSummary();
  }
  function renderGroup(g){
   const card=el('section',null,{class:'photo-group',id:'group-'+g.id});card.append(el('h3',g.label));
-  const ready=readyFiles(g.id);if(ready.length){const list=el('div',null,{class:'photo-gallery'});for(const f of ready){const tile=button('',()=>window.dispatchEvent(new CustomEvent('photo:edit',{detail:f.id})));tile.className='photo-tile';tile.setAttribute('aria-label','Обрезать фото и добавить поля');const image=el('img',null,{alt:'Загруженная фотография',loading:'lazy'});tile.append(image,el('span',f.render_id?'✓ Подготовлено':'✓ Загружено'));list.append(tile);PhotoLinks.showPhotoPreview?.(image,f,token);}card.append(el('p','Сохранено '+ready.length+' фото',{class:'photo-muted'}),list);}
+  const ready=readyFiles(g.id);if(ready.length){const list=el('div',null,{class:'photo-gallery'});for(const f of ready){const tile=button('',()=>window.dispatchEvent(new CustomEvent('photo:edit',{detail:f.id})));tile.className='photo-tile';tile.setAttribute('aria-label','Обрезать фото и добавить поля');const image=el('img',null,{alt:'Загруженная фотография',loading:'lazy'});tile.append(image,el('span',f.render_id?'✓ Подготовлено':'✓ Загружено'));const holder=el('div',null,{class:'photo-tile-item'});holder.append(tile,action('Удалить',()=>PhotoLinks.removePhoto(f.id)));list.append(holder);PhotoLinks.showPhotoPreview?.(image,f,token);}card.append(el('p','Сохранено '+ready.length+' фото',{class:'photo-muted'}),list);}
   const pending=manifest.files.filter(f=>f.group_id===g.id&&f.status==='pending'&&!queue.some(q=>q.id===f.id));
   if(pending.length){card.append(el('p','Эти файлы не завершили загрузку. Выберите их снова для повтора или исключите из заказа.',{class:'photo-muted'}));for(const f of pending){const row=el('div',null,{class:'photo-file'});row.append(el('span',f.name),action('Исключить',async()=>{await call('skip',{id:f.id});await refresh();}));card.append(row);}}
   const drop=el('div',null,{class:'photo-drop'}),input=el('input',null,{type:'file',multiple:'',accept:'.jpg,.jpeg,.png,.heic,.heif,.tif,.tiff,.webp,.avif,.bmp,.dng,.cr2,.nef,.arw',hidden:true});
@@ -105,6 +105,7 @@
  }
  function pump(){const jobs=queue.filter(f=>f.state==='queued');for(const f of jobs){f.state='uploading';active++;working=true;updateSummary();upload(f).finally(()=>{active--;working=active>0;updateSummary();if(!working)call('manifest').then(m=>{manifest=m;announce();updateSummary();}).catch(fail);});}updateSummary();}
  async function download(variant){const win=window.open('about:blank','_blank');if(win)win.opener=null;try{const r=await call('download',{variant:variant||'originals'});if(win)win.location=r.href||r.folder;else{const a=el('a','Скачать фото',{href:r.href||r.folder,target:'_blank',rel:'noopener',class:'photo-button'});app.append(a);}if(r.message)fail(new Error(r.message));}catch(e){win?.close();throw e;}}
+ window.addEventListener('photo:removed',e=>{queue=queue.filter(f=>f.id!==e.detail);updateSummary();});
  window.addEventListener('photo:saving',updateSummary);
  window.addEventListener('photo:refresh',()=>refresh().catch(fail));
  window.addEventListener('beforeunload',e=>{if(working||persisting){e.preventDefault();e.returnValue='';}});
