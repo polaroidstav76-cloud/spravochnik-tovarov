@@ -1,6 +1,6 @@
 // Закупка у поставщика: отдельный каталог, частичные количества, список развозки.
 (() => {
-  let items=[], requests=[], draft={selected:{},manual:[],notes:''}, key='', busy=false, lastBatch=null;
+  let items=[], requests=[], draft={selected:{},manual:[],notes:''}, key='', busy=false, lastBatch=null, viewBranch=null;
   const code=q=>q.supplier_code||q.code||'';
   const searchKey=value=>String(value??'').toLowerCase().replace(/ё/g,'е').replace(/(\d)\s*[xх×]\s*(?=\d)/g,'$1x').replace(/[^a-zа-я0-9]+/g,' ').trim();
   const archived=q=>q.status==='bought'&&Number.isFinite(Date.parse(q.closed_at))&&Date.now()-Date.parse(q.closed_at)>=14*24*60*60*1000;
@@ -21,7 +21,7 @@
     const [a,b]=await Promise.all([db.from('purchase_catalog').select('*').order('id'),isAdmin?db.rpc('stock_purchase_live'):db.rpc('purchase_branch_view',{p_shift_id:stkActor().p_shift_id})]);
     if(loadingAdmin!==isAdmin||loadingShift!==stkActor().p_shift_id||loadingBranch!==stkMyBranch())return false;
     if(a.error||b.error){$('stockBody').textContent='Ошибка загрузки: '+(a.error||b.error).message;return false}
-    items=a.data||[];requests=(b.data.requests||[]).filter(q=>isAdmin||Number(q.branch_id)===Number(stkMyBranch()));lastBatch=isAdmin?null:b.data.last_batch;stk.buy=b.data;stkDrawBadge();
+    viewBranch=b.data.branch_id||stkMyBranch();items=a.data||[];requests=(b.data.requests||[]).filter(q=>isAdmin||Number(q.branch_id)===Number(viewBranch));lastBatch=isAdmin?null:b.data.last_batch;stk.buy=b.data;stkDrawBadge();
     if(!draft.submitted){for(const id of Object.keys(draft.selected))if(!requests.some(q=>Number(q.id)===Number(id)))delete draft.selected[id];save();}
     draw();return true;
   };
@@ -54,7 +54,7 @@
       const box=$('prLastRequestBody'),open=box.hidden;box.hidden=!open;$('prLastRequest').setAttribute('aria-expanded',String(open));
       if(!open)return;
       const requested=lastBatch.requested||[],ordered=lastBatch.ordered||[];
-      box.innerHTML=`<h3>Последняя заявка · ${esc(stkBranchName(stkMyBranch()))}</h3><p>Закупка оформлена администратором: <b>${esc(new Date(lastBatch.created_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))}</b></p><h4>Что запрашивал филиал</h4>${!lastBatch.snapshot_available?'<div class="status">Для этой старой закупки состав заявки не сохранялся. Ниже показано то, что было заказано для вашего филиала.</div>':requested.length?`<ul>${requested.map(q=>`<li><b>${esc(q.name)}</b> — ${q.qty==null?'количество определяет администратор':esc(q.qty)+' шт'}${q.comment?' · '+esc(q.comment):''}</li>`).join('')}</ul>`:'<div class="status">На момент оформления закупки заявок вашего филиала не было.</div>'}<h4>Что заказано для филиала</h4>${ordered.length?`<ul>${ordered.map(q=>`<li><b>${esc(q.name)}</b> — ${esc(q.qty)} шт</li>`).join('')}</ul>`:'<div class="status">В этой закупке для вашего филиала ничего не заказано. Текущие незакупленные заявки остаются в списке.</div>'}`;
+      box.innerHTML=`<h3>Последняя заявка · ${esc(stkBranchName(viewBranch))}</h3><p>Закупка оформлена администратором: <b>${esc(new Date(lastBatch.created_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))}</b></p><h4>Что запрашивал филиал</h4>${!lastBatch.snapshot_available?'<div class="status">Для этой старой закупки состав заявки не сохранялся. Ниже показано то, что было заказано для вашего филиала.</div>':requested.length?`<ul>${requested.map(q=>`<li><b>${esc(q.name)}</b> — ${q.qty==null?'количество определяет администратор':esc(q.qty)+' шт'}${q.comment?' · '+esc(q.comment):''}</li>`).join('')}</ul>`:'<div class="status">На момент оформления закупки заявок вашего филиала не было.</div>'}<h4>Что заказано для филиала</h4>${ordered.length?`<ul>${ordered.map(q=>`<li><b>${esc(q.name)}</b> — ${esc(q.qty)} шт</li>`).join('')}</ul>`:'<div class="status">В этой закупке для вашего филиала ничего не заказано. Текущие незакупленные заявки остаются в списке.</div>'}`;
     });
     let picked=null,adding=false;
     const openedActor=stkActor(),openedBranch=stkMyBranch();
