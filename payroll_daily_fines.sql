@@ -59,7 +59,7 @@ create function public.payroll_fine_revoke(p_id uuid) returns boolean language s
 revoke all on function payroll_private.report(date,date),public.payroll_report(date,date),payroll_private.revoke_fine(uuid),public.payroll_fine_revoke(uuid) from public,anon;
 grant execute on function payroll_private.report(date,date),public.payroll_report(date,date),payroll_private.revoke_fine(uuid),public.payroll_fine_revoke(uuid) to authenticated;
 create function payroll_private.telegram_flow(p_chat_id bigint,p_message_id bigint,p_action text,p_text text default null) returns jsonb language plpgsql security definer set search_path='' as $$
-declare s payroll_private.fine_sessions%rowtype;person public.sales_people%rowtype;matches jsonb;n integer;value numeric;fid uuid;existing payroll_private.fines%rowtype;
+declare s payroll_private.fine_sessions%rowtype;person public.sales_people%rowtype;matches jsonb;n integer;value numeric;name_input text;parts text[];fid uuid;existing payroll_private.fines%rowtype;
 begin
  if coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then raise sqlstate 'PT403' using message='Нет доступа';end if;
  if not exists(select 1 from public.report_recipients where chat_id=p_chat_id and active) then return jsonb_build_object('status','inactive');end if;
@@ -77,10 +77,12 @@ begin
  if s.expires_at<now() then delete from payroll_private.fine_sessions where chat_id=p_chat_id;return jsonb_build_object('status','expired');end if;
  update payroll_private.fine_sessions set last_message_id=p_message_id where chat_id=p_chat_id;
  if s.step='name' then
-  select count(*),jsonb_agg(jsonb_build_object('id',p.id,'name',p.name) order by p.name,p.id) into n,matches from public.sales_people p where p.is_active and (lower(trim(p.name))=lower(trim(p_text)) or (p_text ~ '^#[0-9]+$' and '#'||p.id=p_text));
-  if n=0 then select count(*),jsonb_agg(jsonb_build_object('id',p.id,'name',p.name) order by p.name,p.id) into n,matches from public.sales_people p where p.is_active and position(lower(trim(p_text)) in lower(p.name))>0 and length(trim(p_text))>=2;end if;
-  if n=1 then select * into person from public.sales_people where id=(matches->0->>'id')::bigint;update payroll_private.fine_sessions set person_id=person.id,step='amount' where chat_id=p_chat_id;return jsonb_build_object('status','amount','name',person.name);end if;
-  return jsonb_build_object('status','choose','people',coalesce((select jsonb_agg(x) from(select value x from jsonb_array_elements(matches) limit 30)q),'[]'::jsonb));
+  name_input:=trim(p_text);parts:=regexp_match(name_input,'^(.+?)[[:space:]]+([0-9]+([.,][0-9]{1,2})?)[[:space:]]*(руб[.]?|₽)?$');
+  if parts is not null then name_input:=trim(parts[1]);value:=replace(parts[2],',','.')::numeric;end if;
+  select count(*),jsonb_agg(jsonb_build_object('id',p.id,'name',p.name) order by p.name,p.id) into n,matches from public.sales_people p where p.is_active and (lower(trim(p.name))=lower(trim(name_input)) or (name_input ~ '^#[0-9]+$' and '#'||p.id=name_input));
+  if n=0 then select count(*),jsonb_agg(jsonb_build_object('id',p.id,'name',p.name) order by p.name,p.id) into n,matches from public.sales_people p where p.is_active and position(lower(trim(name_input)) in lower(p.name))>0 and length(trim(name_input))>=2;end if;
+  if n=1 then select * into person from public.sales_people where id=(matches->0->>'id')::bigint;if parts is not null then if value<=0 or value>999999999 then return jsonb_build_object('status','bad_amount');end if;update payroll_private.fine_sessions set person_id=person.id,amount=value,step='confirm' where chat_id=p_chat_id;return jsonb_build_object('status','confirm','name',person.name,'amount',value);end if;update payroll_private.fine_sessions set person_id=person.id,step='amount' where chat_id=p_chat_id;return jsonb_build_object('status','amount','name',person.name);end if;
+  return jsonb_build_object('status','choose','people',coalesce((select jsonb_agg(x) from(select candidate.value x from jsonb_array_elements(matches)candidate limit 30)q),'[]'::jsonb));
  elsif s.step='amount' then
   if trim(p_text) !~ '^[0-9]+([.,][0-9]{1,2})?$' then return jsonb_build_object('status','bad_amount');end if;
   value:=replace(trim(p_text),',','.')::numeric;if value<=0 or value>999999999 then return jsonb_build_object('status','bad_amount');end if;

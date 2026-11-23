@@ -27,6 +27,7 @@ do $$declare worker uuid;admin uuid;pid bigint;otherpid bigint;eid bigint;eid2 b
  execute 'reset role';
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
  assert public.telegram_payroll_fine(-987654321,900000000,'start')->>'status'='inactive';
+ perform public.telegram_payroll_fine(chat,899999995,'start');assert public.telegram_payroll_fine(chat,899999996,'input','__unknown_name__ 100')->>'status'='choose';
  assert public.telegram_payroll_fine(chat,900000000,'start')->>'status'='name';
  assert public.telegram_payroll_fine(chat,900000001,'input','#'||pid)->>'status'='amount';
  assert public.telegram_payroll_fine(chat,900000002,'input','-500')->>'status'='bad_amount';
@@ -39,6 +40,7 @@ do $$declare worker uuid;admin uuid;pid bigint;otherpid bigint;eid bigint;eid2 b
  execute 'set local role authenticated';perform public.payroll_fine_revoke(fid);execute 'reset role';
  perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated')::text,true);
  execute 'set local role authenticated';m:=public.payroll_report(today-4,today);assert (m->'rows'->0->>'total')::numeric=5500;assert (m->'fines'->0->>'revoked')::boolean;execute 'reset role';
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);perform public.telegram_payroll_fine(chat,900000010,'start');flow:=public.telegram_payroll_fine(chat,900000011,'input','#'||pid||' 100');assert flow->>'status'='confirm';assert (flow->>'amount')::numeric=100;perform public.telegram_payroll_fine(chat,900000012,'cancel');
  assert not has_function_privilege('authenticated','public.telegram_payroll_fine(bigint,bigint,text,text)','execute');
  assert not has_table_privilege('authenticated','payroll_private.fines','select');
 end $$;

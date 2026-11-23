@@ -30,7 +30,7 @@ if(msg.chat.type==="private"){
  if(!purchase&&!receipt&&v.status!=="inactive"){
   if(v.status==="ignored")return new Response("ok");
   if(fine){const stop=await db.rpc("telegram_workshop_receipt",{p_chat_id:msg.chat.id,p_message_id:msg.message_id,p_action:"cancel"});if(stop.error)return new Response("Database unavailable",{status:503});}
-  const body=v.status==="name"?"💸 <b>Штраф</b>\nВведите имя сотрудника. При совпадении имён бот предложит выбрать нужного."
+  const body=v.status==="name"?"💸 <b>Штраф</b>\nВведите имя сотрудника или сразу имя и сумму, например: Настя 100. При совпадении имён бот предложит выбрать нужного."
    :v.status==="amount"?"Сотрудник: <b>"+esc(v.name)+"</b>\nВведите сумму штрафа в рублях, например 500 или 500,50."
    :v.status==="confirm"?"Проверьте штраф:\nСотрудник: <b>"+esc(v.name)+"</b>\nСумма: <b>"+esc(v.amount)+" ₽</b>\nДля записи нажмите «Подтвердить штраф»."
    :v.status==="saved"?"✅ Штраф записан: "+esc(v.name)+" — "+esc(v.amount)+" ₽.\nОн вычтен из зарплаты за текущий период и виден сотруднику. Отменить ошибочный штраф можно в Клаудшопе: «Зарплата → Штрафы»."
