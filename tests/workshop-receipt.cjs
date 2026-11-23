@@ -10,6 +10,7 @@ vm.runInNewContext(stripTypeScriptTypes(source),{
   createClient:()=>({rpc:async(name,args)=>{
     calls.push({name,args});
     if(name==='telegram_purchase_config')return {data:{token:'test',secret:'secret'}};
+    if(name==='telegram_payroll_fine')return {data:{status:'inactive'}};
     if(name==='telegram_purchase_data')return {data:allowed?[]:null};
     return failDb?{error:{message:'offline'}}:{data:{status,id:77}};
   }}),

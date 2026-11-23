@@ -1,0 +1,18 @@
+(()=>{
+ let generation=0;
+ async function build(){
+  const seq=++generation,who=staffAccount?.user_id,from=$('payrollFrom').value,to=$('payrollTo').value;
+  if(!who||!from||!to)return;
+  $('payrollContent').textContent='Рассчитываем зарплату…';
+  const r=await db.rpc('payroll_report',{p_from:from,p_to:to});
+  if(seq!==generation||staffAccount?.user_id!==who)return;
+  if(r.error){$('payrollContent').textContent='Не удалось загрузить зарплату: '+r.error.message;return;}
+  const {rows=[],fines=[],admin=false}=r.data||{},money=v=>salesMoney(Number(v)||0),sum=k=>rows.reduce((n,x)=>n+Number(x[k]||0),0);
+  $('payrollContent').innerHTML=`<div class="actions" style="justify-content:flex-start"><button id="payrollSummaryTab" class="primary" aria-pressed="true">Расчёт</button><button id="payrollFinesTab" class="secondary" aria-pressed="false">Штрафы (${fines.filter(f=>!f.revoked).length})</button></div><section id="payrollSummarySection"><div class="report-grid"><div class="report-card">Оплачиваемых дней<br><b>${sum('shifts')}</b></div><div class="report-card">Штрафы<br><b>${money(sum('fines'))}</b></div><div class="report-card">К выплате<br><b>${money(sum('total'))}</b></div></div><div style="overflow:auto"><table class="customer-table"><thead><tr><th>Сотрудник</th><th>Дни</th><th>Оплата дней</th><th>Ретушь</th><th>Ретушь ₽</th><th>Штрафы</th><th>К выплате</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${Number(x.shifts)}${x.duplicates?`<div class="status">Повторных смен без доплаты: ${Number(x.duplicates)}</div>`:''}${x.free_shifts?`<div class="status">Смен без ставки: ${Number(x.free_shifts)}</div>`:''}</td><td>${money(x.shift_pay)}</td><td>${Number(x.retouches)}</td><td>${money(x.retouch_pay)}</td><td>${money(x.fines)}</td><td><b>${money(x.total)}</b></td></tr>`).join('')||'<tr><td colspan="7">За этот период начислений и штрафов нет.</td></tr>'}</tbody></table></div></section><section id="payrollFinesSection" hidden><h3>Штрафы за выбранный период</h3><div class="status">Штраф вычитается в периоде, на который приходится дата его оформления. Отменённые штрафы не уменьшают зарплату.</div>${fines.length?`<table class="customer-table"><thead><tr><th>Дата</th>${admin?'<th>Сотрудник</th>':''}<th>Сумма</th><th>Комментарий / статус</th>${admin?'<th></th>':''}</tr></thead><tbody>${fines.map(f=>`<tr><td>${esc(f.date.split('-').reverse().join('.'))}</td>${admin?`<td>${esc(f.name)}</td>`:''}<td>${money(f.amount)}</td><td>${esc(f.reason||'Штраф')}${f.revoked?' · отменён':''}</td>${admin?`<td>${!f.revoked?`<button class="secondary small" data-revoke-fine="${esc(f.id)}">Отменить штраф</button>`:''}</td>`:''}</tr>`).join('')}</tbody></table>`:'<div class="status">Штрафов за этот период нет.</div>'}</section>`;
+  function tab(fines){$('payrollSummarySection').hidden=fines;$('payrollFinesSection').hidden=!fines;for(const [id,active]of [['payrollSummaryTab',!fines],['payrollFinesTab',fines]]){$(id).className=active?'primary':'secondary';$(id).setAttribute('aria-pressed',String(active));}}
+  $('payrollSummaryTab').onclick=()=>tab(false);$('payrollFinesTab').onclick=()=>tab(true);
+  $('payrollContent').querySelectorAll('[data-revoke-fine]').forEach(b=>b.onclick=async()=>{if(!confirm('Отменить штраф? Его сумма вернётся в расчёт зарплаты.'))return;b.disabled=true;const r=await db.rpc('payroll_fine_revoke',{p_id:b.dataset.revokeFine});if(r.error){b.disabled=false;alert(r.error.message);return;}await build();$('payrollFinesTab')?.click();});
+ }
+ window.PayrollUI={build,clear(){generation++;$('payrollContent').replaceChildren();close('payrollModal');}};
+ $('staffPayrollBtn').onclick=()=>$('payrollBtn').click();
+})();

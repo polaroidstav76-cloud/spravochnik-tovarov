@@ -1,6 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 const esc=(s:unknown)=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-const keyboard={keyboard:[[{text:"🛒 Закупка"},{text:"📥 Приход"}],[{text:"Отмена"}]],resize_keyboard:true,is_persistent:true};
+const keyboard={keyboard:[[{text:"🛒 Закупка"},{text:"📥 Приход"}],[{text:"💸 Штраф"}],[{text:"Отмена"}]],resize_keyboard:true,is_persistent:true};
 Deno.serve(async(req)=>{
 if(req.method!=="POST")return new Response("Method not allowed",{status:405});
 const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false}});
@@ -13,14 +13,35 @@ if(!msg?.chat?.id||typeof msg.text!=="string")return new Response("ok");
 const text=msg.text.trim();
 const purchase=/^(🛒\s*)?закупка$/i.test(text)||/^\/(purchase|start)(@\w+)?(?:\s|$)/i.test(text);
 const receipt=/^(📥\s*)?приход$/i.test(text)||/^\/receipt(@\w+)?$/i.test(text);
+const fine=/^(💸\s*)?штраф$/i.test(text)||/^\/fine(@\w+)?$/i.test(text);
 const cancel=/^отмена$/i.test(text)||/^\/cancel(@\w+)?$/i.test(text);
 const result=await db.rpc("telegram_purchase_data",{p_chat_id:msg.chat.id});
 if(result.error)return new Response("Database unavailable",{status:503});
 if(result.data===null)return new Response("ok");
-const send=async(body:string)=>{
-const response=await fetch("https://api.telegram.org/bot"+cfg.data.token+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:msg.chat.id,text:body,parse_mode:"HTML",reply_markup:keyboard})});
+const send=async(body:string,confirmFine=false)=>{
+const response=await fetch("https://api.telegram.org/bot"+cfg.data.token+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:msg.chat.id,text:body,parse_mode:"HTML",reply_markup:confirmFine?{keyboard:[[{text:"Подтвердить штраф"}],[{text:"Отмена"}]],resize_keyboard:true}:keyboard})});
 const value=await response.json();if(!response.ok||!value.ok)throw new Error("Telegram send failed");
 };
+// Fine entry uses a separate durable state machine; only the owner's approved private chat can write.
+if(msg.chat.type==="private"){
+ const f=await db.rpc("telegram_payroll_fine",{p_chat_id:msg.chat.id,p_message_id:msg.message_id,p_action:fine?"start":cancel||purchase||receipt?"cancel":/^подтвердить штраф$/i.test(text)?"confirm":"input",p_text:text});
+ if(f.error)return new Response("Database unavailable",{status:503});
+ const v=f.data||{status:"inactive"};
+ if(!purchase&&!receipt&&v.status!=="inactive"){
+  if(v.status==="ignored")return new Response("ok");
+  if(fine){const stop=await db.rpc("telegram_workshop_receipt",{p_chat_id:msg.chat.id,p_message_id:msg.message_id,p_action:"cancel"});if(stop.error)return new Response("Database unavailable",{status:503});}
+  const body=v.status==="name"?"💸 <b>Штраф</b>\nВведите имя сотрудника. При совпадении имён бот предложит выбрать нужного."
+   :v.status==="amount"?"Сотрудник: <b>"+esc(v.name)+"</b>\nВведите сумму штрафа в рублях, например 500 или 500,50."
+   :v.status==="confirm"?"Проверьте штраф:\nСотрудник: <b>"+esc(v.name)+"</b>\nСумма: <b>"+esc(v.amount)+" ₽</b>\nДля записи нажмите «Подтвердить штраф»."
+   :v.status==="saved"?"✅ Штраф записан: "+esc(v.name)+" — "+esc(v.amount)+" ₽.\nОн вычтен из зарплаты за текущий период и виден сотруднику. Отменить ошибочный штраф можно в Клаудшопе: «Зарплата → Штрафы»."
+   :v.status==="choose"?((v.people||[]).length?"Найдены сотрудники:\n"+v.people.map((p:{name:string;id:number})=>esc(p.name)+" — #"+p.id).join("\n")+"\nВведите полное имя или номер с решёткой, например #12.":"Сотрудник не найден. Введите имя так, как оно записано в Клаудшопе.")
+   :v.status==="bad_amount"?"Введите сумму больше нуля, цифрами, не более двух знаков после запятой."
+   :v.status==="await_confirm"?"Штраф ещё не записан. Нажмите «Подтвердить штраф» или «Отмена»."
+   :v.status==="cancelled"?"Ввод штрафа отменён."
+   :"Время ввода истекло. Нажмите «💸 Штраф» и начните заново.";
+  try{await send(body,v.status==="confirm"||v.status==="await_confirm");return new Response("ok")}catch{return new Response("Telegram unavailable",{status:503})}
+ }
+}
 // В личном чате принимаем только записи после кнопки «Приход».
 if(!purchase){
   if(msg.chat.type!=="private")return new Response("ok");
