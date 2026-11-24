@@ -203,7 +203,7 @@ class Queue:
 
     def claim(self,recipient,now,manual=False,direction='wideformat',expected=None):
         with self.lock,self.db:
-            existing=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','submitting','uncertain','manual') and direction=? order by created limit 1",(direction,)).fetchone()
+            existing=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','submitting','uncertain','manual','review','editing') and direction=? order by created limit 1",(direction,)).fetchone()
             if existing:
                 if manual:raise UserError('Предыдущая отправка ещё не завершена. Проверьте её состояние на основном компьютере.')
                 return None
@@ -240,7 +240,7 @@ class Queue:
 
     def active_batch(self,direction='wideformat'):
         with self.lock:
-            r=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','dispatching_local') and direction=? order by created limit 1",(direction,)).fetchone()
+            r=self.db.execute("select * from batches where state in ('collecting','packing','uploading','ready','invalidated','dispatching_local','review','editing') and direction=? order by created limit 1",(direction,)).fetchone()
             return dict(r) if r else None
 
     def batch(self,id):

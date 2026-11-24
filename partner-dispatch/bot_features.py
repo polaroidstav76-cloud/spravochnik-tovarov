@@ -48,7 +48,7 @@ class BotFeatures:
         if direction=='dtf':lines.append(f'Всего копий: {sum(r["copies"] for r in rows)}.')
         with self.q.lock:
             batch=self.q.db.execute("select * from batches where direction=? and state not in ('sent','manual_sent','cancelled') order by created limit 1",(direction,)).fetchone()
-        labels={'collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка архива на Диск','ready':'Подготовка письма','submitting':'Передача письма','uncertain':'Нужно проверить получение письма','dispatching_local':'Передача задания приёмнику','awaiting_download':'Ожидает сохранения на компьютере 30×40','manual':'Ручная отправка — автоповторы остановлены','invalidated':'Пересборка архива'}
+        labels={'review':'Предпросмотр ДТФ · ожидание автоотправки через 5 минут','editing':'Исправление ДТФ · автоматическая отправка на паузе','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка архива на Диск','ready':'Подготовка письма','submitting':'Передача письма','uncertain':'Нужно проверить получение письма','dispatching_local':'Передача задания приёмнику','awaiting_download':'Ожидает сохранения на компьютере 30×40','manual':'Ручная отправка — автоповторы остановлены','invalidated':'Пересборка архива'}
         if batch:
             lines.append('Заказ: '+labels.get(batch['state'],batch['state']))
             retry=float(self.q.setting('retry_at:'+batch['id'],'0'))

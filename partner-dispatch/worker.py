@@ -17,6 +17,7 @@ from local_delivery import LocalDelivery
 from file_formats import validate_content
 from progress_cards import ProgressCards
 from vpn_reminder import VpnReminder
+from dtf_review import DtfReview
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -24,7 +25,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self)
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self)
 
     def stop(self):
         self.running=False
@@ -49,7 +50,7 @@ class Worker:
                 buttons=[[Button.text(icon+' '+DIRECTIONS[key]['label'],resize=True,persistent=True) for key,icon in row] for row in [[('wideformat','🖨'),('dtf','👕')],[('workshop','🛠'),('photo30','🖼')]]]
             if direction in ('workshop','photo30'):
                 buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],[Button.text("📋 "+BUTTONS[0]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("↩️ "+UNDO)],[Button.text("⬅️ "+BACK)]]
-            if direction=='dtf':buttons.append([Button.text('Количество копий')])
+            if direction=='dtf':buttons.append([Button.text('Количество копий'),Button.text('Проверить макет')])
             if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
 
@@ -92,6 +93,7 @@ class Worker:
         if not self.q.user(uid):
             await event.respond('Этот бот принимает файлы только от подключённых сотрудников. Получите код подключения у руководителя.',parse_mode=None);return
         try:
+            if event.document and await self.dtf_review.handle_document(event):return
             if text==MANUAL_MENU or text=='/manual':
                 await self.handoff.show_list(self,event);return
             if text in ('/start','/menu',BACK,'Главное меню'):
@@ -106,6 +108,10 @@ class Worker:
             direction=self.direction(uid)
             if not direction:
                 await self.reply(event,'Сначала выберите направление печати. Файл пока не принят.');return
+            if direction=='dtf' and text in ('Проверить макет','/layout'):
+                batch=self.q.active_batch('dtf')
+                if not batch or batch['state'] not in ('review','editing'):await self.reply(event,'Сейчас нет готового макета, ожидающего проверки.');return
+                await self.dtf_review.show(batch['id'],uid);return
             if direction=='dtf' and (text=='Количество копий' or text=='/copies'):
                 await self.copies_menu(event);return
             if direction=='dtf' and text.isdigit():
@@ -188,6 +194,8 @@ class Worker:
             await event.answer('Нет доступа.',alert=True);return
         try:
             data=event.data.decode()
+            if data.startswith('dtf:'):
+                await self.dtf_review.callback(event);return
             if data.startswith('copies:'):
                 row=self.q.file(int(data.split(':')[1]))
                 if not row or row['direction']!='dtf' or row['batch'] is not None or (row['sender']!=event.sender_id and self.q.setting('owner')!=str(event.sender_id)):raise UserError('Принт недоступен для изменения.')
@@ -297,6 +305,8 @@ class Worker:
                     except OSError:pass
 
     async def process_batch(self,b):
+        if b['direction']=='dtf' and b['state'] in ('review','editing'):
+            await self.dtf_review.tick(b['id']);return
         if b['direction']=='photo30':
             await self.local_delivery.process(b);return
         bid=b['id'];disk=Disk(self.c['disk_token'])
@@ -325,12 +335,17 @@ class Worker:
                     with archive.open('rb') as file:
                         if archive.stat().st_size!=rows[0]['size'] or hashlib.file_digest(file,'sha256').hexdigest()!=rows[0]['sha256']:raise UserError('Исходник мастерской изменился.')
                 await asyncio.to_thread(verify_original)
-            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'2/4 · Формирование холста…' if b['direction']=='dtf' else '2/4 · Архивирование…'))
-            if b['direction']=='dtf' and self.q.setting('preview_sent:'+bid,'0')!='1':
-                try:
-                    await self.client.send_file(chat,str(archive.with_suffix('.preview.png')),caption='Предпросмотр холста ДТФ. '+self.q.setting('dtf_layout:'+bid))
-                    self.q.set_setting('preview_sent:'+bid,'1')
-                except Exception:pass
+            elif b['direction']=='dtf':
+                review=self.dtf_review.get(bid)
+                if review and review['approved'] and review['fingerprint']==self.dtf_review.fingerprint(bid):
+                    archive=await asyncio.to_thread(self.dtf_review.artifact,bid)
+                else:
+                    archive=await asyncio.to_thread(build_sheet,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'2/4 · Формирование холста…'))
+                    if self.dtf_review.prepare(bid,archive,chat):
+                        await self.dtf_review.show(bid)
+                        await self.cards.update('batch:'+bid,chat,title,'👀 Предпросмотр готов. Автоотправка через 5 минут. «Исправить макет» остановит таймер.',force=True)
+                    return
+            else:archive=await asyncio.to_thread(build_archive,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'2/4 · Архивирование…'))
             remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/{artifact}'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
             await self.cards.update('batch:'+bid,chat,title,'3/4 · Загружаем на Яндекс Диск…',force=True)

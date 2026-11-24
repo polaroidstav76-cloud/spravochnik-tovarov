@@ -27,7 +27,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.9.2'
+VERSION='0.10'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -554,7 +554,7 @@ class App:
             if key in existing:self.table.item(key,values=values);existing.remove(key)
             else:self.table.insert('','end',iid=key,values=values)
         for key in existing:self.table.delete(key)
-        history_states={'sent':'Письмо принято сервером','dispatching_local':'Передаётся приёмнику','local_saved':'Сохранён на компьютере 30×40','awaiting_download':'Ожидает приёмник 30×40','manual':'Ручная отправка','manual_sent':'Отмечено отправленным вручную','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
+        history_states={'review':'Предпросмотр ДТФ · 5 минут на проверку','editing':'ДТФ исправляется · отправка на паузе','sent':'Письмо принято сервером','dispatching_local':'Передаётся приёмнику','local_saved':'Сохранён на компьютере 30×40','awaiting_download':'Ожидает приёмник 30×40','manual':'Ручная отправка','manual_sent':'Отмечено отправленным вручную','uncertain':'Нужно проверить почту','cancelled':'Отменено','collecting':'Подготовка / ожидание повтора','packing':'Сборка архива','uploading':'Загрузка на Диск','ready':'Готово к отправке','submitting':'Передача письма','invalidated':'Пересборка'}
         old=set(self.history_table.get_children())
         history_rows=self.q.history()
         for batch in history_rows:
