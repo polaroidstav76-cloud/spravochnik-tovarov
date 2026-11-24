@@ -58,10 +58,10 @@
   finally{restoring=false;opening=false;persist();post();}
  };
  const originalRPC=db.rpc;
- db.rpc=async function(name,args,...rest){
+ db.rpc=function(name,args,...rest){
   if(name!=='sales_create_sale')return originalRPC.call(this,name,args,...rest);
   const u=user();pendingSave=true;persist();post();
-  try{const r=await originalRPC.call(this,name,args,...rest);if(!r.error&&u){localStorage.removeItem(core.key(u));pendingSave=false;}return r;}finally{post();}
+  const target=this;return (async()=>{try{const r=await originalRPC.call(target,name,args,...rest);if(!r.error&&u){localStorage.removeItem(core.key(u));pendingSave=false;}return r;}finally{post();}})();
  };
  const baseRender=renderSaleDraft;renderSaleDraft=function(){const r=baseRender.apply(this,arguments);persist();return r;};
  const baseClose=close;close=function(id){const u=user(),r=baseClose.apply(this,arguments);if(id==='saleModal'&&r!==false&&!saleDraft.length&&u){localStorage.removeItem(core.key(u));pendingSave=false;}return r;};
