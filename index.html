@@ -409,6 +409,9 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 #annModal:has(.ann-urgent){z-index:1000}
 .ann-card h3{margin:0 0 4px;font-size:20px}
 .ann-body{white-space:pre-wrap;font-size:15.5px;line-height:1.5;margin:12px 0;padding:14px;background:var(--sunk);border-radius:var(--r-md)}
+.ann-deferred-home{padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.ann-deferred-home summary{cursor:pointer;font-weight:600;font-size:14px}
+.ann-deferred-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
 .ann-imgs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.ann-imgs a,.ann-imgs .ann-thumb{position:relative;display:block}.ann-imgs img{display:block;max-width:100%;max-height:360px;border-radius:var(--r-md);border:1px solid var(--line)}.ann-imgs.edit img{max-height:110px}.ann-thumb button{position:absolute;top:4px;right:4px;padding:2px 8px;min-height:0}
 .ann-drop{border:2px dashed var(--line);border-radius:var(--r-md);padding:14px;text-align:center;color:var(--muted);cursor:pointer}.ann-drop.over{border-color:var(--accent)}
 .ann-people{display:flex;flex-direction:column;gap:8px}
@@ -525,6 +528,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   </div>
 
 <section class="desk" aria-labelledby="salesHomeTitle">
+<div id="annDeferredHome" class="v5-box ann-deferred-home" hidden></div>
   <div class="desk-head">
     <div class="desk-title">
       <span class="kicker">Касса</span>
@@ -2387,7 +2391,7 @@ function applyStaffAuth(account,state){
   if(account&&wasLocked)close('loginModal');
   if(locked){$('loginError').textContent=signedIn?'Учётная запись отключена или недоступна. Обратитесь к администратору.':staffLastUserId?'Вход завершён. Войдите снова — открытая смена и черновик продажи сохранены.':'Войдите под своим логином.';$('loginModal').style.zIndex='1000000';open('loginModal')}
   $('loginBtn').style.display=signedIn?'none':'inline-block'; $('logoutBtn').style.display=signedIn?'inline-block':'none';
-  $('payrollBtn').style.display=isAdmin?'inline-block':'none';$('staffPayrollBtn').style.display=staffAccount&&!isAdmin?'flex':'none';if(!staffAccount&&window.PayrollUI)PayrollUI.clear(); $('staffAccountsBtn').style.display=isAdmin?'inline-block':'none';
+  $('payrollBtn').style.display=isAdmin?'inline-block':'none';$('staffPayrollBtn').style.display=staffAccount&&!isAdmin?'flex':'none';if(!staffAccount&&window.PayrollUI)PayrollUI.clear();if(!staffAccount&&window.AnnDeferred)AnnDeferred.clear(); $('staffAccountsBtn').style.display=isAdmin?'inline-block':'none';
   $('authStatus').textContent=staffAccount?(staffAccount.name+(isAdmin?' · администратор':'')):'';
   $('adminbar').classList.toggle('show',isAdmin); $('testsBtn').style.display=isAdmin?'inline-block':'none'; $('pricesBtn').style.display=isAdmin?'inline-block':'none'; $('customersBtn').style.display=isAdmin?'inline-block':'none'; $('salesAdminBtn').style.display=isAdmin?'inline-block':'none'; $('reportsBtn').style.display=isAdmin?'inline-block':'none'; render();
   if(account&&staffLoadedUserId!==account.user_id){staffLoadedUserId=account.user_id;const ready=()=>loadStaffWorkspace(account.user_id);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else setTimeout(ready,0);}
@@ -4331,12 +4335,14 @@ async function showAnnouncements(urgentOnly=false){
   annShowing=true;
   try{
     let query=db.from('announcements').select('*').eq('is_active',true);
-    if(urgentOnly)query=query.eq('is_urgent',true);
+
     const [a,r]=await Promise.all([query.order('created_at'),db.from('announcement_reads').select('announcement_id,person_id').in('person_id',parts.map(p=>p.personId))]);
     if(a.error||r.error){console.warn(a.error||r.error);return}
     if(salesSession?.shiftId!==sess.shiftId)return;
     const read=new Set((r.data||[]).map(x=>x.announcement_id+':'+x.person_id));
-    const queue=(a.data||[]).map(x=>({...x,unread:parts.filter(p=>!read.has(x.id+':'+p.personId))})).filter(x=>x.unread.length).sort((a,b)=>Number(!!b.is_urgent)-Number(!!a.is_urgent));
+    let queue=(a.data||[]).map(x=>({...x,unread:parts.filter(p=>!read.has(x.id+':'+p.personId))})).filter(x=>x.unread.length).sort((a,b)=>Number(!!b.is_urgent)-Number(!!a.is_urgent));
+    if(window.AnnDeferred)queue=await AnnDeferred.apply(queue,sess);
+    if(urgentOnly)queue=queue.filter(x=>x.is_urgent);
     for(let i=0;i<queue.length;i++){if(await showOneAnnouncement(queue[i],i,queue.length,sess)==='later')break}
   }catch(e){console.warn('Объявления:',e)}
   finally{annShowing=false}
@@ -4350,9 +4356,9 @@ function showOneAnnouncement(x,i,n,sess){
         const r=await db.rpc('announcement_mark_read',{p_announcement_id:x.id,p_shift_id:sess.shiftId,p_person_id:pid});
         if(r.error){b.disabled=false;$('annStatus2').textContent='Ошибка: '+r.error.message;return}
         x.unread=x.unread.filter(p=>Number(p.personId)!==pid);
-        if(!x.unread.length){close('annModal');resolve('done')}else draw();
+        if(!x.unread.length){if(window.AnnDeferred)await AnnDeferred.read(x);close('annModal');resolve('done')}else draw();
       });
-      $('annLater').onclick=()=>{close('annModal');resolve('later')};
+      $('annLater').onclick=async()=>{const b=$('annLater');b.disabled=true;try{if(window.AnnDeferred)await AnnDeferred.later(x,sess);close('annModal');resolve('later');}catch(e){$('annStatus2').textContent='Не удалось отложить: '+e.message;b.disabled=false;}};
     };
     draw();open('annModal');
   });
@@ -7219,5 +7225,6 @@ $('staffSave').onclick=async()=>{
 <script src="photo-common.js?v=1"></script>
 <script src="photo-staff.js?v=20261123-tile"></script>
 <script src="payroll.js?v=20261124-deposit"></script>
+<script src="announcements-deferred.js?v=20261124-later"></script>
 </body>
 </html>
