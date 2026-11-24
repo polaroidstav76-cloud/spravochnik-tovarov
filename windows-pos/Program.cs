@@ -63,7 +63,7 @@ internal sealed class DeskForm:Form {
    web.CoreWebView2.WebMessageReceived+=(_,e)=>{if(!Allowed(e.Source))return;try{using var d=JsonDocument.Parse(e.WebMessageAsJson);var r=d.RootElement;if(r.GetProperty("type").GetString()!="desktop-state")return;status.Text=r.GetProperty("summary").GetString()??"Клаудшоп";saving=r.TryGetProperty("saving",out var s)&&s.GetBoolean();}catch{}};
    web.CoreWebView2.NavigationCompleted+=(_,e)=>{if(!e.IsSuccess)status.Text="Нет связи с сайтом. Проверьте интернет и нажмите «Настройки → Перезагрузить кассу».";};
    web.Source=new Uri(Program.Site+"?desktop=1");
-  }catch(CoreWebView2RuntimeNotFoundException){status.Text="Нужен Microsoft WebView2.";if(MessageBox.Show("Для кассы нужен бесплатный компонент Microsoft Edge WebView2. Запустите INSTALL.cmd из архива или установите компонент с сайта Microsoft. Открыть страницу Microsoft?",Program.Title,MessageBoxButtons.YesNo)==DialogResult.Yes)External("https://developer.microsoft.com/microsoft-edge/webview2/");}
+  }catch(WebView2RuntimeNotFoundException){status.Text="Нужен Microsoft WebView2.";if(MessageBox.Show("Для кассы нужен бесплатный компонент Microsoft Edge WebView2. Запустите INSTALL.cmd из архива или установите компонент с сайта Microsoft. Открыть страницу Microsoft?",Program.Title,MessageBoxButtons.YesNo)==DialogResult.Yes)External("https://developer.microsoft.com/microsoft-edge/webview2/");}
   catch(Exception e){status.Text="Не удалось запустить кассу.";MessageBox.Show("Не удалось открыть кассу: "+e.Message,Program.Title);}
  }
  async Task<string?> Script(string script){try{return web.CoreWebView2==null?null:await web.CoreWebView2.ExecuteScriptAsync(script);}catch{return null;}}
