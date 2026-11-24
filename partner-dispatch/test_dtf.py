@@ -81,8 +81,7 @@ class TestDTF(unittest.TestCase):
             output=build_sheet(self.q,bid)
         self.assertEqual(len(nesting.call_args.args[0]),3)
         with Image.open(output) as image:
-            self.assertEqual(image.width,pixels(56));self.assertLess(image.height,pixels(50))
-            self.assertGreater(image.getchannel('A').getbbox()[3],image.height-pixels(1))
+            self.assertEqual(image.size,(pixels(56),pixels(50)))
             self.assertEqual(image.mode,'RGBA');self.assertAlmostEqual(image.info['dpi'][0],300,places=2)
         batch={**self.q.batch(bid),'link':'https://example.invalid/sheet'}
         msg=email_for({'sender':'sender@example.invalid'},batch,self.q.batch_files(bid))

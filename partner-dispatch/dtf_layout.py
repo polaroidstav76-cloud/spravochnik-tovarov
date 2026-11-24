@@ -97,7 +97,7 @@ def arrange(items,width_cm,base_height_cm=50):
             if best is None or score<best[0]:best=(score,result,gap)
     if best is not None:
         _,result,gap=best
-        height=used_height(result)+2*margin
+        height=max(base,used_height(result)+2*margin)
         return Layout(width,height,gap,margin,tuple(Placement(p.key,p.x+margin,p.y+margin,p.width,p.height,p.rotated) for p in result))
     gap=ceil(DPI*.5/2.54)
     low=base;high=base
@@ -110,5 +110,5 @@ def arrange(items,width_cm,base_height_cm=50):
         middle=(low+high)//2;candidate=attempt(middle,gap)
         if candidate is None:low=middle
         else:high=middle;result=candidate
-    height=max(p.y+p.height for p in result)+2*margin
+    height=max(base,max(p.y+p.height for p in result)+2*margin)
     return Layout(width,height,gap,margin,tuple(Placement(p.key,p.x+margin,p.y+margin,p.width,p.height,p.rotated) for p in result))

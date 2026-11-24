@@ -20,7 +20,7 @@ class TestDTFLayout(unittest.TestCase):
         items=[Print(str(i),pixels(8),pixels(12)) for i in range(12)]
         for width in (55,56):
             layout=arrange(items,width)
-            self.assertEqual(layout.width,pixels(width));self.assertLessEqual(layout.height,pixels(50));self.assertEqual(layout.height,max(p.y+p.height for p in layout.prints)+layout.margin)
+            self.assertEqual(layout.width,pixels(width));self.assertEqual(layout.height,pixels(50))
             self.assert_geometry(layout,items)
     def test_small_order_uses_width_before_growing_occupied_height(self):
         items=[Print(str(i),pixels(10),pixels(15)) for i in range(2)]
@@ -35,18 +35,17 @@ class TestDTFLayout(unittest.TestCase):
         self.assertEqual(len({p.y for p in layout.prints}),1)
         self.assertTrue(all(p.height==pixels(10) for p in layout.prints))
         self.assertTrue(next(p for p in layout.prints if p.key=='portrait').rotated)
-        self.assertEqual(layout.height,pixels(10)+2*layout.margin)
-        self.assertLess(layout.height,pixels(12))
+        self.assertEqual(layout.height,pixels(50));self.assertEqual(max(p.y+p.height for p in layout.prints),pixels(10)+layout.margin)
     def test_shorter_sheet_wins_over_larger_gap(self):
         items=[Print(str(i),pixels(17.9),pixels(10)) for i in range(3)]
         layout=arrange(items,56);self.assert_geometry(layout,items)
         self.assertEqual(len({p.y for p in layout.prints}),1)
-        self.assertEqual(layout.height,pixels(10)+2*layout.margin)
+        self.assertEqual(layout.height,pixels(50));self.assertEqual(max(p.y+p.height for p in layout.prints),pixels(10)+layout.margin)
         self.assertLess(layout.gap,pixels(2))
-    def test_single_landscape_uses_short_side_as_sheet_length(self):
+    def test_single_landscape_uses_short_side_but_keeps_minimum_sheet_length(self):
         items=[Print('one',pixels(10),pixels(20))];layout=arrange(items,56)
         self.assert_geometry(layout,items);self.assertTrue(layout.prints[0].rotated)
-        self.assertEqual(layout.height,pixels(10)+2*layout.margin)
+        self.assertEqual(layout.height,pixels(50));self.assertEqual(max(p.y+p.height for p in layout.prints),pixels(10)+layout.margin)
 
     def test_extends_height_and_preserves_margins(self):
         items=[Print(str(i),pixels(50),pixels(45)) for i in range(5)]
