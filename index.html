@@ -920,7 +920,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
 
 <div class="modal" id="salesTaskModal"><div class="dialog" style="max-width:650px"><h2>Задания на смену</h2><div id="salesTaskContent"></div><div class="actions"><button id="closeSalesTask" class="secondary">Позже</button><button id="confirmSalesTask" class="primary">Подтвердить выполнение</button></div></div></div>
 <div class="modal" id="salesWorkspaceModal"><div class="dialog" style="max-width:650px">
-  <h2>Рабочее место</h2><div class="status">Сначала выберите филиал, затем сотрудника. Если на смене работает второй сотрудник — отметьте «Добавить сотрудника в смену».</div>
+  <h2>Рабочее место</h2><div class="status">Выберите филиал и своё имя. Каждый сотрудник открывает смену или подключается к общей смене только из своего аккаунта.</div>
   <div class="field" style="margin-top:14px"><label>1. Филиал</label><select id="salesBranchSelect"></select></div>
   <div class="field"><label>2. Сотрудник</label><select id="salesEmployeeSelect"></select></div>
   <label id="salesAddEmployeeWrap" class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="salesAddEmployee" type="checkbox" style="width:auto"> <span>Добавить сотрудника в смену</span></label>
@@ -2802,7 +2802,7 @@ document.addEventListener('visibilitychange',staffResumeCheck);setInterval(()=>{
 // Зарплатная неделя: с пятницы по четверг. По умолчанию — неделя, в которую входит сегодняшний день.
 function payrollWeekDates(d=new Date()){const x=new Date(d);const thu=new Date(x);thu.setDate(x.getDate()+((4-x.getDay()+7)%7));const fri=new Date(thu);fri.setDate(thu.getDate()-6);return {from:fri,to:thu}}
 async function buildPayroll(){return PayrollUI.build();}
-$('payrollBtn').onclick=async()=>{const w=payrollWeekDates();$('payrollFrom').value=salesTodayISO(w.from);$('payrollTo').value=salesTodayISO(w.to);open('payrollModal');await buildPayroll()};$('buildPayrollBtn').onclick=buildPayroll;$('closePayroll').onclick=()=>close('payrollModal');
+$('payrollBtn').onclick=async()=>{const w=payrollWeekDates();$('payrollFrom').value=salesTodayISO(w.from);$('payrollTo').value=salesTodayISO(w.to);open('payrollModal');await PayrollUI.start()};$('buildPayrollBtn').onclick=buildPayroll;$('closePayroll').onclick=()=>PayrollUI.clear();
 
 const V4_PAY_LABELS={cash:'Наличные',card:'Карта',qr:'QR-код',link:'Ссылка',bank_account:'Расчётный счёт',transfer:'Перевод'};
 let v4Upsells=[],v4SplitRows=[];
@@ -2911,11 +2911,11 @@ async function refreshWorkspaceBranch() {
     workspaceShift=shift?{...shift,participants,leadPersonId:participants.find(p=>p.isLead)?.personId}:null;
     const people=[...uniquePeople()];
     participants.forEach(p=>{if(!people.some(x=>Number(x.id)===p.personId))people.push({id:p.personId,name:p.name,is_active:false});});
-    const currentPrimary=participants[0]?.personId || salesSession?.personId || '';
+    const currentPrimary=(!isAdmin&&staffAccount?.person_id)||participants[0]?.personId||salesSession?.personId||'';
     $('salesEmployeeSelect').innerHTML=people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('') || '<option value="">Нет сотрудников</option>';
     if(currentPrimary) $('salesEmployeeSelect').value=String(currentPrimary);
-    const hasSecond=participants.length>1;
-    $('salesAddEmployee').checked=hasSecond;
+    const hasSecond=isAdmin&&participants.length>1;
+    $('salesAddEmployee').checked=hasSecond;$('salesAddEmployee').closest('label').style.display=isAdmin?'':'none';
     refreshAdditionalEmployeeOptions();
     $('salesAdditionalWrap').style.display=hasSecond?'block':'none';
     updateLeadEmployeeOptions();
@@ -2989,7 +2989,8 @@ $('salesSelectBtn').onclick=openSalesWorkspace;
 $('startShiftBtn').onclick=async()=>{
   if(workspaceLoading || $('startShiftBtn').disabled) return;
   const branchId=Number($('salesBranchSelect').value),ids=selectedWorkspacePeople();
-  const leadId=ids.length>1?Number($('salesLeadEmployee').value||0):null;
+  if(!isAdmin&&Number($('salesEmployeeSelect').value)!==Number(staffAccount?.person_id)){$('salesWorkspaceStatus').textContent='Войдите в свой аккаунт. Открыть смену на своё имя можно только под своим логином и паролем.';return;}
+  const leadId=ids.length>1?(!isAdmin?(workspaceShift?.leadPersonId||Number(staffAccount?.person_id)):Number($('salesLeadEmployee').value||0)):null;
   if(!branchId || !ids.length) { $('salesWorkspaceStatus').textContent='Сначала выберите филиал и сотрудника.';return; }
   if(ids.length>1 && !leadId) { $('salesWorkspaceStatus').textContent='Выберите главного по ретуши.';return; }
   $('startShiftBtn').disabled=true; $('salesBranchSelect').disabled=true; $('salesWorkspaceStatus').textContent='Сохраняю состав смены…';
@@ -2999,7 +3000,7 @@ $('startShiftBtn').onclick=async()=>{
     if(r.error) throw r.error;
     const c=r.data;
     if(noPay){const np=await db.rpc('sales_shift_set_no_pay',{p_shift_id:c.shiftId,p_no_pay:true});if(np.error) alert('Смена открыта, но отметка «Не учитывать смену» не сохранилась: '+np.error.message);}
-    const primaryPersonId=Number($('salesEmployeeSelect').value||0);
+    const primaryPersonId=Number(ids[0]||0);
     const cashier=c.participants.find(p=>p.personId===primaryPersonId && p.isActive) || c.participants.find(p=>p.isActive);
     if(!cashier) throw new Error('Выбранный сотрудник недоступен. Обновите состав смены.');
     salesSession={shiftId:c.shiftId,branchId:c.branchId,branchName:c.branchName,employeeId:cashier.employeeId,personId:cashier.personId,employeeName:cashier.name,startedAt:c.startedAt,participants:c.participants,noPay:noPay||(salesSession?.shiftId===c.shiftId&&!!salesSession.noPay)};
@@ -7224,7 +7225,7 @@ $('staffSave').onclick=async()=>{
 <script src="vendor/qrcode.js"></script>
 <script src="photo-common.js?v=1"></script>
 <script src="photo-staff.js?v=20261123-tile"></script>
-<script src="payroll.js?v=20261124-deposit"></script>
+<script src="payroll.js?v=20261124-password"></script>
 <script src="announcements-deferred.js?v=20261124-later"></script>
 </body>
 </html>

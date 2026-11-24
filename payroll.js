@@ -1,11 +1,13 @@
 (()=>{
- let generation=0;
+ let generation=0,unlockedUntil=0;
  async function build(){
   const seq=++generation,who=staffAccount?.user_id,from=$('payrollFrom').value,to=$('payrollTo').value;
   if(!who||!from||!to)return;
+  if(!isAdmin&&Date.now()>=unlockedUntil){askPassword();return;}
   $('payrollContent').textContent='Рассчитываем зарплату…';
   const r=await db.rpc('payroll_report',{p_from:from,p_to:to});
   if(seq!==generation||staffAccount?.user_id!==who)return;
+  if(r.error?.code==='PT401'&&!isAdmin){unlockedUntil=0;askPassword();return;}
   if(r.error){$('payrollContent').textContent='Не удалось загрузить зарплату: '+r.error.message;return;}
   const {rows=[],fines=[],deposits=[],admin=false}=r.data||{},money=v=>salesMoney(Number(v)||0),sum=k=>rows.reduce((n,x)=>n+Number(x[k]||0),0);
   $('payrollContent').innerHTML=`<div class="actions" style="justify-content:flex-start"><button id="payrollSummaryTab" class="primary" aria-pressed="true">Расчёт</button><button id="payrollDepositTab" class="secondary" aria-pressed="false">Депозиты</button><button id="payrollFinesTab" class="secondary" aria-pressed="false">Штрафы (${fines.filter(f=>!f.revoked).length})</button></div><section id="payrollSummarySection"><div class="report-grid"><div class="report-card">Оплачиваемых дней<br><b>${sum('shifts')}</b></div><div class="report-card">Штрафы<br><b>${money(sum('fines'))}</b></div><div class="report-card">К выплате<br><b>${money(sum('total'))}</b></div></div><div style="overflow:auto"><table class="customer-table"><thead><tr><th>Сотрудник</th><th>Дни</th><th>Оплата дней</th><th>Ретушь</th><th>Ретушь ₽</th><th>Штрафы</th><th>В депозит</th><th>К выплате</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${Number(x.shifts)}${x.duplicates?`<div class="status">Повторных смен без доплаты: ${Number(x.duplicates)}</div>`:''}${x.free_shifts?`<div class="status">Смен без ставки: ${Number(x.free_shifts)}</div>`:''}</td><td>${money(x.shift_pay)}</td><td>${Number(x.retouches)}</td><td>${money(x.retouch_pay)}</td><td>${money(x.fines)}</td><td>${money(x.deposit)}</td><td><b>${money(x.total)}</b></td></tr>`).join('')||'<tr><td colspan="8">За этот период начислений и штрафов нет.</td></tr>'}</tbody></table></div></section><section id="payrollDepositSection" hidden></section><section id="payrollFinesSection" hidden><h3>Штрафы за выбранный период</h3><div class="status">Штраф вычитается в периоде, на который приходится дата его оформления. Отменённые штрафы не уменьшают зарплату.</div>${fines.length?`<table class="customer-table"><thead><tr><th>Дата</th>${admin?'<th>Сотрудник</th>':''}<th>Сумма</th><th>Комментарий / статус</th>${admin?'<th></th>':''}</tr></thead><tbody>${fines.map(f=>`<tr><td>${esc(f.date.split('-').reverse().join('.'))}</td>${admin?`<td>${esc(f.name)}</td>`:''}<td>${money(f.amount)}</td><td>${esc(f.reason||'Штраф')}${f.revoked?' · отменён':''}</td>${admin?`<td>${!f.revoked?`<button class="secondary small" data-revoke-fine="${esc(f.id)}">Отменить штраф</button>`:''}</td>`:''}</tr>`).join('')}</tbody></table>`:'<div class="status">Штрафов за этот период нет.</div>'}</section>`;
@@ -15,6 +17,14 @@
   $('payrollContent').querySelectorAll('[data-deposit-person]').forEach(b=>b.onclick=async()=>{const paid=b.dataset.depositPaid==='true';if(!confirm(paid?'Подтвердить, что депозит выплачен сотруднику? Отмечайте только после фактической выплаты.':'Вернуть депозиту статус «Не выплачено»?'))return;b.disabled=true;const r=await db.rpc('payroll_deposit_set_paid',{p_person_id:Number(b.dataset.depositPerson),p_paid:paid});if(r.error){b.disabled=false;alert(r.error.message);return;}await build();$('payrollDepositTab')?.click();});
   $('payrollContent').querySelectorAll('[data-revoke-fine]').forEach(b=>b.onclick=async()=>{if(!confirm('Отменить штраф? Его сумма вернётся в расчёт зарплаты.'))return;b.disabled=true;const r=await db.rpc('payroll_fine_revoke',{p_id:b.dataset.revokeFine});if(r.error){b.disabled=false;alert(r.error.message);return;}await build();$('payrollFinesTab')?.click();});
  }
- window.PayrollUI={build,clear(){generation++;$('payrollContent').replaceChildren();close('payrollModal');}};
+ function askPassword(){
+  const who=staffAccount?.user_id,opened=++generation;
+  $('payrollContent').innerHTML=`<form id="payrollPasswordForm" class="block"><h3>Подтвердите просмотр зарплаты</h3><p>Введите пароль своего аккаунта: <b>${esc(staffAccount?.name||'')}</b>. Пароль другого сотрудника не подойдёт.</p><label for="payrollPassword">Пароль</label><input id="payrollPassword" type="password" autocomplete="current-password" required maxlength="1000"><button id="payrollPasswordSubmit" class="primary" type="submit">Посмотреть зарплату</button><div id="payrollPasswordStatus" class="status" role="status"></div></form>`;
+  $('payrollPassword').focus();
+  $('payrollPasswordForm').onsubmit=async e=>{e.preventDefault();const input=$('payrollPassword'),button=$('payrollPasswordSubmit'),status=$('payrollPasswordStatus');button.disabled=true;status.textContent='Проверяем пароль…';
+   try{const r=await db.functions.invoke('payroll-unlock',{body:{password:input.value}});input.value='';if(staffAccount?.user_id!==who||opened!==generation){db.rpc('payroll_lock').catch(()=>{});return;}if(r.error){let detail;try{detail=await r.error.context?.json();}catch{}throw new Error(detail?.error||'Не удалось проверить пароль. Попробуйте ещё раз.');}if(!r.data?.ok)throw new Error(r.data?.error||'Неверный пароль своего аккаунта');unlockedUntil=Date.now()+14*60000;await build();}catch(e){input.value='';status.textContent=e.message;button.disabled=false;input.focus();}
+  };
+ }
+ window.PayrollUI={build,async start(){unlockedUntil=0;await build();},clear(){generation++;unlockedUntil=0;if(staffAccount&&!isAdmin)db.rpc('payroll_lock').catch(()=>{});$('payrollContent').replaceChildren();close('payrollModal');}};
  $('staffPayrollBtn').onclick=()=>$('payrollBtn').click();
 })();
