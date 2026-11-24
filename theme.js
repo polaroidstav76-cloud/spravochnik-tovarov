@@ -5,7 +5,7 @@
   for(const button of document.querySelectorAll('[data-theme-toggle]')){button.textContent=current==='dark'?'☀ Светлая тема':'☾ Тёмная тема';button.setAttribute('aria-pressed',String(current==='dark'));button.title='Переключить на '+(current==='dark'?'светлую':'тёмную')+' тему';}
  }
  apply(current);
- function mount(container,id){if(!container||document.getElementById(id))return;const button=document.createElement('button');button.type='button';button.id=id;button.className='secondary theme-toggle';button.dataset.themeToggle='';button.onclick=()=>{apply(current==='dark'?'light':'dark');try{localStorage.setItem(key,current);}catch{}};container.append(button);apply(current);}
+ function mount(container,id){if(!container||document.getElementById(id))return;const button=document.createElement('button');button.type='button';button.id=id;button.className='secondary theme-toggle';button.dataset.themeToggle='';button.onclick=()=>{apply(current==='dark'?'light':'dark');try{localStorage.setItem(key,current);}catch{}};if(id==='themeToggle')container.insertBefore(button,document.getElementById('authStatus'));else container.append(button);apply(current);}
  // Legacy windows use inline colours. Keep their original light palette and
  // attach dark alternatives without changing business data or photo pixels.
  function rgb(value){if(value==='white')return [255,255,255];if(value==='black')return [0,0,0];const m=/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(value);return m&&(!m[4]||Number(m[4])>.9)?m.slice(1,4).map(Number):null;}
@@ -22,7 +22,7 @@
   }
  }
  function scan(node){if(!(node instanceof HTMLElement))return;if(node.hasAttribute('style'))inlineColours(node);for(const child of node.querySelectorAll('[style]'))inlineColours(child);}
- function ready(){scan(document.body);new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')inlineColours(r.target);else for(const node of r.addedNodes)scan(node);}}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['style']});mount(document.querySelector('.app-head .top'),'themeToggle');mount(document.querySelector('.desktop-home-actions'),'desktopThemeToggle');mount(document.querySelector('#saleModal .sales-home-head'),'saleThemeToggle');}
+ function ready(){scan(document.body);new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')inlineColours(r.target);else for(const node of r.addedNodes)scan(node);}}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['style']});mount(document.querySelector('.app-head .top'),'themeToggle');mount(document.querySelector('.desktop-home-actions'),'desktopThemeToggle');}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else ready();
  window.addEventListener('storage',e=>{if(e.key===key)apply(e.newValue);});
 })();
