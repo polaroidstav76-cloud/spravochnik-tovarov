@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from math import ceil,floor
 from core import UserError
+from itertools import permutations
 
 DPI=300
 
@@ -37,13 +38,16 @@ def pack(items,width,height,gap,strategy='short-side'):
     """MaxRects best-short-side-fit; gaps are never added to artwork dimensions."""
     free=[(0,0,width+gap,height+gap)];placed=[]
     for item in items:
-        best=None
+        best=None;used=max((p.y+p.height for p in placed),default=0)
         for rect in free:
             for rotate in (False,True):
                 w,h=(item.height,item.width) if rotate else (item.width,item.height)
                 rw,rh=w+gap,h+gap
                 if rw<=rect[2] and rh<=rect[3]:
-                    score=((rect[1],rect[0],min(rect[2]-rw,rect[3]-rh),rotate) if strategy=='bottom-left' else (min(rect[2]-rw,rect[3]-rh),max(rect[2]-rw,rect[3]-rh),rect[1],rect[0],rotate))
+                    if strategy=='lowest-height':
+                        score=(max(used,rect[1]+h),rect[1],rect[0],min(rect[2]-rw,rect[3]-rh),rotate)
+                    elif strategy=='bottom-left':score=(rect[1],rect[0],min(rect[2]-rw,rect[3]-rh),rotate)
+                    else:score=(min(rect[2]-rw,rect[3]-rh),max(rect[2]-rw,rect[3]-rh),rect[1],rect[0],rotate)
                     if best is None or score<best[0]:best=(score,rect[0],rect[1],w,h,rotate)
         if best is None:return None
         _,x,y,w,h,rotate=best;right=x+w+gap;bottom=y+h+gap
@@ -68,17 +72,33 @@ def arrange(items,width_cm,base_height_cm=50):
     if usable<=0:raise UserError('Ширина холста меньше полей.')
     if any(min(p.width,p.height)>usable or p.width<=0 or p.height<=0 for p in items):
         raise UserError('Один из принтов не помещается по ширине даже при повороте. Уменьшите его размер.')
-    orders=[sorted(items,key=lambda p:(-max(p.width,p.height),-p.width*p.height,p.key)),
-            sorted(items,key=lambda p:(-p.width*p.height,-max(p.width,p.height),p.key)),
-            sorted(items,key=lambda p:(-p.height,-p.width,p.key))]
+    proposed=[sorted(items,key=lambda p:(-max(p.width,p.height),-p.width*p.height,p.key)),
+              sorted(items,key=lambda p:(-p.width*p.height,-max(p.width,p.height),p.key)),
+              sorted(items,key=lambda p:(-p.height,-p.width,p.key)),
+              sorted(items,key=lambda p:(-p.width,-p.height,p.key))]
+    # Small orders can afford every insertion order; rotation is evaluated by
+    # each packing strategy without ever changing an artwork's dimensions.
+    if len(items)<=4:proposed.extend(permutations(items))
+    orders=[];seen=set()
+    for order in proposed:
+        keys=tuple(p.key for p in order)
+        if keys not in seen:seen.add(keys);orders.append(order)
+    def used_height(placed):return max(p.y+p.height for p in placed)
     def attempt(height,gap):
-        candidates=[v for strategy in ('short-side','bottom-left') for order in orders if (v:=pack(order,usable,height-2*margin,gap,strategy)) is not None]
-        return min(candidates,key=lambda v:max(p.y+p.height for p in v)) if candidates else None
-    for mm in range(20,4,-1):
+        candidates=[v for strategy in ('lowest-height','short-side','bottom-left') for order in orders if (v:=pack(order,usable,height-2*margin,gap,strategy)) is not None]
+        return min(candidates,key=used_height) if candidates else None
+    best=None
+    # Occupied length has priority. A larger gap wins only for equal length.
+    for mm in (range(20,4,-1) if len(items)<=100 else (20,15,10,5)):
         gap=min(floor(DPI*2/2.54),ceil(DPI*(mm/10)/2.54))
         result=attempt(base,gap)
         if result is not None:
-            return Layout(width,base,gap,margin,tuple(Placement(p.key,p.x+margin,p.y+margin,p.width,p.height,p.rotated) for p in result))
+            score=(used_height(result),-gap)
+            if best is None or score<best[0]:best=(score,result,gap)
+    if best is not None:
+        _,result,gap=best
+        height=used_height(result)+2*margin
+        return Layout(width,height,gap,margin,tuple(Placement(p.key,p.x+margin,p.y+margin,p.width,p.height,p.rotated) for p in result))
     gap=ceil(DPI*.5/2.54)
     low=base;high=base
     result=None
@@ -90,5 +110,5 @@ def arrange(items,width_cm,base_height_cm=50):
         middle=(low+high)//2;candidate=attempt(middle,gap)
         if candidate is None:low=middle
         else:high=middle;result=candidate
-    height=max(base,max(p.y+p.height for p in result)+2*margin)
+    height=max(p.y+p.height for p in result)+2*margin
     return Layout(width,height,gap,margin,tuple(Placement(p.key,p.x+margin,p.y+margin,p.width,p.height,p.rotated) for p in result))

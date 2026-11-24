@@ -18,17 +18,17 @@ for arch in ('x64','x86'):
     data=json.loads(checks[0].read_text(encoding='utf-8-sig'))
     assert data.get('ok') and data.get('gui') and data.get('dpapi'),(arch,'failed smoke test')
     assert data.get('source_commit')==a.commit,(arch,'wrong source commit')
-    assert data.get('version')=='0.9.1',(arch,'wrong version')
+    assert data.get('version')=='0.9.2',(arch,'wrong version')
     with found[0].open('rb') as f:assert f.read(2)==b'MZ'
     binaries.append(found[0]);reports.append(data)
-archive=output/'Cloudshop-Print-Windows-v0.9.1.zip'
+archive=output/'Cloudshop-Print-Windows-v0.9.2.zip'
 with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,allowZip64=True) as z:
     for binary in binaries:z.write(binary,'Cloudshop-Print/'+binary.name)
     for name in ('НАЧАТЬ_ЗДЕСЬ.html','ИНСТРУКЦИЯ.txt','ТЕСТ_НЕ_ПЕЧАТАТЬ_1х1см.tif','ТЕСТ_ДТФ_10х15см.png','THIRD-PARTY.txt'):
         z.write(source/name,'Cloudshop-Print/'+name)
     z.write(source/'START-NATIVE.cmd','Cloudshop-Print/START.cmd')
     z.write(source/'START-30X40.cmd','Cloudshop-Print/START-30X40.cmd')
-    z.writestr('Cloudshop-Print/Windows-checks.json',json.dumps({'version':'0.9.1','source_commit':a.commit,'checks':reports},indent=2))
+    z.writestr('Cloudshop-Print/Windows-checks.json',json.dumps({'version':'0.9.2','source_commit':a.commit,'checks':reports},indent=2))
     # Carry original dependency license texts alongside the application.
     for wheel in (source/'wheelhouse').glob('*.whl'):
         with zipfile.ZipFile(wheel) as w:
@@ -38,5 +38,5 @@ with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,allowZip64=Tru
 assert archive.stat().st_size<95*1024*1024,'Release exceeds GitHub single-file limit'
 with zipfile.ZipFile(archive) as z:assert z.testzip() is None
 checksum=hashlib.sha256(archive.read_bytes()).hexdigest()
-(output/'Cloudshop-Print-Windows-v0.9.1.sha256').write_text(checksum+'  '+archive.name+'\n')
+(output/'Cloudshop-Print-Windows-v0.9.2.sha256').write_text(checksum+'  '+archive.name+'\n')
 print('Prepared',archive.name,archive.stat().st_size,'bytes; SHA256',checksum)
