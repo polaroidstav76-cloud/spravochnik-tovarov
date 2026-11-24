@@ -6,12 +6,34 @@
  function defaults(img){return {format:'10x15',orientation:img.naturalWidth>img.naturalHeight?'landscape':'portrait',zoom:1,ox:0,oy:0,rot:0,fit:'crop'};}
  function placement(img,s){return {...s,mode:'none',img,iw:img.naturalWidth,ih:img.naturalHeight};}
  function viewport(s){const f=format(s),d=dimensions(s);return f.frame?f.frame.slots[0].win:[0,0,d.width,d.height];}
- function clamp(img,s){if((s.fit||'crop')!=='crop'&&!format(s).frame)return {...s,zoom:Math.max(1,Math.min(8,s.zoom)),ox:Math.max(-1,Math.min(1,s.ox)),oy:Math.max(-1,Math.min(1,s.oy))};const p=PhotoLinks.polaroid.clampPlacement(viewport(s),placement(img,s));return {...s,ox:p.ox,oy:p.oy};}
+ function clamp(img,s){if(s.fit==='blur')s={...s,blur_version:2};if((s.fit||'crop')!=='crop'&&!format(s).frame)return {...s,zoom:Math.max(1,Math.min(8,s.zoom)),ox:Math.max(-1,Math.min(1,s.ox)),oy:Math.max(-1,Math.min(1,s.oy))};const p=PhotoLinks.polaroid.clampPlacement(viewport(s),placement(img,s));return {...s,ox:p.ox,oy:p.oy};}
  function draw(canvas,img,state,maxWidth){const s=clamp(img,state),f=format(s),d=dimensions(s);
   if(f.frame){PhotoLinks.polaroid.renderPolaroid(canvas,f.frame,placement(img,s),null,maxWidth?Math.min(d.width,maxWidth):d.width);return s;}
   const k=maxWidth?Math.min(1,maxWidth/d.width):1;canvas.width=Math.round(d.width*k);canvas.height=Math.round(d.height*k);const c=canvas.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,canvas.width,canvas.height);
   const [rw,rh]=s.rot%2?[img.naturalHeight,img.naturalWidth]:[img.naturalWidth,img.naturalHeight],scale=((s.fit||'crop')==='crop'?Math.max(d.width/rw,d.height/rh):Math.min(d.width/rw,d.height/rh))*s.zoom;
-  if(s.fit==='blur'){c.save();c.scale(k,k);c.filter='blur('+Math.max(d.width,d.height)*.025+'px)';c.translate(d.width/2,d.height/2);c.rotate(s.rot*Math.PI/2);const bg=Math.max(d.width/rw,d.height/rh)*1.12;c.drawImage(img,-img.naturalWidth*bg/2,-img.naturalHeight*bg/2,img.naturalWidth*bg,img.naturalHeight*bg);c.restore();}
+  if(s.fit==='blur'){
+   // Pixel blur is portable: Safari may ignore CanvasRenderingContext2D.filter.
+   // Build one low-resolution backdrop in output proportions, then smooth it.
+   const small=document.createElement('canvas'),ratio=64/Math.max(d.width,d.height);
+   small.width=Math.max(1,Math.round(d.width*ratio));small.height=Math.max(1,Math.round(d.height*ratio));
+   const sc=small.getContext('2d');sc.translate(small.width/2,small.height/2);sc.rotate(s.rot*Math.PI/2);
+   const bg=Math.max(small.width/rw,small.height/rh)*1.12;
+   sc.drawImage(img,-img.naturalWidth*bg/2,-img.naturalHeight*bg/2,img.naturalWidth*bg,img.naturalHeight*bg);
+   const pixels=sc.getImageData(0,0,small.width,small.height),w=small.width,h=small.height;
+   let src=pixels.data;
+   for(let pass=0;pass<3;pass++)for(const horizontal of [true,false]){
+    const out=new Uint8ClampedArray(src.length);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++)for(let ch=0;ch<4;ch++){
+     let sum=0;for(let offset=-2;offset<=2;offset++){
+      const sx=horizontal?Math.max(0,Math.min(w-1,x+offset)):x,sy=horizontal?y:Math.max(0,Math.min(h-1,y+offset));
+      sum+=src[(sy*w+sx)*4+ch];
+     }out[(y*w+x)*4+ch]=sum/5;
+    }src=out;
+   }
+   pixels.data.set(src);sc.putImageData(pixels,0,0);
+   c.save();c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';
+   c.drawImage(small,0,0,canvas.width,canvas.height);c.restore();small.width=small.height=1;
+  }
   c.scale(k,k);c.translate(d.width/2+s.ox*d.width,d.height/2+s.oy*d.height);c.rotate(s.rot*Math.PI/2);c.imageSmoothingQuality='high';c.drawImage(img,-img.naturalWidth*scale/2,-img.naturalHeight*scale/2,img.naturalWidth*scale,img.naturalHeight*scale);return s;
  }
  function lowResolution(img,s){return PhotoLinks.polaroid.needPx(viewport(s),placement(img,s))>Math.max(img.naturalWidth,img.naturalHeight)*1.05;}
