@@ -1,0 +1,5 @@
+
+# Windows desktop build outputs
+windows-pos/bin/
+windows-pos/obj/
+dist/
