@@ -16,7 +16,7 @@ from pathlib import Path
 
 MOSCOW = timezone(timedelta(hours=3))
 MAX_BYTES = 500 * 1024 * 1024
-BUTTONS = ('Просмотр файлов', 'Отправить сейчас', 'Удалить файл')
+BUTTONS = ('Загруженные файлы', 'Отправить сейчас', 'Удалить файл')
 DIRECTIONS = {
     'wideformat': {'label': 'Широкоформатная печать', 'enabled': True},
     'dtf': {'label': 'ДТФ-печать', 'enabled': True},

@@ -11,7 +11,7 @@ from pathlib import Path
 from core import Queue, UserError, MOSCOW, BUTTONS, DIRECTIONS, UPLOAD, BACK, build_archive, chunks
 from monitoring import Monitoring
 from handoff import Handoff,MANUAL_MENU
-from bot_features import BotFeatures,STATUS
+from bot_features import BotFeatures,STATUS,NEXT,UNDO
 from dtf_render import inspect_art,build_sheet
 from local_delivery import LocalDelivery
 from file_formats import validate_content
@@ -44,11 +44,11 @@ class Worker:
             direction=self.direction(event.sender_id)
             if direction:
                 buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],
-                         [Button.text("📋 "+BUTTONS[0])],[Button.text("🚀 "+BUTTONS[1]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("⬅️ "+BACK)]]
+                         [Button.text("📋 "+BUTTONS[0])],[Button.text("🚀 "+BUTTONS[1]),Button.text("🗑 "+BUTTONS[2])],[Button.text("🕒 "+NEXT),Button.text("📊 "+STATUS)],[Button.text("↩️ "+UNDO)],[Button.text("⬅️ "+BACK)]]
             else:
                 buttons=[[Button.text(icon+' '+DIRECTIONS[key]['label'],resize=True,persistent=True) for key,icon in row] for row in [[('wideformat','🖨'),('dtf','👕')],[('workshop','🛠'),('photo30','🖼')]]]
             if direction in ('workshop','photo30'):
-                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],[Button.text("📋 "+BUTTONS[0]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("⬅️ "+BACK)]]
+                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],[Button.text("📋 "+BUTTONS[0]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("↩️ "+UNDO)],[Button.text("⬅️ "+BACK)]]
             if direction=='dtf':buttons.append([Button.text('Количество копий')])
             if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
         await event.respond(text,buttons=buttons,parse_mode=None)
@@ -56,7 +56,7 @@ class Worker:
     async def on_message(self,event):
         if not event.is_private:return
         text=(event.raw_text or '').strip();uid=event.sender_id
-        text=text.lstrip('🖨👕🛠🖼📥📋🚀🗑📊⬅️ ').strip()
+        text=text.lstrip('🖨👕🛠🖼📥📋🚀🗑📊⬅️🕒↩️📂 ').strip()
         owner=self.q.setting('owner')
         parts=text.split(maxsplit=1)
         if parts and parts[0].split('@')[0]=='/owner':
@@ -116,11 +116,10 @@ class Worker:
                 await self.reply(event,f'Количество сохранено: {int(text)} шт.');return
             if text==UPLOAD:
                 await self.reply(event,'Направление: '+DIRECTIONS[direction]['label']+'.\nОтправьте оригинал документом, до 500 МБ.');return
-            if text==BUTTONS[0] or text=='/files':
+            if text in (BUTTONS[0],'Просмотр файлов','/files'):
                 rows=self.q.waiting(direction)
                 if not rows:await self.reply(event,'Очередь пуста.');return
-                # User-facing list deliberately contains names only.
-                for part in chunks(r['name'] for r in rows):await self.reply(event,part)
+                for part in chunks(self.features.file_lines(direction)):await self.reply(event,DIRECTIONS[direction]['label']+' · загруженные файлы\n'+part)
             elif text==BUTTONS[1] or text=='/send':
                 if direction=='dtf' and not self.c.get('dtf_recipient'):raise UserError('Укажите тестового получателя ДТФ в программе.')
                 if not self.q.setting('owner'):raise UserError('Сначала подключите владельца на основном компьютере.')
@@ -134,6 +133,13 @@ class Worker:
                 branches=len({r['branch'] for r in rows if r['batch'] is None})
                 copy_note=f' Всего копий: {sum(r["copies"] for r in rows if r["batch"] is None)}.' if direction=='dtf' else ''
                 await self.reply(event,f'Отправить общую очередь: {count} файлов от {branches} филиалов?{copy_note} Состав фиксируется после подтверждения. Подтверждение действует 5 минут.',[[Button.inline('Подтвердить отправку',('send:'+token).encode()),Button.inline('Отмена',('abort:'+token).encode())]])
+            elif text in (NEXT,'/next'):
+                await self.reply(event,self.features.status(direction))
+            elif text in (UNDO,'/undo'):
+                from telethon import Button
+                row=self.features.last_upload(uid,direction)
+                if not row:await self.reply(event,'Ваших файлов, которые ещё можно отменить до отправки, нет.');return
+                await self.reply(event,'Отменить вашу последнюю загрузку?\n'+row['name'],[[Button.inline('↩️ Отменить загрузку',f'undo:{direction}:{row["id"]}'.encode()),Button.inline('Оставить',f'keep:{direction}:{row["id"]}'.encode())]])
             elif text==STATUS or text=='/status':
                 await self.reply(event,self.features.status(direction))
             elif text==BUTTONS[2] or text=='/delete':
@@ -221,8 +227,8 @@ class Worker:
                 return
             elif action=='keep':
                 await event.answer('Файл оставлен.');await event.edit('Файл оставлен в очереди.',buttons=None);return
-            elif action=='remove':
-                r=self.q.cancel(number,direction=direction)
+            elif action in ('remove','undo'):
+                r=self.features.undo(event.sender_id,direction,number) if action=='undo' else self.q.cancel(number,direction=direction)
                 try:self.q.path(r).unlink(missing_ok=True)
                 except OSError:pass # A currently downloading file is removed when download finishes.
                 await event.answer('Файл удалён из очереди.')
@@ -309,7 +315,7 @@ class Worker:
         if not self.q.transition(bid,'collecting','packing'):return
         chat=int(self.q.setting('batch_progress:'+bid,self.q.setting('owner','0')) or 0)
         title='📦 '+DIRECTIONS[b['direction']]['label']+' · '+str(len(rows))+' файлов'
-        await self.cards.update('batch:'+bid,chat,title,'Подготовка исходников…',force=True)
+        await self.cards.update('batch:'+bid,chat,title,'1/4 · Собираем заказ…',force=True)
         try:
             if b.get('remote_path'):await asyncio.to_thread(disk.remove_generated,b['remote_path'])
             artifact=rows[0]['name'] if b['direction']=='workshop' else 'Полароид-ДТФ.png' if b['direction']=='dtf' else 'Полароид.zip'
@@ -319,7 +325,7 @@ class Worker:
                     with archive.open('rb') as file:
                         if archive.stat().st_size!=rows[0]['size'] or hashlib.file_digest(file,'sha256').hexdigest()!=rows[0]['sha256']:raise UserError('Исходник мастерской изменился.')
                 await asyncio.to_thread(verify_original)
-            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'Формирование холста…' if b['direction']=='dtf' else 'Архивирование…'))
+            else:archive=await asyncio.to_thread(build_sheet if b['direction']=='dtf' else build_archive,self.q,bid,self.cards.thread_callback('batch:'+bid,chat,title,'2/4 · Формирование холста…' if b['direction']=='dtf' else '2/4 · Архивирование…'))
             if b['direction']=='dtf' and self.q.setting('preview_sent:'+bid,'0')!='1':
                 try:
                     await self.client.send_file(chat,str(archive.with_suffix('.preview.png')),caption='Предпросмотр холста ДТФ. '+self.q.setting('dtf_layout:'+bid))
@@ -327,12 +333,12 @@ class Worker:
                 except Exception:pass
             remote=f'disk:/Cloudshop-Print/{bid}_{uuid.uuid4().hex}/{artifact}'
             if not self.q.transition(bid,'packing','uploading',remote_path=remote):return
-            await self.cards.update('batch:'+bid,chat,title,'Загрузка на Яндекс Диск…',force=True)
-            link=await asyncio.to_thread(disk.upload,archive,remote,self.cards.thread_callback('batch:'+bid,chat,title,'Загрузка на Яндекс Диск…'))
+            await self.cards.update('batch:'+bid,chat,title,'3/4 · Загружаем на Яндекс Диск…',force=True)
+            link=await asyncio.to_thread(disk.upload,archive,remote,self.cards.thread_callback('batch:'+bid,chat,title,'3/4 · Загружаем на Яндекс Диск…'))
             if not self.q.transition(bid,'uploading','ready',link=link):
                 await asyncio.to_thread(disk.remove_generated,remote);return
             b=self.q.batch(bid)
-            await self.cards.update('batch:'+bid,chat,title,'✅ Файлы на Диске. Отправляю письмо…',force=True)
+            await self.cards.update('batch:'+bid,chat,title,'4/4 · Файлы на Диске. Отправляем письмо…',force=True)
             # Login happens before the irreversible boundary; deletion is still possible here.
             smtp=await asyncio.to_thread(smtp_connect,self.c)
             try:
@@ -366,7 +372,7 @@ class Worker:
             self.monitor.failure(bid,reason)
 
         current=self.q.batch(bid)
-        stage={'sent':'✅ Заказ отправлен. Письмо принято почтовым сервером.','uncertain':'⚠️ Результат письма не подтверждён. Проверьте почту перед повтором.','collecting':'⏳ Не удалось завершить. Файлы сохранены, повтор через 10 минут.','invalidated':'Состав изменился. Заказ будет пересобран.'}.get(current['state'],'Обработка: '+current['state'])
+        stage={'sent':f'✅ Заказ отправлен. Файлов: {len(rows)}.','uncertain':'⚠️ Результат письма не подтверждён. Проверьте почту перед повтором.','collecting':'⏳ Не удалось завершить. Файлы сохранены, повтор через 10 минут.','invalidated':'Состав изменился. Заказ будет пересобран.'}.get(current['state'],'Обработка: '+current['state'])
         buttons=None
         if current.get('link') and current['state']=='sent':
             from telethon import Button
@@ -390,7 +396,7 @@ class Worker:
             if b['state'] in ('manual','manual_sent','uncertain'):
                 await self.handoff.notify(self,b);continue
             if b['state']=='sent':
-                text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо принято почтовым сервером; получение партнёром не подтверждено.'
+                text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо отправлено.'
                 if b['direction']=='dtf':text=text.replace('Архив:','Холст ДТФ:')+'\n'+self.q.setting('dtf_layout:'+b['id'])
                 chats={r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets()
             else:

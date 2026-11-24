@@ -143,24 +143,13 @@ class TestDispatch(unittest.TestCase):
             with self.assertRaises(UserError):features.confirm(token,11,CONFIG['recipient'])
         self.assertIsNone(self.q.active_batch())
 
-    def test_queue_broadcast_names_only_updates_and_retries(self):
+    def test_queue_changes_never_broadcast(self):
         from bot_features import BotFeatures
         from unittest.mock import AsyncMock
         features=BotFeatures(self.q);self.file(name='самоклейка.tif')
-        client=type('Client',(),{'send_message':AsyncMock(side_effect=ConnectionError())})()
-        asyncio.run(features.broadcast(client))
-        client.send_message=AsyncMock()
-        asyncio.run(features.broadcast(client));asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,8)
-        texts=[call.args[1] for call in client.send_message.await_args_list if 'Широкоформатная печать' in call.args[1]]
-        self.assertTrue(all('самоклейка.tif' in t and 'Первый филиал' not in t for t in texts))
-        bid=self.q.claim(CONFIG['recipient'],self.now);self.q.transition(bid,'collecting','sent')
-        asyncio.run(features.broadcast(client))
-        self.assertEqual(client.send_message.await_count,10)
-        self.assertIn('Файлов, ожидающих отправки, нет',client.send_message.await_args.args[1])
-        self.q.db.close();self.q=Queue(self.tmp.name)
-        asyncio.run(BotFeatures(self.q).broadcast(client))
-        self.assertEqual(client.send_message.await_count,10)
+        client=type('Client',(),{'send_message':AsyncMock()})()
+        asyncio.run(features.broadcast(client));self.q.cancel(self.q.waiting()[0]['id'])
+        asyncio.run(features.broadcast(client));self.assertEqual(client.send_message.await_count,0)
 
     def test_manual_claim_stops_retries_and_is_single_operator(self):
         self.q.set_setting('owner',11);self.q.set_setting('alert_branch','Ответственный')
@@ -360,6 +349,7 @@ class TestDispatch(unittest.TestCase):
             asyncio.run(worker.process_batch(self.q.batch(bid)))
         self.assertEqual(self.q.batch(bid)['state'],'sent')
         asyncio.run(worker.notify());asyncio.run(worker.notify())
+        self.assertFalse(any('получение партнёром' in text for _,text in sent))
         self.assertEqual(len([m for m in sent if m[0]==11 and m[1].startswith('Заказ отправлен на')]),1)
         self.assertNotIn('https://',next(m[1] for m in sent if m[0]==22))
     def test_telegram_buttons_and_names_only(self):
@@ -378,9 +368,9 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[icon+' '+r['label'] for icon,r in zip(('🖨','👕','🛠','🖼'),DIRECTIONS.values())]+['Ручная отправка'])
             event=Event(DIRECTIONS['wideformat']['label']);await worker.on_message(event)
             event=Event(BUTTONS[0]);await worker.on_message(event)
-            self.assertEqual(event.messages[0][0],self.q.waiting()[0]['name'])
+            self.assertIn(self.q.waiting()[0]['name'],event.messages[0][0]);self.assertIn('Первый филиал',event.messages[0][0])
             keyboard=event.messages[0][1]['buttons']
-            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'📊 Состояние','⬅️ '+BACK,'Ручная отправка'])
+            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'🕒 Ближайшая отправка','📊 Состояние','↩️ Отменить последнюю загрузку','⬅️ '+BACK,'Ручная отправка'])
             event=Event(BUTTONS[2]);await worker.on_message(event)
             button=event.messages[0][1]['buttons'][0][0]
             self.assertTrue(button.type.data.startswith(b'delete:'))
