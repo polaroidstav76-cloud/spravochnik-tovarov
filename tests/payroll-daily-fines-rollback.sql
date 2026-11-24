@@ -5,6 +5,7 @@ do $$declare worker uuid;admin uuid;pid bigint;otherpid bigint;eid bigint;eid2 b
  select chat_id into chat from public.report_recipients where active limit 1;
  insert into public.sales_people(name,is_active) values('__Payroll isolated test',true) returning id into pid;
  insert into public.sales_people(name,is_active) values('__Payroll OTHER secret',true) returning id into otherpid;
+ delete from payroll_private.deposits where person_id in(pid,otherpid);
  update public.staff_accounts set person_id=pid where user_id=worker;
  select id into bid from public.sales_branches where is_active and not is_test and not is_workshop order by id limit 1;
  select id into bid2 from public.sales_branches where is_active and not is_test and not is_workshop and id<>bid order by id limit 1;
