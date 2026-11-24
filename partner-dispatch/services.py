@@ -9,6 +9,7 @@ import smtplib
 import ssl
 import mimetypes
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -70,6 +71,9 @@ class Settings:
 
 class RemoteMissing(UserError):pass
 
+class DiskHTTPError(UserError):
+    def __init__(self,status,message):super().__init__(message);self.status=status
+
 class UploadReader:
     def __init__(self,file,total,progress):self.file=file;self.total=total;self.progress=progress;self.done=0
     def read(self,size=-1):
@@ -87,7 +91,7 @@ class Disk:
         except urllib.error.HTTPError as e:
             if e.code==409 and method=='PUT' and endpoint=='/resources':return {}
             if e.code==404:raise RemoteMissing('Архив не найден на Диске.') from None
-            raise UserError(f'Яндекс Диск вернул ошибку {e.code}. Проверьте доступ и свободное место.') from None
+            raise DiskHTTPError(e.code,f'Яндекс Диск вернул ошибку {e.code}. Проверьте доступ и свободное место.') from None
         except (OSError,ValueError):raise UserError('Нет ответа Яндекс Диска. Проверьте интернет.') from None
     def check(self):
         d=self.request('GET','');return d.get('total_space',0)-d.get('used_space',0)
@@ -128,9 +132,28 @@ class Disk:
         if metadata.get('size')!=filename.stat().st_size or metadata.get('md5')!=checksum:
             raise UserError('Архив на Диске не прошёл проверку целостности.')
         self.request('PUT','/resources/publish',path=remote)
-        url=self.request('GET','/resources',path=remote,fields='public_url').get('public_url')
-        if not url or not url.startswith('https://'):raise UserError('Не удалось получить ссылку на архив.')
-        return url
+        return self.public_link(remote)
+
+    def public_link(self,remote):
+        # Publication is eventually consistent: a successful publish may not
+        # expose public_url immediately. Keep the verified upload while polling.
+        for delay in (0,1,2,3,5,8,10,10,10,10):
+            if delay:time.sleep(delay)
+            try:metadata=self.request('GET','/resources',path=remote,fields='public_url')
+            except DiskHTTPError as error:
+                if error.status not in (408,429) and error.status<500:raise
+                continue
+            except UserError as error:
+                if isinstance(error,RemoteMissing) or str(error).startswith('Нет ответа Яндекс Диска'):continue
+                raise
+            url=metadata.get('public_url')
+            if url:
+                if not isinstance(url,str):raise UserError('Яндекс Диск вернул некорректную публичную ссылку.')
+                parsed=urllib.parse.urlparse(url)
+                if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password:
+                    raise UserError('Яндекс Диск вернул некорректную публичную ссылку.')
+                return url
+        raise UserError('Архив загружен и проверен, но Яндекс Диск пока не выдал публичную ссылку. Файлы сохранены.')
 
 
 def smtp_connect(config):
