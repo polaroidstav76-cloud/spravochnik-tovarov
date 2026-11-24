@@ -176,7 +176,25 @@ Deno.serve(async(req:Request)=>{
    await rpc('complete_file',data);return reply({ok:true});
   }
   const order=await rpc('internal',data);let root='disk:/Cloudshop-Client-Photos/'+order.id;
-  if(action==='download'&&data.variant==='print'){const ready=await rpc('crop_download_check',data);if(!ready.count)throw new Problem('Кадрированные JPG ещё не сохранены');root='disk:/Cloudshop-Client-Ready/'+order.id;}
+  if(action==='download'&&['print','ready'].includes(data.variant)){
+   const delivery=await rpc('delivery_files',data),files=delivery.files as any[];if(!files.length)throw new Problem('Фотографии ещё не загружены');
+   const fingerprint=async(value:unknown)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value))))).map(v=>v.toString(16).padStart(2,'0')).join('');
+   const snapshot=await fingerprint(delivery);root='disk:/Cloudshop-Client-Delivery/'+delivery.id+'/'+snapshot.slice(0,24);
+   const safe=(value:string)=>value.replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').slice(0,130)||'Фото';
+   const destinations=files.map(f=>root+'/'+String(f.position).padStart(2,'0')+'_'+safe(f.group)+'/'+f.id+'_'+safe(f.cropped?f.name.replace(/\.[^.]+$/,'')+'.jpg':f.name));
+   const exists=async(path:string,size?:number)=>{try{const m=await disk(token,'/resources',{path,fields:'type,size'});return m.type==='file'&&(size===undefined||Number(m.size)===Number(size));}catch(e){if(e instanceof Problem&&e.status===404)return false;throw e;}};
+   if(!await exists(root+'/О заказе.txt')){
+    let cursor=data.snapshot===snapshot&&Number.isInteger(data.cursor)?Math.max(0,Math.min(files.length,Number(data.cursor))):0;
+    const end=Math.min(cursor+8,files.length);let next=cursor;
+    await Promise.all(Array.from({length:Math.min(4,end-cursor)},async()=>{while(next<end){const i=next++,f=files[i],path=destinations[i];if(!await exists(path,f.size)){await folders(token,path.slice(0,path.lastIndexOf('/')));await operation(token,await disk(token,'/resources/copy',{from:f.path,path,overwrite:'true'},'POST'));if(!await exists(path,f.size))throw new Problem('Архив ещё готовится. Повторите скачивание.',503);}}}));
+    if(end<files.length)return reply({preparing:true,cursor:end,done:end,total:files.length,snapshot});
+    let missing=files.length,index=0;
+    await Promise.all(Array.from({length:Math.min(4,files.length)},async()=>{while(index<files.length){const i=index++;if(!await exists(destinations[i],files[i].size))missing=Math.min(missing,i);}}));
+    if(missing<files.length)return reply({preparing:true,cursor:missing,done:missing,total:files.length,snapshot});
+    if(await fingerprint(await rpc('delivery_files',data))!==snapshot)return reply({preparing:true,cursor:0,done:0,total:files.length});
+    await writeText(token,root+'/О заказе.txt','ПОЛАРОИД · Фотографии для печати\r\nЗаказ: '+(delivery.order_number||'без номера')+'\r\nКомментарий: '+(delivery.comment||'нет')+'\r\nОбработанные фотографии заменяют свои оригиналы. Остальные сохранены без изменений.\r\nВсего фотографий: '+files.length);
+   }
+  }
   if(action==='finish'){
    const m=await rpc('manifest',data);
    if(!m.files.some((x:any)=>x.status==='ready')||m.files.some((x:any)=>x.status==='pending'))throw new Problem('Дождитесь загрузки всех фото или исключите файлы с ошибкой');

@@ -8,7 +8,7 @@ async function setup(){
 }
 (async()=>{
  const h=await setup(),$=id=>h.document.getElementById(id);
- assert.equal($('prFreeName'),null);assert.equal($('prFreeCode'),null);assert.equal($('prBranch'),null);assert($('prAutoBranch').textContent.includes('Тухачевского 26/10'));
+ assert($('prCurrentRequests').nextElementSibling.id==='prBranchHistory');assert($('prBranchHistory').nextElementSibling.contains($('prSearch')));assert.equal($('prFreeName'),null);assert.equal($('prFreeCode'),null);assert.equal($('prBranch'),null);assert($('prAutoBranch').textContent.includes('Тухачевского 26/10'));
  for(const q of ['21х30 мат','мат 21x30','21 х 30 МАТ']){$('prSearch').value=q;$('prSearch').oninput();assert.equal(h.document.querySelectorAll('[data-pick]').length,1);assert.equal(h.document.querySelector('[data-pick]').dataset.pick,'1');}
  h.document.querySelector('[data-pick]').onclick();assert.equal($('prSearch').value,'Мат 21×30, 230 г/м');await $('prAdd').onclick();
  let req=h.calls.find(x=>x.name==='purchase_request_add');assert.equal(req.args.p_item_id,1);assert.equal(req.args.p_branch_id,8);assert($('prAdded').textContent.includes('✅'));assert(h.ctx.toast.includes('Тухачевского 26/10'));

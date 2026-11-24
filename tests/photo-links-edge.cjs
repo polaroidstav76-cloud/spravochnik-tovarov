@@ -1,9 +1,11 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
+let deliveryFiles=Array.from({length:10},(_,i)=>({id:'delivery'+i,name:'Фото'+i+(i%2?'.png':'.jpg'),group:'10x15',position:1,path:i%2?'disk:/Cloudshop-Client-Photos/order1/original'+i+'.png':'disk:/Cloudshop-Client-Crops/order1/processed'+i+'.jpg',size:123,cropped:i%2===0,render_id:i%2?null:'render'+i})),deliverySaved=new Set();
 let handler,rpcs=[],fetches=[],diskMode='normal',currentAction='';
 const fakeToken='test-storage-token-never-return-this';
 const db={auth:{getUser:async jwt=>({data:{user:jwt==='valid-admin'?{id:'admin'}:null},error:jwt==='valid-admin'?null:{message:'invalid'}})},rpc:async(name,args)=>{
  rpcs.push(args);const d=args.p_data;let data={ok:true};
  switch(args.p_action){
+  case 'delivery_files':data={id:'order1',files:deliveryFiles};break;
   case 'remove_begin':data={order_id:'order1',path:'disk:/Cloudshop-Client-Photos/order1/photo.jpg',target:'disk:/Cloudshop-Client-Ready/order1/photo.jpg'};break;
   case 'secret':data={token:fakeToken};break;
   case 'branches':data={admin:args.p_actor==='admin',branches:[],configured:true};break;
@@ -18,6 +20,9 @@ const db={auth:{getUser:async jwt=>({data:{user:jwt==='valid-admin'?{id:'admin'}
 }};
 const context={console,Request,Response,Headers,URL,URLSearchParams,TextEncoder,AbortSignal,crypto:require('node:crypto').webcrypto,createClient:()=>db,Deno:{env:{get:()=>''},serve:h=>handler=h},fetch:async(url,opt={})=>{
  fetches.push({url:String(url),opt});const u=new URL(url);let body={};
+ if(u.pathname.endsWith('/resources/copy'))deliverySaved.add(u.searchParams.get('path'));
+ if(u.pathname.endsWith('/resources/upload')&&u.searchParams.get('path')?.includes('Cloudshop-Client-Delivery'))deliverySaved.add(u.searchParams.get('path'));
+ if(u.pathname.endsWith('/resources')&&opt.method!=='PUT'&&u.searchParams.get('path')?.includes('Cloudshop-Client-Delivery')&&/\/(delivery[0-9]+_|О заказе)/.test(u.searchParams.get('path'))&&!deliverySaved.has(u.searchParams.get('path')))return new Response('{}',{status:404});
  if(u.hostname==='download.disk.yandex.net'){const data=new Uint8Array([255,216,255,224,0,16,74,70,73,70,0,1,2,1,1,44,1,44,0,0,255,192,0,17,8,4,157,6,236,3,1,17,0,2,17,0,3,17,0,255,218,0,2]);if(diskMode==='bad-dpi')data[15]=96;return new Response(data,{status:206});}
  if(u.pathname.endsWith('/disk/'))body={user:{uid:'disk-owner'},total_space:2000000000000,used_space:100};
  else if(u.pathname==='/v1/disk/resources/download')body={href:'https://download.disk.yandex.net/original.jpg'};
@@ -52,6 +57,7 @@ async function call(action,data={},jwt='',customOrigin=origin){currentAction=act
  diskMode='missing';assert.equal((await call('skip',{token,id})).b.ok,true);diskMode='normal';
  assert.equal((await call('finish',{token,comment:'Без полей'})).b.ok,true);
  assert.deepEqual(Array.from(rpcs.find(x=>x.p_action==='finish').p_data.snapshot),['f1']);
+ const mixed=await call('download',{token,variant:'ready'});assert.equal(mixed.b.preparing,true);assert.equal(mixed.b.done,8);const finished=await call('download',{token,variant:'ready',snapshot:mixed.b.snapshot,cursor:mixed.b.cursor});assert.equal(finished.r.status,200);assert.ok(finished.b.href);const mixedCopies=fetches.filter(x=>x.url.includes('/resources/copy?')&&x.url.includes('Cloudshop-Client-Delivery'));assert.equal(mixedCopies.length,10);assert.equal(mixedCopies.filter(x=>new URL(x.url).searchParams.get('from').includes('Crops')).length,5);assert.equal(mixedCopies.filter(x=>new URL(x.url).searchParams.get('from').includes('Photos')).length,5);const count=mixedCopies.length;await call('download',{token,variant:'ready'});assert.equal(fetches.filter(x=>x.url.includes('/resources/copy?')&&x.url.includes('Cloudshop-Client-Delivery')).length,count);
  const archive=await call('download',{token});assert.equal(archive.b.href,'https://download.disk.yandex.net/folder.zip');
  assert.ok(fetches.some(x=>x.url.includes('/public/resources/download?')));
  assert.equal((await call('crop_source',{token,id})).b.href,'https://download.disk.yandex.net/original.jpg');

@@ -7,7 +7,7 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  async function fixture({offline=false,mobile=false}={}){
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1100,height:900}});
   const state={id:'order1',branch:'Тухачевского 26/4',phone_hint:'1234',order_number:'',source:offline?'offline':'staff',status:'uploading',mode:null,comment:'',groups:[],files:[],configured:true,revision:0,needs_size_advice:false,contacts:{whatsapp:'https://wa.me/79000000001',telegram:'https://t.me/test_branch'}};
-  const uploads=[],calls=[];let simultaneous=0,maxActive=0;
+  const uploads=[],calls=[];let simultaneous=0,maxActive=0,downloadRounds=0;
   await page.route('**/upload.disk.yandex.net/**',async route=>{simultaneous++;maxActive=Math.max(maxActive,simultaneous);uploads.push(route.request().postDataBuffer());await new Promise(r=>setTimeout(r,25));await route.fulfill({status:201,body:''});simultaneous--;});
   await page.route('**/functions/v1/photo-links',async route=>{
    const b=route.request().postDataJSON();calls.push(b);const d=b.data;let result={ok:true};
@@ -25,7 +25,7 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
     case 'finish':state.status='complete';state.comment=d.comment;state.completed_at=new Date().toISOString();state.revision++;break;
     case 'reopen':state.status='uploading';break;
     case 'list':result={orders:[]};break;
-    case 'download':result={href:'https://download.disk.yandex.net/photos.zip'};break;
+    case 'download':downloadRounds++;result=downloadRounds===1?{preparing:true,done:8,total:9,cursor:8,snapshot:'test-snapshot'}:{href:'https://download.disk.yandex.net/photos.zip'};break;
     case 'configure':result={ok:true,total:2e12,used:1e11};break;
    }
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
@@ -45,7 +45,7 @@ const base=process.env.PHOTO_TEST_URL||'http://127.0.0.1:8795';
  await page.locator('#photoComment').fill('Без полей, пожалуйста');
  await page.getByRole('button',{name:'Завершить загрузку фото',exact:true}).click();
  await page.getByText('Фотографии отправлены!',{exact:true}).waitFor();assert.equal(state.comment,'Без полей, пожалуйста');await page.waitForTimeout(900);assert.ok(await page.locator('.photo-success').evaluate(e=>e.getBoundingClientRect().top<100),'confirmation is scrolled into view');assert.ok(await page.getByText('Сотрудник фотоцентра свяжется с вами в ближайшее время для оформления заказа.',{exact:true}).isVisible());checks+=3;
- await page.screenshot({path:'/tmp/cloudshop-photos-mobile.png',fullPage:true});
+ await page.screenshot({path:'/tmp/cloudshop-photos-mobile.png',fullPage:true});await page.context().route('**/download.disk.yandex.net/photos.zip',r=>r.fulfill({contentType:'text/plain',body:'mock archive'}));await page.getByRole('button',{name:'Скачать все фото ZIP',exact:true}).click();await page.getByText('Архив готов.',{exact:true}).waitFor();assert.equal(f.calls.filter(x=>x.action==='download').length,2);assert.ok(f.calls.filter(x=>x.action==='download').every(x=>x.data.variant==='ready'));checks+=2;
  await page.getByRole('button',{name:'Добавить ещё фото',exact:true}).click();
  await page.getByRole('button',{name:'Выбрать фото'}).waitFor();
  await page.locator('input[type=file]').setInputFiles({name:'Оригинал.JPG',mimeType:'image/jpeg',buffer:original});
