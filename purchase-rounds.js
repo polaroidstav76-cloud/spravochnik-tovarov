@@ -94,7 +94,7 @@
         try{await stkDrawBuy();}catch{}
         const banner=document.createElement('div');banner.setAttribute('role','status');banner.id='prAdded';banner.style.cssText='padding:14px;margin:12px 0;border:1px solid #86b89a;border-radius:10px;background:#eaf8ee;color:#14532d;font-weight:600';banner.textContent=text;
         const anchor=$('prAdd');if(anchor)anchor.insertAdjacentElement('afterend',banner);else $('stockBody').prepend(banner);
-        if(typeof v5Toast==='function')v5Toast(text);$('prSearch')?.focus();
+        if(typeof v5Toast==='function')v5Toast(text);if(isAdmin)$('prSearch')?.focus();else $('prCurrentRequests')?.scrollIntoView?.({behavior:'smooth',block:'start'});
       }catch(e){status('Заявка не добавлена: '+e.message);if($('prAdd')){$('prAdd').disabled=false;$('prAdd').textContent='Добавить заявку';}}
       finally{adding=false;}
     });
