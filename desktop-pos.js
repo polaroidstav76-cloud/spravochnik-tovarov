@@ -1,9 +1,9 @@
 (()=>{
  if(new URLSearchParams(location.search).get('desktop')!=='1')return;
  document.body.classList.add('desktop-pos');
- const style=document.createElement('link');style.rel='stylesheet';style.href='desktop-pos.css?v=1';document.head.append(style);
+ const style=document.createElement('link');style.rel='stylesheet';style.href='desktop-pos.css?v=20261124-logo';document.head.append(style);
  const $=id=>document.getElementById(id),core=CloudshopDesktopDraft;
- const home=document.createElement('section');home.id='desktopHome';home.innerHTML='<div class="desktop-brand">КЛАУДШОП <span>Касса на рабочем столе</span></div><h1>Продажа без лишних окон</h1><p>Распечатали часть заказа — сразу добавьте позиции. Черновик сохранится на этом компьютере.</p><div id="desktopIdentity" role="status"></div><div class="desktop-home-actions"><button id="desktopSale" class="primary">Открыть продажу</button><button id="desktopShift" class="secondary">Выбрать смену</button><button id="desktopAccount" class="secondary">Сменить аккаунт</button></div><div id="desktopDraftNotice" role="status"></div><div id="desktopSaveStatus" role="status"></div>';document.body.append(home);
+ const home=document.createElement('section');home.id='desktopHome';home.innerHTML='<div class="desktop-brand"><img src="assets/photo-logo.png" width="44" height="44" alt=""><div>ПОЛАРОИД<span>Касса на рабочем столе</span></div></div><h1>Продажа без лишних окон</h1><p>Распечатали часть заказа — сразу добавьте позиции. Черновик сохранится на этом компьютере.</p><div id="desktopIdentity" role="status"></div><div class="desktop-home-actions"><button id="desktopSale" class="primary">Открыть продажу</button><button id="desktopShift" class="secondary">Выбрать смену</button><button id="desktopAccount" class="secondary">Сменить аккаунт</button></div><div id="desktopDraftNotice" role="status"></div><div id="desktopSaveStatus" role="status"></div>';document.body.append(home);
  let opening=false,restoring=false,pendingSave=false,timer,storageOK=true,lastSummary='',currentUser='',favs=new Set();
  const fields=['saleComment','salePayment','saleDiscountPercent','saleClubQuery','saleClubNewName','saleClubNewPhone','saleClubComment','salePointsToUse'];
  const user=()=>staffAccount?.user_id||null;

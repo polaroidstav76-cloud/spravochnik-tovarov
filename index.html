@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="icon" type="image/png" href="assets/photo-logo.png?v=20261124">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ПОЛАРОИД</title>
@@ -151,9 +151,7 @@ header.app-head{position:sticky;top:0;z-index:5;background:rgba(236,238,241,.86)
 header.app-head .top{max-width:1240px;gap:12px}
 .brand{display:flex;align-items:center;gap:12px}
 .brand h1{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.06em;margin:0;color:var(--ink)}
-.brand-stripe{display:flex;flex-direction:column;width:28px;height:28px;border-radius:7px;overflow:hidden;background:var(--ink);padding:5px 0 5px;justify-content:flex-end;gap:0}
-.brand-stripe i{display:block;height:3px}
-.brand-stripe i:nth-child(1){background:var(--s-red)}.brand-stripe i:nth-child(2){background:var(--s-orange)}.brand-stripe i:nth-child(3){background:var(--s-yellow)}.brand-stripe i:nth-child(4){background:var(--s-green)}.brand-stripe i:nth-child(5){background:var(--s-blue)}
+.brand-logo{display:block;width:40px;height:40px;object-fit:contain;flex-shrink:0}
 #authStatus{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 #authStatus:not(:empty){padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
 .ghost{background:transparent;border-color:transparent;color:var(--ink)}
@@ -513,7 +511,7 @@ body.has-task-banner .modal{padding-bottom:calc(var(--task-banner-h,0px) + 10px)
   </defs>
 </svg>
 <header class="app-head"><div class="top">
-  <div class="brand"><span class="brand-stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><h1>ПОЛАРОИД</h1></div>
+  <div class="brand"><img class="brand-logo" src="assets/photo-logo.png" width="40" height="40" alt=""><h1>ПОЛАРОИД</h1></div>
   <div class="grow"></div>
   <span id="authStatus" class="status"></span>
   <button id="loginBtn" class="ghost">Войти</button>
@@ -7228,6 +7226,6 @@ $('staffSave').onclick=async()=>{
 <script src="payroll.js?v=20261124-password"></script>
 <script src="announcements-deferred.js?v=20261124-later"></script>
 <script src="desktop-draft-core.js?v=1"></script>
-<script src="desktop-pos.js?v=1"></script>
+<script src="desktop-pos.js?v=20261124-logo"></script>
 </body>
 </html>
