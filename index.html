@@ -3477,7 +3477,7 @@ const{sales,items}=await loadSalesForRange(
 // Закрытие выполняется только отдельной явной командой для всей смены.
 let closeShiftPending=null;
 async function showShiftTasks(branchId,shiftId,employeeId,force=false) {
-  const r=await db.from('sales_shift_tasks').select('*').eq('branch_id',branchId).eq('task_date',salesTodayISO()).eq('is_active',true).order('id');
+  const r=await db.from('sales_shift_tasks').select('*').eq('branch_id',branchId).lte('task_date',salesTodayISO()).or('task_date.eq.'+salesTodayISO()+',recurrence_id.not.is.null').eq('is_active',true).order('task_date').order('id');
   if(r.error) throw r.error;
   if(!r.data?.length) return true;
   const comps=await db.from('sales_shift_task_completions').select('task_id').eq('shift_id',shiftId);
@@ -3583,7 +3583,7 @@ async function refreshTaskBanner(){
     const today=salesTodayISO(),parts=(sess.participants||[]).filter(p=>p.isActive!==false&&p.personId);
     const personIds=[...new Set(parts.map(p=>Number(p.personId)))];
     const [bt,bc,pt]=await Promise.all([
-      db.from('sales_shift_tasks').select('*').eq('branch_id',sess.branchId).eq('task_date',today).eq('is_active',true).order('id'),
+      db.from('sales_shift_tasks').select('*').eq('branch_id',sess.branchId).lte('task_date',today).or('task_date.eq.'+today+',recurrence_id.not.is.null').eq('is_active',true).order('task_date').order('id'),
       db.from('sales_shift_task_completions').select('task_id').eq('shift_id',sess.shiftId),
       personIds.length?db.from('sales_person_tasks').select('*').in('person_id',personIds).is('completed_at',null).eq('is_active',true).lte('start_date',today).order('start_date').order('id'):Promise.resolve({data:[]})
     ]);
@@ -3600,7 +3600,7 @@ function drawTaskBanner(){
   const b=$('taskBanner'),st=window.taskBannerState,total=st.branch.length+st.personal.length;
   if(!total){b.classList.remove('show');document.body.classList.remove('has-task-banner');document.body.style.removeProperty('--task-banner-h');return}
   const today=salesTodayISO();
-  const item=(kind,t)=>`<div class="tb-item"><div><div class="tb-title">${kind==='branch'?'<span class="tb-who branch">Филиал</span>':`<span class="tb-who">${esc(t.who.name)}</span>`}${esc(t.title)}${kind==='person'&&t.start_date<today?'<span class="tb-carry">перенесено</span>':''}</div>${t.description?`<div class="tb-sub">${esc(t.description)}</div>`:''}</div><button class="tb-done" onclick="completeBannerTask('${kind}',${t.id})">✓ Выполнено</button></div>`;
+  const item=(kind,t)=>`<div class="tb-item"><div><div class="tb-title">${kind==='branch'?'<span class="tb-who branch">Филиал</span>':`<span class="tb-who">${esc(t.who.name)}</span>`}${esc(t.title)}${t.recurrence_id?` <span class="status">· ${esc(String(t.task_date||t.start_date).split('-').reverse().join('.'))}</span>`:''}${kind==='person'&&t.start_date<today?'<span class="tb-carry">перенесено</span>':''}</div>${t.description?`<div class="tb-sub">${esc(t.description)}</div>`:''}</div><button class="tb-done" onclick="completeBannerTask('${kind}',${t.id})">✓ Выполнено</button></div>`;
   b.innerHTML=`<div class="tb-head"><span>📋 Задания на смену: ${total}</span><button class="tb-toggle" onclick="toggleTaskBanner()">${taskBannerCollapsed?'Развернуть':'Свернуть'}</button></div><div class="tb-list">${st.personal.map(t=>item('person',t)).join('')}${st.branch.map(t=>item('branch',t)).join('')}</div>`;
   b.classList.toggle('collapsed',taskBannerCollapsed);b.classList.add('show');document.body.classList.add('has-task-banner');
   document.body.style.setProperty('--task-banner-h',b.offsetHeight+'px');
@@ -7232,5 +7232,6 @@ $('staffSave').onclick=async()=>{
 <link rel="stylesheet" href="commerce.css?v=1">
 <script src="commerce.js?v=1"></script>
 <script src="commerce-editor.js?v=1"></script>
+<script src="task-recurrence.js?v=1"></script>
 </body>
 </html>

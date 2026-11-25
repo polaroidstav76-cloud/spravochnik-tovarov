@@ -1,0 +1,20 @@
+begin;
+do $$declare actor uuid;person bigint;branch bigint;employee bigint;shift bigint;rule_id bigint;task_id bigint;r jsonb;before_count bigint;today date:=(now() at time zone 'Europe/Moscow')::date;begin
+ select user_id into actor from public.staff_accounts where active and role='admin' limit 1;perform set_config('request.jwt.claim.sub',actor::text,true);
+ insert into public.sales_people(name) values('__task_recur_rollback__') returning id into person;
+ insert into public.sales_branches(name,is_test) values('__task_recur_rollback__',true) returning id into branch;
+ insert into public.sales_employees(branch_id,person_id,name) values(branch,person,'__task_recur_rollback__') returning id into employee;
+ insert into public.sales_shifts(branch_id,employee_id) values(branch,employee) returning id into shift;
+ insert into public.sales_shift_employees(shift_id,employee_id,is_lead) values(shift,employee,true);
+ r:=public.tasks_recur_manage('save',jsonb_build_object('target','branch','target_id',branch,'title','__task_recur_rollback__','kind','days','every',3,'month_day',1,'starts_on',today,'weekdays','[]'::jsonb));rule_id:=(r->>'id')::bigint;
+ select id into task_id from public.sales_shift_tasks where recurrence_id=rule_id;assert task_id is not null;
+ perform public.tasks_recur_refresh();assert(select count(*) from public.sales_shift_tasks where recurrence_id=rule_id)=1;
+ assert exists(select 1 from jsonb_array_elements(public.tasks_recur_manage('list')) x where (x->>'id')::bigint=rule_id and (x->>'published')::integer=1);
+ insert into public.sales_shift_task_completions(task_id,shift_id,completed_by_employee_id) values(task_id,shift,employee);
+ assert not(select is_active from public.sales_shift_tasks where id=task_id);
+ perform public.tasks_recur_manage('toggle',jsonb_build_object('id',rule_id,'version',1,'enabled',false));
+ assert not(select enabled from task_recur_private.rules where id=rule_id);
+ assert task_recur_private.next_on(jsonb_populate_record(null::task_recur_private.rules,'{"kind":"months","every":1,"starts_on":"2028-01-31","month_day":31}'),'2028-02-01')='2028-02-29'::date;
+ assert not has_function_privilege('authenticated','task_recur_private.generate(date)','execute');
+end $$;
+rollback;
