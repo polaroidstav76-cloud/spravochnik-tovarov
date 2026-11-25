@@ -1,0 +1,30 @@
+begin;
+do $$
+declare boss uuid;worker uuid;proof uuid;pid bigint;bid bigint;eid bigint;sid bigint;m jsonb;entry jsonb;denied boolean;
+begin
+ select user_id into boss from public.staff_accounts where active and role='admin' limit 1;
+ select a.user_id,s.id into worker,proof from public.staff_accounts a join auth.sessions s on s.user_id=a.user_id where a.active and a.role='staff' limit 1;
+ if boss is null or worker is null then raise exception 'Test requires existing admin and staff session';end if;
+ insert into public.sales_people(name) values('__training_rollback__') returning id into pid;
+ insert into public.sales_branches(name) values('__training_rollback__') returning id into bid;
+ insert into public.sales_employees(branch_id,person_id,name) values(bid,pid,'__training_rollback__') returning id into eid;
+ insert into public.sales_shifts(branch_id,employee_id,started_at,ended_at,status,no_pay) values(bid,eid,'2026-01-31T08:00Z','2026-01-31T18:00Z','closed',false) returning id into sid;
+ insert into public.sales_shift_employees(shift_id,employee_id,is_lead) values(sid,eid,true);
+ perform set_config('request.jwt.claim.sub',boss::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',boss,'role','authenticated')::text,true);
+ perform public.payroll_training_set(pid,3,0);
+ m:=public.payroll_report('2026-02-01','2026-02-28');select x into entry from jsonb_array_elements(m->'training') x where (x->>'person_id')::bigint=pid;
+ assert (entry->>'amount')::numeric=1500;assert entry->>'due_on'='2026-02-28';assert (entry->>'period_amount')::numeric=1500;
+ assert exists(select 1 from jsonb_array_elements(m->'rows') x where (x->>'person_id')::bigint=pid and (x->>'total')::numeric=1500);
+ perform public.payroll_training_set(pid,3,1);
+ denied:=false;begin perform public.payroll_training_set(pid,4,1);exception when sqlstate 'PT409' then denied:=true;end;assert denied;
+ perform public.payroll_training_paid(pid,true,2);
+ assert (select paid_amount from payroll_private.training where person_id=pid)=1500;
+ update public.staff_accounts set person_id=pid where user_id=worker;
+ insert into payroll_private.unlocks values(worker,proof,now()+interval '15 minutes') on conflict(user_id,session_id) do update set expires_at=excluded.expires_at;
+ perform set_config('request.jwt.claim.sub',worker::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated','session_id',proof)::text,true);
+ execute 'set local role authenticated';m:=public.payroll_report('2026-02-01','2026-02-28');assert jsonb_array_length(m->'training')=1;assert (m->'training'->0->>'person_id')::bigint=pid;assert (m->'training'->0->>'paid')::boolean;assert m->'training_people'='[]'::jsonb;
+ denied:=false;begin perform public.payroll_training_set(pid,4,3);exception when sqlstate 'PT403' then denied:=true;end;assert denied;
+ execute 'reset role';
+ assert not has_table_privilege('authenticated','payroll_private.training','select');assert not has_function_privilege('authenticated','payroll_private.training_info(bigint)','execute');
+end $$;
+rollback;
