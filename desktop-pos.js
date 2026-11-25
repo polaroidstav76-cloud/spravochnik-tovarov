@@ -13,7 +13,7 @@
   if(opening||restoring)return true;const u=user();if(!u)return true;
   try{
    if(saleDraft?.length&&saleContext?.shiftId){
-    const data={version:1,user:u,context:{shiftId:saleContext.shiftId,branchId:saleContext.branchId,branchName:saleContext.branchName,personId:saleContext.personId,employeeId:saleContext.employeeId},orderNo:window.currentSaleOrderNumber,items:saleDraft.map(i=>({...i,label:salesCatalog.find(c=>Number(c.id)===Number(i.catalogId))?.name||'Позиция'})),fields:Object.fromEntries(fields.map(id=>[id,$(id)?.value||''])),club:!!$('saleClubEnabled')?.checked,usePoints:!!$('saleUsePoints')?.checked,customerId:saleLoyaltyCustomerId,split:typeof v4SplitRows==='undefined'?[]:v4SplitRows,attempted:pendingSave||!!stored()?.attempted,updatedAt:new Date().toISOString()};
+    const data={commerce:window.CommerceCheckout?.draft()||null,version:1,user:u,context:{shiftId:saleContext.shiftId,branchId:saleContext.branchId,branchName:saleContext.branchName,personId:saleContext.personId,employeeId:saleContext.employeeId},orderNo:window.currentSaleOrderNumber,items:saleDraft.map(i=>({...i,label:salesCatalog.find(c=>Number(c.id)===Number(i.catalogId))?.name||'Позиция'})),fields:Object.fromEntries(fields.map(id=>[id,$(id)?.value||''])),club:!!$('saleClubEnabled')?.checked,usePoints:!!$('saleUsePoints')?.checked,customerId:saleLoyaltyCustomerId,split:typeof v4SplitRows==='undefined'?[]:v4SplitRows,attempted:pendingSave||!!stored()?.attempted,updatedAt:new Date().toISOString()};
     // Pickup payments have a separate server order. Do not turn them into a new sale on restart.
     if(typeof salePickup!=='undefined'&&salePickup)data.pickupId=salePickup.id;
     localStorage.setItem(core.key(u),JSON.stringify(data));$('desktopSaveStatus').textContent='✓ Черновик сохранён на этом компьютере.';
@@ -48,7 +48,7 @@
     // Recheck the customer's current balance rather than restoring an old balance from disk.
     if(d.customerId&&d.fields?.saleClubNewPhone){const r=await db.rpc('loyalty_find_customers',{p_query:clubPhoneValue(d.fields.saleClubNewPhone)});const customer=(r.data||[]).find(c=>String(c.customer_id)===String(d.customerId));if(customer)selectSaleLoyaltyCustomer(customer);else{$('saleUsePoints').checked=false;$('salePointsToUse').value='0';$('saleClubStatus').textContent='Выберите клубную карту заново: баланс не удалось проверить.';}}
     if(d.customerId&&saleLoyaltyCustomerId){$('saleUsePoints').checked=!!d.usePoints;$('salePointsFields').style.display=d.usePoints?'block':'none';}
-    v4SplitRows=d.split||[];$('salePayment').onchange?.();renderSaleDraft();
+    v4SplitRows=d.split||[];$('salePayment').onchange?.();renderSaleDraft();await window.CommerceCheckout?.restore(d.commerce);
     if(!anotherShift&&d.orderNo){window.currentSaleOrderNumber=d.orderNo;$('saleOrderPreview').textContent='№ '+d.orderNo+' (черновик)';}
     $('saleStatus').textContent='Черновик восстановлен. Проверьте позиции и оплату перед оформлением.';
    }
