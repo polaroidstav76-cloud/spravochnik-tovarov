@@ -131,7 +131,7 @@ begin
    pay_sum:=pay_sum+(pay->>'amount')::numeric;if pay->>'method'='bank_account' then due:=due+(pay->>'amount')::numeric;end if;
   end loop;
   if pay_sum<>total then raise exception 'Сумма способов оплаты не равна итогу продажи';end if;
- else p_payments:=jsonb_build_array(jsonb_build_object('method',p_payment_method,'amount',total));if p_payment_method='bank_account' then due:=total;end if;end if;
+ else p_payments:=case when total>0 then jsonb_build_array(jsonb_build_object('method',p_payment_method,'amount',total)) else '[]'::jsonb end;if p_payment_method='bank_account' then due:=total;end if;end if;
  select * into old_debt from public.customer_debts where sale_id=s.id for update;
  if old_debt.paid_at is not null and due<>old_debt.amount then raise exception 'Долг этой продажи уже погашен. Сумму оплаты по расчётному счёту нужно корректировать отдельно';end if;
  -- Save item history and cancel its old stock usage, retaining the ledger itself.
@@ -318,9 +318,9 @@ begin
   end if;
 
   perform set_config('workflow.creator_person',coalesce((select person_id::text from public.sales_employees where id=p_employee_id),''),true);
-  if v_customer_id is null and nullif(trim(coalesce(p_loyalty_phone,'')),'') is not null then
+  if v_gross>0 and v_customer_id is null and nullif(trim(coalesce(p_loyalty_phone,'')),'') is not null then
     select x.customer_id into v_customer_id from public.loyalty_add_purchase(trim(p_loyalty_name),trim(p_loyalty_phone),v_gross,nullif(trim(coalesce(p_loyalty_comment,'')),'')) x limit 1;
-  elsif v_customer_id is not null then
+  elsif v_gross>0 and v_customer_id is not null then
     select x.customer_id into v_customer_id from public.loyalty_customers c cross join lateral public.loyalty_add_purchase(c.name,c.phone,v_gross,nullif(trim(coalesce(p_loyalty_comment,'')),'')) x where c.id=v_customer_id;
   end if;
 
@@ -339,7 +339,7 @@ begin
     for v_pay in select * from jsonb_array_elements(p_payments) loop
       insert into public.sale_payments(sale_id,payment_method,amount) values(v_sale_id,(v_pay->>'method'),round((v_pay->>'amount')::numeric,2));
     end loop;
-  else
+  elsif v_total>0 then
     insert into public.sale_payments(sale_id,payment_method,amount) values(v_sale_id,p_payment_method,v_total);
   end if;
   update public.sales_branch_order_counters set next_number=greatest(next_number,v_order+1),updated_at=now() where branch_id=v_shift.branch_id;

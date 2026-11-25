@@ -35,6 +35,11 @@ module.exports=async db=>{
  // Normal sale edits recalculate stock and payment without making another sale.
  await db.exec(`insert into stock_materials(id,name,unit) values(101,'Бумага','шт');insert into stock_norms(material_id,catalog_id,qty,active) values(101,101,1,true);`);
  const normal=(await one("select sales_create_sale_v6($1,null,101,101,'cash','Normal',$2) n",[crypto.randomUUID(),JSON.stringify(item(2))])).n,ns=await one('select * from sales where order_number=$1',[normal]);await db.query("select commerce_edit_sale($1,101,0,$2,0,0,'cash','[]','Edited')",[ns.id,JSON.stringify([{catalog_id:101,quantity:3,unit_price:100}])]);assert.equal(Number((await one('select total from sales where id=$1',[ns.id])).total),300);assert.equal(Number((await one('select sum(qty) q from stock_moves where sale_id=$1 and cancelled_at is null',[ns.id])).q),-3);
+ const freeQuote=await quote('GIFT',[{catalog_id:102,quantity:2,unit_price:200}],other);assert.equal(freeQuote.total,0);
+ const freeItems=freeQuote.items.map((i,n)=>n?i:{...i,_checkout:{code:'GIFT',version:freeQuote.version,total:0,ack:[]}});
+ const freeOrder=(await one("select sales_create_sale_v6($1,null,101,101,'cash','Free gift',$2,p_loyalty_customer_id:=$3) n",[crypto.randomUUID(),JSON.stringify(freeItems),other])).n;
+ const freeSale=await one('select * from sales where order_number=$1',[freeOrder]);assert.equal(Number(freeSale.total),0);assert.equal((await one('select count(*) n from sale_payments where sale_id=$1',[freeSale.id])).n,0);
+ await db.query("select commerce_edit_sale($1,101,0,$2,0,0,'cash','[]','Free gift edited')",[freeSale.id,JSON.stringify(freeQuote.items)]);
  await db.exec(`update staff_accounts set role='staff',person_id=101 where user_id='${uid}'`);await denies("select commerce_manage('list','{}')",[],/администратору/);await db.query("select commerce_get_sale($1,101)",[ns.id]);
  await db.exec(`update staff_accounts set person_id=null where user_id='${uid}'`);await denies('select commerce_get_sale($1,101)',[ns.id],/смену/);
  await db.exec("select set_config('request.jwt.claim.sub','',false)");await denies('select commerce_get_sale($1,101)',[ns.id],/вход/);

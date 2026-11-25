@@ -30,6 +30,16 @@ begin
  perform public.commerce_edit_sale(test_sale,branch,0,rows,0,0,'card','[]','Edited rollback test');
  if(select total from public.sales where id=test_sale)<>1800 then raise exception 'Bad edited promo total';end if;
  if(select count(*) from commerce_private.redemptions where customer_id=card)<>1 then raise exception 'Redemption changed on edit';end if;
+ insert into commerce_private.promos(code,title,kind,value,gift_id,gift_qty,starts_at,ends_at) values('__GIFT_'||upper(replace(gen_random_uuid()::text,'-','')),'Free gift','gift',0,catalog,2,now()-interval '1 day',now()+interval '1 day') returning id into rule;
+ rows:=jsonb_build_array(jsonb_build_object('catalog_id',catalog,'quantity',2,'unit_price',100));
+ q:=public.commerce_quote((select code from commerce_private.promos where id=rule),card,rows);
+ rows:=jsonb_set(q->'items','{0,_checkout}',jsonb_build_object('code',q->'code','version',q->'version','total',q->'total','ack','[]'::jsonb));
+ order_no:=public.sales_create_sale_v6(gen_random_uuid(),null,branch,person,'cash','Free rollback test',rows,p_loyalty_customer_id:=card);
+ select id,total into test_sale,old_total from public.sales where branch_id=branch and order_number=order_no;
+ if old_total<>0 or exists(select 1 from public.sale_payments where sale_id=test_sale) then raise exception 'Bad zero gift checkout';end if;
+ detail:=public.commerce_get_sale(test_sale,branch);
+ perform public.commerce_edit_sale(test_sale,branch,0,detail->'items',0,0,'cash','[]','Free edited');
+
 
 end $$;
 rollback;
