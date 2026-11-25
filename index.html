@@ -2398,7 +2398,7 @@ function applyStaffAuth(account,state){
 }
 const staffSessionController=CloudshopStaffSession.controller({
   auth:db.auth,
-  readAccount:id=>db.from('staff_accounts').select('user_id,login,name,role,active').eq('user_id',id).maybeSingle(),
+  readAccount:id=>db.from('staff_accounts').select('user_id,login,name,role,active,person_id').eq('user_id',id).maybeSingle(),
   apply:applyStaffAuth,
   onTransient:()=>{
     if(!staffAccount&&STAFF_LOGIN_REQUIRED){document.body.classList.add('staff-locked');$('loginError').textContent='Нет связи с сервером. Проверьте интернет и повторите вход.';$('loginModal').style.zIndex='1000000';open('loginModal');}
