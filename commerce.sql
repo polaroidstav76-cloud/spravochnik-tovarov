@@ -214,7 +214,7 @@ begin
   items:=items||jsonb_build_array(jsonb_build_object('id',null,'catalog_id',gift_id,'variant_material_id',gift_variant,'quantity',gift_left,'unit_price',0,'gift',true));
  end if;
  if p_rule->>'kind'='percent' then discount:=round(eligible*(p_rule->>'value')::numeric/100,2);
- elsif p_rule->>'kind'='amount' then discount:=least(gross,(p_rule->>'value')::numeric);end if;
+ elsif p_rule->>'kind'='amount' then discount:=least(gross,round((p_rule->>'value')::numeric,2));end if;
  if p_rule->>'kind'<>'gift' and eligible<=0 then raise exception 'В продаже нет товаров, подходящих под промокод';end if;
  return jsonb_build_object('items',items,'gross',gross,'discount',discount+price_reduction,'discount_percent',case when gross>0 then discount*100/gross else 0 end,'total',gross-discount,'normal_total',normal,'wholesale',whole,'code',p_rule->>'code','title',p_rule->>'title','version',p_rule->'version');
 end $$;
