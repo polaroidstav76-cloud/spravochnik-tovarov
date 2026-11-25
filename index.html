@@ -3600,7 +3600,7 @@ function drawTaskBanner(){
   const b=$('taskBanner'),st=window.taskBannerState,total=st.branch.length+st.personal.length;
   if(!total){b.classList.remove('show');document.body.classList.remove('has-task-banner');document.body.style.removeProperty('--task-banner-h');return}
   const today=salesTodayISO();
-  const item=(kind,t)=>`<div class="tb-item"><div><div class="tb-title">${kind==='branch'?'<span class="tb-who branch">Филиал</span>':`<span class="tb-who">${esc(t.who.name)}</span>`}${esc(t.title)}${t.recurrence_id?` <span class="status">· ${esc(String(t.task_date||t.start_date).split('-').reverse().join('.'))}</span>`:''}${kind==='person'&&t.start_date<today?'<span class="tb-carry">перенесено</span>':''}</div>${t.description?`<div class="tb-sub">${esc(t.description)}</div>`:''}</div><button class="tb-done" onclick="completeBannerTask('${kind}',${t.id})">✓ Выполнено</button></div>`;
+  const item=(kind,t)=>`<div class="tb-item" data-task-kind="${kind}" data-task-id="${t.id}"><div><div class="tb-title">${kind==='branch'?'<span class="tb-who branch">Филиал</span>':`<span class="tb-who">${esc(t.who.name)}</span>`}${esc(t.title)}${t.recurrence_id?` <span class="status">· ${esc(String(t.task_date||t.start_date).split('-').reverse().join('.'))}</span>`:''}${kind==='person'&&t.start_date<today?'<span class="tb-carry">перенесено</span>':''}</div>${t.description?`<div class="tb-sub">${esc(t.description)}</div>`:''}</div><button class="tb-done" onclick="completeBannerTask('${kind}',${t.id})">✓ Выполнено</button></div>`;
   b.innerHTML=`<div class="tb-head"><span>📋 Задания на смену: ${total}</span><button class="tb-toggle" onclick="toggleTaskBanner()">${taskBannerCollapsed?'Развернуть':'Свернуть'}</button></div><div class="tb-list">${st.personal.map(t=>item('person',t)).join('')}${st.branch.map(t=>item('branch',t)).join('')}</div>`;
   b.classList.toggle('collapsed',taskBannerCollapsed);b.classList.add('show');document.body.classList.add('has-task-banner');
   document.body.style.setProperty('--task-banner-h',b.offsetHeight+'px');
@@ -7233,5 +7233,6 @@ $('staffSave').onclick=async()=>{
 <script src="commerce.js?v=1"></script>
 <script src="commerce-editor.js?v=1"></script>
 <script src="task-recurrence.js?v=1"></script>
+<script src="task-tracking.js?v=1"></script>
 </body>
 </html>
