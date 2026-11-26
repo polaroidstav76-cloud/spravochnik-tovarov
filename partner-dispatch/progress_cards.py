@@ -3,8 +3,12 @@ import asyncio
 import time
 
 class ProgressCards:
-    def __init__(self,worker):self.w=worker;self.cards={};self.last={}
+    def __init__(self,worker):self.w=worker;self.cards={};self.last={};self.locks={}
     async def update(self,key,chat,title,stage,done=None,total=None,buttons=None,force=False):
+        lock=self.locks.setdefault(key,asyncio.Lock())
+        async with lock:
+            return await self._update(key,chat,title,stage,done,total,buttons,force)
+    async def _update(self,key,chat,title,stage,done=None,total=None,buttons=None,force=False):
         now=time.monotonic()
         if not force and now-self.last.get(key,0)<3:return
         self.last[key]=now

@@ -146,9 +146,28 @@ class Queue:
             key=unicodedata.normalize('NFC',name).casefold()
             if direction!='dtf' and any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
                 raise UserError('Переименуйте файл, так как такой уже существует.')
-            self.db.execute('insert or ignore into files(chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?)',
-                (chat,message,sender,branch,name,size,received,due_day(received),direction))
+            next_id=max(int(self.setting('file_id_floor','0')),self.db.execute('select coalesce(max(id),0) from files').fetchone()[0])+1
+            self.db.execute('insert or ignore into files(id,chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?,?)',
+                (next_id,chat,message,sender,branch,name,size,received,due_day(received),direction))
             return dict(self.db.execute('select * from files where chat=? and message=?',(chat,message)).fetchone())
+
+    def accept_event(self,kind,key):
+        import time
+        with self.lock,self.db:
+            self.db.execute('create table if not exists processed_updates(kind text,key text,created real,primary key(kind,key))')
+            self.db.execute('delete from processed_updates where created<?',(time.time()-30*86400,))
+            return self.db.execute('insert or ignore into processed_updates values(?,?,?)',(kind,key,time.time())).rowcount==1
+
+    def discard_rejected(self,id):
+        # Keep only the Telegram event identity, never rejected artwork or filenames.
+        with self.lock,self.db:
+            row=self.file(id)
+            if not row or row['state']!='cancelled':return
+            self.accept_event('message',str(row['chat'])+':'+str(row['message']))
+            self.set_setting('file_id_floor',max(id,int(self.setting('file_id_floor','0'))))
+            self.path(row).unlink(missing_ok=True)
+            self.db.execute('delete from handoff_files where file=?',(id,))
+            self.db.execute('delete from files where id=?',(id,))
 
     def set_copies(self,id,uid,count):
         if not 1<=count<=999:raise UserError('Укажите целое количество от 1 до 999.')

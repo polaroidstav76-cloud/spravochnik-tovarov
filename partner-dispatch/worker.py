@@ -26,6 +26,9 @@ class Worker:
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
         self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self)
+        with self.q.lock:
+            rejected=[r[0] for r in self.q.db.execute("select id from files where state='cancelled' and error is not null")]
+        for file_id in rejected:self.q.discard_rejected(file_id)
 
     def stop(self):
         self.running=False
@@ -43,18 +46,26 @@ class Worker:
         from telethon import Button
         if buttons is None:
             direction=self.direction(event.sender_id)
-            if direction:
-                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],
-                         [Button.text("📋 "+BUTTONS[0])],[Button.text("🚀 "+BUTTONS[1]),Button.text("🗑 "+BUTTONS[2])],[Button.text("🕒 "+NEXT),Button.text("📊 "+STATUS)],[Button.text("↩️ "+UNDO)],[Button.text("⬅️ "+BACK)]]
+            def keys(rows):return [[Button.text(label,resize=True,persistent=True) for label in row] for row in rows]
+            if not direction:
+                rows=[['🖨 '+DIRECTIONS['wideformat']['label'],'👕 '+DIRECTIONS['dtf']['label']],['🛠 '+DIRECTIONS['workshop']['label'],'🖼 '+DIRECTIONS['photo30']['label']]]
+                if self.handoff.authorized(event.sender_id):rows.append([MANUAL_MENU,'Главное меню'])
+                buttons=keys(rows)
             else:
-                buttons=[[Button.text(icon+' '+DIRECTIONS[key]['label'],resize=True,persistent=True) for key,icon in row] for row in [[('wideformat','🖨'),('dtf','👕')],[('workshop','🛠'),('photo30','🖼')]]]
-            if direction in ('workshop','photo30'):
-                buttons=[[Button.text("📥 "+UPLOAD,resize=True,persistent=True)],[Button.text("📋 "+BUTTONS[0]),Button.text("🗑 "+BUTTONS[2])],[Button.text("📊 "+STATUS)],[Button.text("↩️ "+UNDO)],[Button.text("⬅️ "+BACK)]]
-            if direction=='dtf':buttons.append([Button.text('Количество копий'),Button.text('Проверить макет')])
-            if self.handoff.authorized(event.sender_id):buttons.append([Button.text(MANUAL_MENU)])
+                rows=[['📥 '+UPLOAD,'📋 '+BUTTONS[0]],['🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2]],['↩️ '+UNDO,'📊 '+STATUS]]
+                if direction in ('workshop','photo30'):rows=[rows[0],['🗑 '+BUTTONS[2],'📊 '+STATUS]]
+                if direction=='dtf':rows.append(['Количество копий','Проверить макет'])
+                rows.append([MANUAL_MENU if self.handoff.authorized(event.sender_id) else 'Главное меню','⬅️ '+BACK])
+                buttons=keys(rows)
         await event.respond(text,buttons=buttons,parse_mode=None)
 
     async def on_message(self,event):
+        if not event.is_private:return
+        message_id=getattr(event,'id',None)
+        if message_id is not None and not self.q.accept_event('message',str(event.chat_id)+':'+str(message_id)):return
+        await self._on_message(event)
+
+    async def _on_message(self,event):
         if not event.is_private:return
         text=(event.raw_text or '').strip();uid=event.sender_id
         text=text.lstrip('🖨👕🛠🖼📥📋🚀🗑📊⬅️🕒↩️📂 ').strip()
@@ -156,9 +167,7 @@ class Worker:
                 if r['state']=='cancelled':await self.reply(event,'Этот файл ранее удалён.');return
                 self.cached[(r['chat'],r['message'])]=event.message
                 await self.reply(event,f'{DIRECTIONS[direction]["label"]}: получаю «{r["name"]}». Дождитесь подтверждения «Сохранён».')
-                if direction=='dtf':
-                    from telethon import Button
-                    await self.reply(event,'По умолчанию — 1 копия. Если нужно больше, нажмите кнопку у файла.',[[Button.inline('Количество копий · #'+str(r['id']),f'copies:{r["id"]}'.encode())]])
+
             elif event.photo:
                 await self.reply(event,'Пришлите макет как файл, без сжатия, чтобы сохранить оригинал для печати.')
             else:
@@ -190,6 +199,12 @@ class Worker:
         await self.reply(event,'Выберите файл для удаления. Номер отличает файлы с одинаковым названием.',buttons)
 
     async def on_callback(self,event):
+        query_id=getattr(getattr(event,'query',None),'query_id',None)
+        if query_id is not None and not self.q.accept_event('callback',str(query_id)):
+            await event.answer();return
+        await self._on_callback(event)
+
+    async def _on_callback(self,event):
         if not event.is_private or not self.q.user(event.sender_id):
             await event.answer('Нет доступа.',alert=True);return
         try:
@@ -220,6 +235,8 @@ class Worker:
                 if not changed:raise UserError('Подтверждение уже использовано.')
                 await event.answer('Отменено.');await event.edit('Отправка отменена. Файлы остаются в очереди.',buttons=None);return
             action,direction,value=data.split(':',2)
+            if action not in ('page','delete','keep','remove','undo'):
+                raise UserError('Эта кнопка относится к другой версии программы. Откройте меню заново и проверьте, что старая программа остановлена на всех компьютерах.')
             if direction!=self.direction(event.sender_id):
                 await event.answer('Откройте соответствующее направление и выберите файл заново.',alert=True);return
             number=int(value)
@@ -294,7 +311,7 @@ class Worker:
                 self.q.download_failed(r['id'],time.time(),reason)
                 if invalid_art:
                     self.q.cancel(r['id'],direction=r['direction'])
-                    retry_note='Файл автоматически убран из рабочей очереди. Загрузите исправленный оригинал.'
+                    retry_note='Файл отклонён и автоматически удалён с компьютера и из очереди. Загрузите исправленный оригинал.'
                 self.log(reason+' '+r['name'])
                 if invalid_art or self.q.file(r['id'])['state']!='cancelled':
                     await self.cards.update('file:'+str(r['id']),r['chat'],'❌ '+r['name'],reason+' '+retry_note,force=True)
@@ -303,6 +320,7 @@ class Worker:
                 if self.q.file(r['id'])['state']=='cancelled':
                     try:dest.unlink(missing_ok=True)
                     except OSError:pass
+                if invalid_art:self.q.discard_rejected(r['id'])
 
     async def process_batch(self,b):
         if b['direction']=='dtf' and b['state'] in ('review','editing'):

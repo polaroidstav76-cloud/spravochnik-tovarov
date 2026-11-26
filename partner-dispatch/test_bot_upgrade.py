@@ -53,7 +53,7 @@ class Upgrade(unittest.TestCase):
                 Path(file).write_bytes(b'x'*32);w.running=False
         w.client=Client();w.cached[(1,1)]=SimpleNamespace(document=True)
         asyncio.run(w.download_loop())
-        self.assertEqual(self.q.file(row['id'])['state'],'cancelled');self.assertEqual(self.q.waiting(),[])
+        self.assertIsNone(self.q.file(row['id']));self.assertEqual(self.q.waiting(),[]);self.assertFalse(self.q.path(row).exists())
         self.assertTrue(any('автоматически' in m for m in messages))
     def test_progress_card_is_edited_not_spammed(self):
         sent=[];edits=[]

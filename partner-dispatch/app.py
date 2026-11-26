@@ -27,7 +27,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.10'
+VERSION='0.11'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
