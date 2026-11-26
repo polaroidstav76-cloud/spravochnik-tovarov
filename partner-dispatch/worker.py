@@ -25,7 +25,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self);self.q.set_setting('runtime_version','0.12')
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self);self.q.set_setting('runtime_version','0.13')
         with self.q.lock:
             rejected=[r[0] for r in self.q.db.execute("select id from files where state='cancelled' and error is not null")]
         for file_id in rejected:self.q.discard_rejected(file_id)
@@ -106,12 +106,12 @@ class Worker:
         if not self.q.user(uid):
             await event.respond('Этот бот принимает файлы только от подключённых сотрудников. Получите код подключения у руководителя.',parse_mode=None);return
         try:
-            if event.document and await self.dtf_review.handle_document(event):return
+            if event.document and self.direction(uid)=='dtf' and await self.dtf_review.handle_document(event):return
             if text==MANUAL_MENU or text=='/manual':
                 await self.reply(event,'Ручная отправка отключена. Используйте «Отправить сейчас».');return
             if text in ('/start','/menu',BACK,'Главное меню'):
                 self.choose(uid,None)
-                await self.reply(event,'Выберите направление печати. Программа 0.12.');return
+                await self.reply(event,'Выберите направление печати. Программа 0.13.');return
             chosen=next((key for key,value in DIRECTIONS.items() if text==value['label']),None)
             if chosen:
                 self.choose(uid,chosen if DIRECTIONS[chosen]['enabled'] else None)

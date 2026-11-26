@@ -27,7 +27,7 @@ class DtfProof(unittest.TestCase):
   self.bid=self.q.claim('dtf@example.invalid',time.time(),manual=True,direction='dtf');self.q.transition(self.bid,'collecting','packing')
   self.worker=Worker(self.q,{'recipient':'wide@example.invalid','dtf_recipient':'dtf@example.invalid','disk_token':'fake','sender':'sender@example.invalid'},lambda _:None)
   self.worker.client=SimpleNamespace(send_message=AsyncMock(),send_file=AsyncMock(),download_media=AsyncMock(side_effect=self.download))
-  self.review=self.worker.dtf_review;folder=self.q.root/'archives'/self.bid;folder.mkdir(parents=True);self.sheet=folder/'Полароид-ДТФ.png';shutil.copyfile(self.template,self.sheet);self.review.prepare(self.bid,self.sheet,11)
+  self.worker.choose(11,'dtf');self.review=self.worker.dtf_review;folder=self.q.root/'archives'/self.bid;folder.mkdir(parents=True);self.sheet=folder/'Полароид-ДТФ.png';shutil.copyfile(self.template,self.sheet);self.review.prepare(self.bid,self.sheet,11)
   self.export_patch=patch('dtf_psd.export_psd',return_value=self.sheet.with_suffix('.psd'));self.export_patch.start();self.addCleanup(self.export_patch.stop)
  def tearDown(self):self.q.db.close();self.tmp.cleanup()
  async def download(self,message,file,**kw):Path(file).write_bytes(self.payload)

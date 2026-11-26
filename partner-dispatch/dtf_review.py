@@ -101,6 +101,7 @@ class DtfReview:
   with self.q.lock:
    row,batch=self.checked(bid,revision,uid)
    if action=='edit':
+    self.w.choose(uid,'dtf')
     with self.q.db:
      if batch['state']=='editing' and row['editor']!=uid:raise UserError('Этот макет уже исправляет другой сотрудник.')
      existing=self.editing_for(uid)
@@ -129,6 +130,7 @@ class DtfReview:
    await self.w.reply(event,'✏️ Автоматическая отправка этого заказа остановлена. Откройте PSD/PSB в Photoshop, исправьте слои и отправьте готовый PNG сюда документом. После проверки он сразу уйдёт партнёру.\nХолст: ширина 56 см, длина не меньше 50 см, 300 dpi, прозрачный фон. Сам файл отправится без новой раскладки.',[[Button.inline('Вернуть текущий макет',f'dtf:{bid}:{revision}:resume'.encode())]])
   if action=='resume':await self.show(bid)
  async def handle_document(self,event):
+  if self.w.direction(event.sender_id)!='dtf':return False
   with self.q.lock:
    intent=self.q.db.execute('select * from dtf_replacement_messages where chat=? and message=?',(event.chat_id,event.id)).fetchone()
   current=self.editing_for(event.sender_id)
@@ -141,7 +143,7 @@ class DtfReview:
   if not event.document:return False
   with self.q.lock,self.q.db:self.q.db.execute('insert or ignore into dtf_replacement_messages(chat,message,batch) values(?,?,?)',(event.chat_id,event.id,row['batch']))
   name=event.file.name or '';size=event.file.size or 0
-  if not name.lower().endswith('.png') or not 0<size<=MAX_BYTES:raise UserError('Для замены холста пришлите готовый PNG документом, до 500 МБ.')
+  if not name.lower().endswith('.png') or not 0<size<=MAX_BYTES:raise UserError('Вы исправляете макет ДТФ. Отправьте исправленный PNG документом, до 500 МБ. Для обычной загрузки выберите нужный раздел в меню.')
   with self.q.lock,self.q.db:
    self.checked(row['batch'],row['revision'],event.sender_id)
    if self.q.db.execute('update dtf_reviews set uploading=1 where batch=? and uploading=0',(row['batch'],)).rowcount!=1:raise UserError('Предыдущий готовый PNG ещё загружается. Дождитесь результата.')
