@@ -24,7 +24,7 @@ class Monitoring:
         with self.q.lock,self.q.db:
             self.q.db.execute('insert or ignore into operator_alerts values(?,?,?)',(key,body,batch))
     def failure(self,bid,reason):
-        self.add('failure:'+bid,'Не удалось отправить заказ '+bid[:8]+'.\n'+reason+'\nФайлы сохранены. Повтор каждые 10 минут, пока программа работает. Для самостоятельной отправки откройте кнопку «Ручная отправка». При полном отсутствии интернета уведомление придёт после восстановления связи.',bid)
+        self.add('failure:'+bid,'Не удалось отправить заказ '+bid[:8]+'.\n'+reason+'\nФайлы сохранены. Повтор каждые 10 минут, пока программа работает. При полном отсутствии интернета уведомление придёт после восстановления связи.',bid)
     async def check_delays(self):
         now=time.time()
         download_minutes=float(self.q.setting('download_delay_minutes','15'))
@@ -37,7 +37,7 @@ class Monitoring:
                 self.add('file:'+str(r['id']),f'Файл «{r["name"]}» долго не сохраняется. Проверьте связь с Telegram и свободное место на компьютере. Если исходник недоступен, попросите филиал загрузить его заново.',None)
         for b in batches:
             if now-b['created']>=send_minutes*60:
-                self.add('delay:'+b['id'],f'Заказ {b["id"][:8]} не отправлен более {send_minutes:g} минут после начала подготовки. Проверьте состояние. При необходимости откройте «Ручная отправка»; автоповторы остановятся после взятия заказа.',b['id'])
+                self.add('delay:'+b['id'],f'Заказ {b["id"][:8]} не отправлен более {send_minutes:g} минут после начала подготовки. Проверьте состояние. Проверьте соединение и настройки программы; файлы сохранены.',b['id'])
 
     async def check_space(self,config):
         now=time.time()

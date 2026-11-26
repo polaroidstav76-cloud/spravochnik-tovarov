@@ -175,10 +175,12 @@ def email_for(config,batch,files):
     title='Мастерская' if workshop else 'ДТФ-печать' if dtf else 'Широкоформатная печать'
     artifact=files[0]['name'] if workshop else 'Полароид-ДТФ.png' if dtf else 'Полароид.zip'
     msg['Subject']=('ТЕСТ · ' if batch.get('test_mode',1) else '')+f'Полароид · {title} · {len(files)} файлов · заказ {batch["id"][:8]}'
-    body=['Здравствуйте!', 'ТЕСТОВАЯ ОТПРАВКА. НЕ ПЕРЕДАВАТЬ В ПРОИЗВОДСТВО.' if batch.get('test_mode',1) else '', '',f'Оригинал для мастерской: {artifact}' if workshop else f'{artifact} — готовый холст ДТФ:' if dtf else f'{artifact} — архив с {len(files)} макетами для печати:',batch['link'],'','Состав заказа:']
-    if dtf and batch.get('layout_description'):body.insert(4,batch['layout_description'])
-    body += [f'• {r["name"]}'+(f' — {r["copies"]} шт.' if dtf else '') for r in files]
-    body += ['','Файл передаётся в оригинале, без архива.' if workshop else 'Холст: PNG RGB с прозрачностью, 300 dpi. Размеры принтов взяты из DPI исходников.' if dtf else 'Файлы в архиве сохранены в оригинале.','Ссылка доступна любому, кто её получил. Не пересылайте её посторонним.']
+    body=['Здравствуйте!']
+    if batch.get('test_mode',1):body+=['ТЕСТОВАЯ ОТПРАВКА. НЕ ПЕРЕДАВАТЬ В ПРОИЗВОДСТВО.']
+    body+=['Отправляем файлы на печать. Скачать можно по ссылке:','',batch['link']]
+    if not dtf and not workshop:
+        body+=['','Состав заказа:']+[f'• {r["name"]} — {r.get("copies",1)} шт.' for r in files]
+    body+=['','Это сообщение отправлено автоматически. Если есть проблемы с файлом, пожалуйста, напишите нам.']
     msg.set_content('\n'.join(body))
     return msg
 

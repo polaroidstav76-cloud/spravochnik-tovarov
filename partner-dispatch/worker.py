@@ -25,10 +25,12 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self)
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self);self.q.set_setting('runtime_version','0.12')
         with self.q.lock:
             rejected=[r[0] for r in self.q.db.execute("select id from files where state='cancelled' and error is not null")]
         for file_id in rejected:self.q.discard_rejected(file_id)
+        with self.q.lock,self.q.db:
+            self.q.db.execute("update batches set state='uncertain',notified=0,error='Ручная отправка отключена. Проверьте почту и отметьте результат в программе перед повтором.' where state='manual'")
 
     def stop(self):
         self.running=False
@@ -49,13 +51,13 @@ class Worker:
             def keys(rows):return [[Button.text(label,resize=True,persistent=True) for label in row] for row in rows]
             if not direction:
                 rows=[['🖨 '+DIRECTIONS['wideformat']['label'],'👕 '+DIRECTIONS['dtf']['label']],['🛠 '+DIRECTIONS['workshop']['label'],'🖼 '+DIRECTIONS['photo30']['label']]]
-                if self.handoff.authorized(event.sender_id):rows.append([MANUAL_MENU,'Главное меню'])
+
                 buttons=keys(rows)
             else:
                 rows=[['📥 '+UPLOAD,'📋 '+BUTTONS[0]],['🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2]],['↩️ '+UNDO,'📊 '+STATUS]]
                 if direction in ('workshop','photo30'):rows=[rows[0],['🗑 '+BUTTONS[2],'📊 '+STATUS]]
                 if direction=='dtf':rows.append(['Количество копий','Проверить макет'])
-                rows.append([MANUAL_MENU if self.handoff.authorized(event.sender_id) else 'Главное меню','⬅️ '+BACK])
+                rows.append(['Главное меню','⬅️ '+BACK])
                 buttons=keys(rows)
         await event.respond(text,buttons=buttons,parse_mode=None)
 
@@ -106,10 +108,10 @@ class Worker:
         try:
             if event.document and await self.dtf_review.handle_document(event):return
             if text==MANUAL_MENU or text=='/manual':
-                await self.handoff.show_list(self,event);return
+                await self.reply(event,'Ручная отправка отключена. Используйте «Отправить сейчас».');return
             if text in ('/start','/menu',BACK,'Главное меню'):
                 self.choose(uid,None)
-                await self.reply(event,'Выберите направление печати.');return
+                await self.reply(event,'Выберите направление печати. Программа 0.12.');return
             chosen=next((key for key,value in DIRECTIONS.items() if text==value['label']),None)
             if chosen:
                 self.choose(uid,chosen if DIRECTIONS[chosen]['enabled'] else None)
@@ -210,7 +212,9 @@ class Worker:
         try:
             data=event.data.decode()
             if data.startswith('dtf:'):
-                await self.dtf_review.callback(event);return
+                try:await self.dtf_review.callback(event)
+                except UserError as e:await self.reply(event,str(e))
+                return
             if data.startswith('copies:'):
                 row=self.q.file(int(data.split(':')[1]))
                 if not row or row['direction']!='dtf' or row['batch'] is not None or (row['sender']!=event.sender_id and self.q.setting('owner')!=str(event.sender_id)):raise UserError('Принт недоступен для изменения.')
@@ -218,7 +222,7 @@ class Worker:
                 self.choose(event.sender_id,'dtf')
                 await event.answer();await self.reply(event,'Введите количество копий для «'+row['name']+'» от 1 до 999.');return
             if data.startswith('h:'):
-                await self.handoff.callback(self,event);return
+                await event.answer('Ручная отправка отключена.',alert=True);return
             if data.startswith('send:'):
                 token=data.split(':',1)[1]
                 with self.q.lock:confirmation=self.q.db.execute('select direction from send_confirmations where token=?',(token,)).fetchone()
@@ -427,7 +431,11 @@ class Worker:
                 if complete:self.q.mark_notified(b['id'])
                 continue
             if b['state'] in ('manual','manual_sent','uncertain'):
-                await self.handoff.notify(self,b);continue
+                if b['state']=='uncertain':
+                    for chat in self.monitor.targets():
+                        if not self.q.notice_done(b['id'],chat):
+                            await self.client.send_message(chat,'Почтовый сервер не вернул результат отправки. Проверьте почту перед повтором, чтобы не отправить заказ дважды.',parse_mode=None);self.q.finish_notice(b['id'],chat)
+                self.q.mark_notified(b['id']);continue
             if b['state']=='sent':
                 text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо отправлено.'
                 if b['direction']=='dtf':text=text.replace('Архив:','Холст ДТФ:')+'\n'+self.q.setting('dtf_layout:'+b['id'])
@@ -497,7 +505,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.vpn.run()),asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.handoff.file_loop(self)),asyncio.create_task(self.watch_loop())]
+            self.tasks=[asyncio.create_task(self.vpn.run()),asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False

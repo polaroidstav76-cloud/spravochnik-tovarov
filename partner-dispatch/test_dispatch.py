@@ -82,7 +82,7 @@ class TestDispatch(unittest.TestCase):
         text=msg.get_content()
         for branch in ['Первый филиал','Второй филиал']:
             self.assertNotIn(branch,text)
-        self.assertIn('Полароид.zip',text)
+        self.assertIn('Скачать можно по ссылке:',text)
         self.assertIn('https://example.invalid/archive',text)
         self.assertEqual(list(msg.iter_attachments()),[])
 
@@ -365,12 +365,12 @@ class TestDispatch(unittest.TestCase):
         worker=Worker(self.q,{**CONFIG,'owner_code':'owner','join_code':'staff'},self.logs.append)
         async def check():
             event=Event('/start');await worker.on_message(event)
-            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[icon+' '+r['label'] for icon,r in zip(('🖨','👕','🛠','🖼'),DIRECTIONS.values())]+['Ручная отправка','Главное меню'])
+            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[icon+' '+r['label'] for icon,r in zip(('🖨','👕','🛠','🖼'),DIRECTIONS.values())])
             event=Event(DIRECTIONS['wideformat']['label']);await worker.on_message(event)
             event=Event(BUTTONS[0]);await worker.on_message(event)
             self.assertIn(self.q.waiting()[0]['name'],event.messages[0][0]);self.assertIn('Первый филиал',event.messages[0][0])
             keyboard=event.messages[0][1]['buttons']
-            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'↩️ Отменить последнюю загрузку','📊 Состояние','Ручная отправка','⬅️ '+BACK])
+            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'↩️ Отменить последнюю загрузку','📊 Состояние','Главное меню','⬅️ '+BACK])
             event=Event(BUTTONS[2]);await worker.on_message(event)
             button=event.messages[0][1]['buttons'][0][0]
             self.assertTrue(button.type.data.startswith(b'delete:'))

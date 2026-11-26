@@ -1,4 +1,6 @@
 """Render DTF sheets as streaming 300 dpi RGBA PNGs, without a full-sheet bitmap."""
+import json
+from dataclasses import asdict
 import hashlib
 import io
 import math
@@ -148,4 +150,6 @@ def build_sheet(queue,bid,progress=None):
     if shutil.disk_usage(queue.root).free<required:raise UserError('На компьютере недостаточно свободного места для холста ДТФ. Освободите место или разделите заказ.')
     with queue.lock,queue.db:
         queue.set_setting('dtf_layout:'+bid,f'{layout.width/DPI*2.54:.2f} × {layout.height/DPI*2.54:.2f} см; {len(items)} копий; промежуток {layout.gap/DPI*25.4:.1f} мм')
-    return render_png(queue.root/'archives'/bid/'Полароид-ДТФ.png',layout,sources,valid=lambda:queue.batch(bid)['state']=='packing',progress=progress)
+    result=render_png(queue.root/'archives'/bid/'Полароид-ДТФ.png',layout,sources,valid=lambda:queue.batch(bid)['state']=='packing',progress=progress)
+    result.with_suffix('.layout.json').write_text(json.dumps(asdict(layout)))
+    return result

@@ -85,8 +85,8 @@ class TestDTF(unittest.TestCase):
             self.assertEqual(image.mode,'RGBA');self.assertAlmostEqual(image.info['dpi'][0],300,places=2)
         batch={**self.q.batch(bid),'link':'https://example.invalid/sheet'}
         msg=email_for({'sender':'sender@example.invalid'},batch,self.q.batch_files(bid))
-        self.assertIn('ДТФ',msg['Subject']);self.assertIn('Полароид-ДТФ.png',msg.get_content())
-        self.assertIn('2 шт.',msg.get_content());self.assertNotIn('Первый',msg.get_content())
+        self.assertIn('ДТФ',msg['Subject']);self.assertIn('Скачать можно по ссылке:',msg.get_content());self.assertNotIn('Состав заказа:',msg.get_content())
+        self.assertNotIn('шт.',msg.get_content());self.assertNotIn('Первый',msg.get_content())
         self.assertEqual(list(msg.iter_attachments()),[])
     def test_full_working_width_55_cm_fits_without_rescaling(self):
         item=Print('full-width',pixels(55),pixels(10));layout=arrange([item],56)

@@ -119,10 +119,14 @@ class DtfReview:
   await event.answer('Автоотправка остановлена.' if action=='edit' else 'Отправка подтверждена.' if action=='send' else '')
   if action in ('get','edit'):
    path=await asyncio.to_thread(self.artifact,bid)
-   await self.w.client.send_file(uid,str(path),force_document=True,caption='Готовый ДТФ-холст, PNG 300 dpi. Размеры и качество сохранены.')
+   if action=='edit':
+    from dtf_psd import export_psd
+    await self.w.reply(event,'Готовлю Photoshop-макет: каждая копия принта будет отдельным слоем. Отправка на паузе.')
+    path=await asyncio.to_thread(export_psd,self.q,bid,path)
+   await self.w.client.send_file(uid,str(path),force_document=True,caption='Макет для Photoshop со слоями, 300 dpi.' if action=='edit' else 'Готовый PNG 300 dpi.')
   if action=='edit':
    from telethon import Button
-   await self.w.reply(event,'✏️ Автоматическая отправка этого заказа остановлена. Исправьте скачанный холст и отправьте готовый PNG сюда документом.\nХолст: ширина 56 см, длина не меньше 50 см, 300 dpi, прозрачный фон. Сам файл отправится без новой раскладки.',[[Button.inline('Вернуть текущий макет',f'dtf:{bid}:{revision}:resume'.encode())]])
+   await self.w.reply(event,'✏️ Автоматическая отправка этого заказа остановлена. Откройте PSD/PSB в Photoshop, исправьте слои и отправьте готовый PNG сюда документом. После проверки он сразу уйдёт партнёру.\nХолст: ширина 56 см, длина не меньше 50 см, 300 dpi, прозрачный фон. Сам файл отправится без новой раскладки.',[[Button.inline('Вернуть текущий макет',f'dtf:{bid}:{revision}:resume'.encode())]])
   if action=='resume':await self.show(bid)
  async def handle_document(self,event):
   with self.q.lock:
@@ -154,11 +158,12 @@ class DtfReview:
     if current['editor']!=event.sender_id:raise UserError('Макет уже изменён другим сотрудником.')
     os.replace(temp,destination)
     self.q.db.execute('''update dtf_reviews set revision=revision+1,path=?,sha=?,width=?,height=?,
-      deadline=null,editor=null,approved=0,noticed=0,uploading=0,replacement=1,chat=? where batch=?''',(destination.name,sha,width,height,event.sender_id,row['batch']))
-    self.q.db.execute("update batches set state='review',error=null where id=?",(row['batch'],))
+      deadline=null,editor=null,approved=1,noticed=1,uploading=0,replacement=1,chat=? where batch=?''',(destination.name,sha,width,height,event.sender_id,row['batch']))
+    self.q.db.execute("update batches set state='collecting',error=null where id=?",(row['batch'],))
     self.q.db.execute('update dtf_replacement_messages set accepted=1 where chat=? and message=?',(event.chat_id,event.id))
     self.q.set_setting('dtf_layout:'+row['batch'],f'{width/300*2.54:.2f} × {height/300*2.54:.2f} см; готовый макет сотрудника, без повторной раскладки')
-   accepted=True;await self.show(row['batch']);return True
+   self.q.set_setting('retry_at:'+row['batch'],'0')
+   accepted=True;await self.w.reply(event,'Исправленный макет принят. Отправляю партнёру без повторной раскладки.');return True
   finally:
    temp.unlink(missing_ok=True)
    if not accepted:destination.with_suffix('.preview.png').unlink(missing_ok=True)

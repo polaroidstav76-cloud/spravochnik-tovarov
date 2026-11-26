@@ -45,3 +45,10 @@ class BackgroundTests(unittest.TestCase):
             with patch('worker.check_dedicated_bot',side_effect=check):asyncio.run(worker.run())
             self.assertIsNone(worker.client)
             queue.db.close()
+
+    @unittest.skipUnless(os.name=='nt','Windows PowerShell parser')
+    def test_stop_old_script_syntax(self):
+        path=Path(__file__).with_name('STOP-OLD.ps1').resolve()
+        script="$t=$null;$e=$null;[void][Management.Automation.Language.Parser]::ParseFile('"+str(path).replace("'","''")+"',[ref]$t,[ref]$e);if($e.Count){exit 1}"
+        encoded=base64.b64encode(script.encode('utf-16le')).decode()
+        self.assertEqual(subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],timeout=30).returncode,0)

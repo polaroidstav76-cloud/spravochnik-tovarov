@@ -27,7 +27,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.11'
+VERSION='0.12'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -190,7 +190,7 @@ class App:
         history_actions=ttk.Frame(history);history_actions.pack(fill='x')
         ttk.Button(history_actions,text='Открыть ссылку',command=lambda:self.history_link(False)).pack(side='left',padx=3)
         ttk.Button(history_actions,text='Скопировать ссылку',command=lambda:self.history_link(True)).pack(side='left',padx=3)
-        ttk.Label(history,text='«Письмо принято сервером» не подтверждает получение партнёром. Старые ссылки могут стать недоступны после удаления архива с Диска.',wraplength=850).pack(anchor='w',pady=8)
+        ttk.Label(history,text='Старые ссылки могут стать недоступны после удаления архива с Диска.',wraplength=850).pack(anchor='w',pady=8)
         self.wizard=Wizard(notebook,self)
         notebook.insert(0,self.wizard,text='Первый запуск')
         notebook.select(self.wizard if self.q.setting('first_test_confirmed','0')!='1' else main)
@@ -452,7 +452,7 @@ class App:
         def check():
             try:
                 username=check_dedicated_bot(c['bot_token'],c['bot_username'])
-                self.q.set_setting('bot_checked','1');self.log('Telegram подтвердил @'+username+'. Другой обработчик к нему не подключён.')
+                self.q.set_setting('bot_checked','1');self.log('Telegram подтвердил @'+username+'. Проверка токена выполнена.')
             except UserError as e:self.log(str(e))
         threading.Thread(target=check,daemon=True).start()
 
@@ -626,6 +626,8 @@ def self_test(report_path):
                 assert instance.q.setting('first_test_confirmed','0')=='0'
                 assert instance.wizard is not None
                 assert 'perezakazi_bot' in root.title()
+                import dtf_psd
+                assert callable(dtf_psd.export_psd)
                 from receiver import ReceiverApp
                 receiver_window=tk.Toplevel(root);receiver_window.withdraw()
                 receiver_app=ReceiverApp(receiver_window)

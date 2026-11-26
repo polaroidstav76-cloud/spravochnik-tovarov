@@ -28,6 +28,7 @@ class DtfProof(unittest.TestCase):
   self.worker=Worker(self.q,{'recipient':'wide@example.invalid','dtf_recipient':'dtf@example.invalid','disk_token':'fake','sender':'sender@example.invalid'},lambda _:None)
   self.worker.client=SimpleNamespace(send_message=AsyncMock(),send_file=AsyncMock(),download_media=AsyncMock(side_effect=self.download))
   self.review=self.worker.dtf_review;folder=self.q.root/'archives'/self.bid;folder.mkdir(parents=True);self.sheet=folder/'Полароид-ДТФ.png';shutil.copyfile(self.template,self.sheet);self.review.prepare(self.bid,self.sheet,11)
+  self.export_patch=patch('dtf_psd.export_psd',return_value=self.sheet.with_suffix('.psd'));self.export_patch.start();self.addCleanup(self.export_patch.stop)
  def tearDown(self):self.q.db.close();self.tmp.cleanup()
  async def download(self,message,file,**kw):Path(file).write_bytes(self.payload)
  def event(self,action,uid=11,revision=None):
@@ -62,11 +63,11 @@ class DtfProof(unittest.TestCase):
  def test_ready_file_is_preserved_not_repacked_and_not_readded_on_replay(self):
   asyncio.run(self.review.callback(self.event('edit')));old=self.review.get(self.bid)['revision'];event=self.incoming()
   with patch('dtf_review.time.time',return_value=1000):self.assertTrue(asyncio.run(self.review.handle_document(event)))
-  row=self.review.get(self.bid);self.assertEqual(row['revision'],old+1);self.assertEqual(row['deadline'],1300);self.assertEqual(self.q.batch(self.bid)['state'],'review')
+  row=self.review.get(self.bid);self.assertEqual(row['revision'],old+1);self.assertIsNone(row['deadline']);self.assertEqual(self.q.batch(self.bid)['state'],'collecting');self.assertEqual(row['approved'],1)
   self.assertEqual(self.review.artifact(self.bid).read_bytes(),self.payload)
   self.assertTrue(asyncio.run(self.review.handle_document(event)));self.assertEqual(len(self.q.batch_files(self.bid)),1)
   with self.assertRaises(UserError):asyncio.run(self.review.callback(self.event('edit',revision=old)))
-  asyncio.run(self.review.callback(self.event('send')))
+  with self.assertRaises(UserError):asyncio.run(self.review.callback(self.event('send')))
   uploaded=[]
   class Disk:
    def __init__(self,*a):pass

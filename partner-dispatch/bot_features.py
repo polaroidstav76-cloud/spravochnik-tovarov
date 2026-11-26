@@ -44,7 +44,7 @@ class BotFeatures:
             return bid
     def status(self,direction):
         rows=self.snapshot(direction)
-        lines=[DIRECTIONS[direction]['label'],f'В очереди: {len(rows)} файлов.',f'Сохранено: {sum(r["state"]=="ready" for r in rows)}.']
+        lines=[DIRECTIONS[direction]['label']+' · программа '+self.q.setting('runtime_version','неизвестна'),f'В очереди: {len(rows)} файлов.',f'Сохранено: {sum(r["state"]=="ready" for r in rows)}.']
         if direction=='dtf':lines.append(f'Всего копий: {sum(r["copies"] for r in rows)}.')
         with self.q.lock:
             batch=self.q.db.execute("select * from batches where direction=? and state not in ('sent','manual_sent','cancelled') order by created limit 1",(direction,)).fetchone()
