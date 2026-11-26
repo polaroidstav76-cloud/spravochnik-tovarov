@@ -18,8 +18,9 @@ def export_psd(queue,bid,png):
   from dtf_layout import Layout,Placement
   data=json.loads(plan.read_text());layout=Layout(data['width'],data['height'],data['gap'],data['margin'],tuple(Placement(**p) for p in data['prints']))
  else:layout=arrange(items,56,50)
- with Image.open(png) as im:
-  if im.size!=(layout.width,layout.height):raise UserError('Холст изменён. Для этого готового макета скачайте PNG; исходная раскладка не совпадает.')
+ with open(png,'rb') as source:
+  header=source.read(24)
+  if header[:8]!=b'\x89PNG\r\n\x1a\n' or struct.unpack('>II',header[16:24])!=(layout.width,layout.height):raise UserError('Холст изменён. Для этого готового макета скачайте PNG; исходная раскладка не совпадает.')
  large=max(layout.width,layout.height)>30000
  dest=Path(png).with_suffix('.psb' if large else '.psd');part=dest.with_suffix(dest.suffix+'.part');length=lambda n:struct.pack('>Q' if large else '>I',n)
  try:
