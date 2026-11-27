@@ -6480,7 +6480,7 @@ function grShowStaff(v){
 async function grLoadAdmin(){
   gr.staff=null;gr.shiftId=null;
   $('grTitle').textContent='Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
-  const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months,staff_visible').order('sort_order').order('id');
+  const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months,staff_visible,updated_at').order('sort_order').order('id');
   if(r.error){$('grBody').innerHTML=`<p class="status">Ошибка: ${esc(r.error.message)}</p>`;return}
   gr.sheets=r.data||[];gr.sel=null;gr.month=null;
   if(gr.cur>=gr.sheets.length)gr.cur=0;
@@ -7225,7 +7225,7 @@ $('staffSave').onclick=async()=>{
 <script src="vendor/qrcode.js"></script>
 <script src="photo-common.js?v=1"></script>
 <script src="photo-staff.js?v=20261123-tile"></script>
-<script src="payroll.js?v=20261125-training"></script>
+<script src="payroll.js?v=20261127-deposit"></script>
 <script src="announcements-deferred.js?v=20261124-later"></script>
 <script src="desktop-draft-core.js?v=1"></script>
 <script src="desktop-pos.js?v=20261125-promos"></script>
@@ -7235,5 +7235,6 @@ $('staffSave').onclick=async()=>{
 <script src="task-recurrence.js?v=1"></script>
 <script src="task-tracking.js?v=1"></script>
 <script src="catalog-guide.js?v=1"></script>
+<script src="report-refresh.js?v=1"></script>
 </body>
 </html>

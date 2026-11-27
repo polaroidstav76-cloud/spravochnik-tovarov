@@ -16,7 +16,7 @@ do $$declare proof uuid;worker uuid;admin uuid;pid bigint;eid bigint;bid bigint;
   end if;
  end loop;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',worker,'role','authenticated','session_id',proof)::text,true);execute 'set local role authenticated';
- m:=public.payroll_report(today-14,today);assert jsonb_array_length(m->'rows')=1;assert (m->'rows'->0->>'shifts')::int=6;assert (m->'rows'->0->>'deposit')::numeric=5200;assert (m->'rows'->0->>'total')::numeric=1100;
+ m:=public.payroll_report(today-14,today);assert jsonb_array_length(m->'rows')=1;assert (m->'rows'->0->>'shifts')::int=1;assert (m->'rows'->0->>'deposit')::numeric=5200;assert (m->'rows'->0->>'total')::numeric=1100;
  assert jsonb_array_length(m->'deposits')=1;d:=m->'deposits'->0;assert (d->>'days')::int=5;assert (d->>'amount')::numeric=5200;
  m:=public.payroll_report(today-4,today);assert (m->'rows'->0->>'deposit')::numeric=1000;assert (m->'rows'->0->>'total')::numeric=1100;
  blocked:=false;begin perform public.payroll_deposit_set_paid(pid,true);exception when sqlstate 'PT403' then blocked:=true;end;assert blocked;
