@@ -5214,6 +5214,7 @@ function stkDrawOp(){
   <div class="field"><label for="stkFrom">${k==='transfer'?'Откуда (отдаёт)':'Филиал'}</label><select id="stkFrom">${stkOpts(own,from)}</select></div>
   ${k==='transfer'?`<div class="field"><label for="stkTo">Куда (получает)</label><select id="stkTo">${stkOpts(br.filter(b=>Number(b.id)!==Number(from)),to,'Выберите филиал')}</select></div>`:''}</div>
   <div class="stk-sub" style="margin-top:6px">${hints[k]}</div>
+  ${k==='receipt'?'<div class="actions" style="justify-content:flex-start"><button type="button" id="stkPurchasePrices" class="secondary">Закупка — цены товаров</button><span class="stk-sub">Посмотреть стоимость перед заполнением прихода</span></div>':''}
   <div id="stkOpRows"></div>
   ${k!=='inventory'?'<div class="actions" style="justify-content:flex-start"><button id="stkAddRow" class="secondary small">＋ Ещё материал</button></div>':''}
   <div class="row">${k==='receipt'?'<div class="field"><label for="stkSupplier">Поставщик</label><input id="stkSupplier" placeholder="Где купили (по желанию)"></div>':''}
@@ -5224,6 +5225,7 @@ function stkDrawOp(){
   $('stkFrom').onchange=e=>{stk.opFrom=Number(e.target.value);stkDrawOp()};
   if($('stkTo'))$('stkTo').onchange=e=>{stk.opTo=Number(e.target.value)||''};
   if($('stkAddRow'))$('stkAddRow').onclick=()=>{stk.opRows.push({m:'',q:'',p:''});stkDrawOpRows()};
+  if($('stkPurchasePrices'))$('stkPurchasePrices').onclick=()=>openBigReport(true);
   $('stkSave').onclick=stkSaveOp;
   stkDrawOpRows();
 }
@@ -6424,11 +6426,15 @@ function grPaint(a){
 }
 
 // ---------- Открытие ----------
-async function openBigReport(){
+function grIsPurchaseSheet(s){return !s.branch_id&&String(s.title||'').trim().toLocaleLowerCase('ru')==='закупка'}
+async function openBigReport(purchase=false){
+  gr.priceView=purchase===true;
+  $('bigReportModal').style.zIndex=gr.priceView?'12000':'';
   if(isAdmin){await grLoadAdmin();return}
-  // Листы, которые админ открыл всем сотрудникам (например «Закупка»): только просмотр, смена не нужна.
+  // Листы, которые админ открыл всем сотрудникам (кроме перенесённого в приход листа «Закупка»): только просмотр, смена не нужна.
   const pub=await db.rpc('report_staff_sheets');
-  const shared=(pub.error?[]:(pub.data||[])).map(x=>({title:x.title,data:x.data,from:1,to:x.data?.nrows||1,row:null,cols:[],past:[],mode:null,shared:true}));
+  const shared=(pub.error?[]:(pub.data||[])).filter(s=>gr.priceView?grIsPurchaseSheet(s):!grIsPurchaseSheet(s)).map(x=>({title:x.title,data:x.data,from:1,to:x.data?.nrows||1,row:null,cols:[],past:[],mode:null,shared:true}));
+  if(gr.priceView){if(!shared.length){alert('Лист «Закупка» пока недоступен. Обратитесь к администратору.');return}grOpenStaff(null,null,shared);return}
   let sid=salesSession?.shiftId||null;
   if(!sid){try{const st=JSON.parse(localStorage.getItem(GR_STAFF_KEY)||'null');if(st&&st.id)sid=st.id}catch(e){}}
   if(!sid){if(shared.length){grOpenStaff(null,null,shared);return}alert('Общий отчет: сначала начните смену на своём филиале. Полный отчет видит только администратор.');return}
@@ -6450,7 +6456,7 @@ async function openBigReport(){
 function grOpenStaff(shiftId,v,shared){
   gr.shiftId=shiftId;
   gr.staffTabs=[...(v?[{...v,branchTab:true}]:[]),...(shared||[])];
-  $('grTitle').textContent=v?'Отчет филиала':'Общий отчет';$('grAdminTools').innerHTML='';
+  $('grTitle').textContent=gr.priceView?'Закупка — цены товаров':v?'Отчет филиала':'Общий отчет';$('grAdminTools').innerHTML='';
   if(!gr.staffTabs.length){gr.staff=null;$('grTabs').innerHTML='';$('grBody').innerHTML='<p class="status">Для вашего филиала отчета пока нет.</p>';open('bigReportModal');return}
   open('bigReportModal');grStaffTab(0);
 }
@@ -6479,7 +6485,7 @@ function grShowStaff(v){
 
 async function grLoadAdmin(){
   gr.staff=null;gr.shiftId=null;
-  $('grTitle').textContent='Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
+  $('grTitle').textContent=gr.priceView?'Закупка — цены товаров':'Общий отчет';$('grBody').innerHTML='<p class="status">Загружаю листы…</p>';$('grTabs').innerHTML='';grDrawTools();open('bigReportModal');
   const r=await db.from('report_sheets').select('id,sort_order,title,branch_id,data,months,staff_visible,updated_at').order('sort_order').order('id');
   if(r.error){$('grBody').innerHTML=`<p class="status">Ошибка: ${esc(r.error.message)}</p>`;return}
   gr.sheets=r.data||[];gr.sel=null;gr.month=null;
@@ -6495,7 +6501,9 @@ function grDrawTools(){
   const vis=$('grStaffVis');if(vis)vis.onchange=async()=>{const on=vis.checked;const r=await db.from('report_sheets').update({staff_visible:on}).eq('id',cs.id);if(r.error){vis.checked=!on;alert('Не сохранилось: '+r.error.message);return}cs.staff_visible=on;v5Toast(on?'Теперь этот лист видят все сотрудники.':'Этот лист снова видит только администратор.')};
 }
 function grDrawTabs(){
-  $('grTabs').innerHTML=gr.sheets.map((s,i)=>`<button type="button" class="calc-tab" role="tab" data-gr="${i}" aria-selected="${i===gr.cur}">${esc(s.title)}</button>`).join('');
+  const visible=s=>gr.priceView?grIsPurchaseSheet(s):!grIsPurchaseSheet(s);
+  if(!visible(gr.sheets[gr.cur]||{}))gr.cur=gr.sheets.findIndex(visible);
+  $('grTabs').innerHTML=gr.sheets.map((s,i)=>`<button type="button" class="calc-tab" role="tab" data-gr="${i}" aria-selected="${i===gr.cur}">${esc(s.title)}</button>`).filter((_,i)=>visible(gr.sheets[i])).join('');
   $('grTabs').querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{grCloseEd(true);gr.cur=Number(b.dataset.gr);gr.sel=null;gr.month=null;grDrawTabs();grDrawSheet();grDrawTools()});
 }
 function grCurrentMonthKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
