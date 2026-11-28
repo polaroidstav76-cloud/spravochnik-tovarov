@@ -535,7 +535,7 @@ class App:
             try:text=self.messages.get_nowait()
             except threadqueue.Empty:break
             self.logs.configure(state='normal');self.logs.insert('end',datetime.now().strftime('%H:%M:%S')+' '+text+'\n');self.logs.see('end');self.logs.configure(state='disabled')
-        instant_rows=self.q.waiting('workshop')+self.q.waiting('photo30')
+        instant_rows=self.q.waiting('workshop')+self.q.waiting('photo30')+self.q.waiting('masterphoto')
         previous=set(self.instant_table.get_children())
         for row in instant_rows:
             key=str(row['id']);batch=self.q.batch(row['batch']) if row['batch'] else None

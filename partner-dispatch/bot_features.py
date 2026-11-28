@@ -55,7 +55,7 @@ class BotFeatures:
             if batch['state']=='collecting' and retry>time.time():lines.append('Повтор не раньше '+datetime.fromtimestamp(retry,MOSCOW).strftime('%H:%M МСК')+'.')
         if direction in ('workshop','photo30','masterphoto'):
             if direction=='photo30' and self.q.setting('bridge_connected','0')!='1':lines.append('Основная программа ещё не подключена к приёмнику в Клаудшопе.')
-            lines.append('Отправка: автоматически после сохранения, без расписания.')
+            lines.append('Отправка: сразу после проверки всех сторон и выбора тиража, вложениями без архива.' if direction=='masterphoto' else 'Отправка: автоматически после сохранения, без расписания.')
             return '\n'.join(lines)
         slot=self.next_slot(direction)
         if slot:
