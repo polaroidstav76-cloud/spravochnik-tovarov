@@ -11,7 +11,7 @@ class DirectionIsolation(unittest.TestCase):
  def event(self,name):return SimpleNamespace(is_private=True,sender_id=1,chat_id=1,id=100,raw_text='',document=True,photo=False,file=SimpleNamespace(name=name,size=20),date=datetime.now(timezone.utc),message=object())
  def test_other_directions_never_intercepted_by_pending_dtf(self):
   self.w.dtf_review.handle_document=AsyncMock(return_value=True)
-  for n,(direction,name) in enumerate([('wideformat','wide.tif'),('workshop','work.pdf'),('photo30','photo.jpg')]):
+  for n,(direction,name) in enumerate([('wideformat','wide.tif'),('workshop','work.pdf')]):
    self.w.choose(1,direction);event=self.event(name);event.id+=n;asyncio.run(self.w.on_message(event));self.assertEqual(self.q.waiting(direction)[0]['name'],name)
   self.w.dtf_review.handle_document.assert_not_awaited()
  def test_dtf_replacement_still_handled_in_dtf(self):

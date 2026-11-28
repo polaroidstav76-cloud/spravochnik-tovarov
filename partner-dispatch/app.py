@@ -27,7 +27,7 @@ from worker import Worker
 from wizard import Wizard
 
 BASE=Path(__file__).resolve().parent
-VERSION='0.13'
+VERSION='0.14'
 FIELDS=[('api_id','Telegram API ID',False),('api_hash','Telegram API hash',True),('bot_token','Токен отдельного бота',True),
         ('disk_client_id','ClientID приложения Яндекс Диска (для получения токена)',False),('disk_token','OAuth-токен Яндекс Диска',True),('sender','Яндекс Почта — отправитель',False),('smtp_password','Пароль приложения Яндекс Почты',True),
         ('recipient','Получатель (сначала тестовый)',False)]
@@ -148,7 +148,7 @@ class App:
             self.dtf_table.heading(key,text=label);self.dtf_table.column(key,width=width)
         self.dtf_table.pack(fill='both',expand=True,pady=6)
         ttk.Label(dtf,text='Количество копий сотрудники задают в боте. Файл без DPI или многостраничный TIFF нужно пересохранить.\nПрозрачность исходников сохраняется; белый фон изображения не удаляется автоматически. Принты могут поворачиваться на 90° для экономии места.',wraplength=850).pack(anchor='w',pady=8)
-        instant=ttk.Frame(notebook,padding=12);notebook.add(instant,text='Мастерская и 30×40')
+        instant=ttk.Frame(notebook,padding=12);notebook.add(instant,text='Мастерская и Мастерфото')
         ttk.Label(instant,text='Мастерская — каждый файл сразу на почту, ссылкой на оригинал, без архива.',wraplength=850).pack(anchor='w',pady=6)
         row=ttk.Frame(instant);row.pack(fill='x',pady=6)
         ttk.Label(row,text='Почта мастерской (пока тестовая):').pack(side='left')
@@ -156,6 +156,12 @@ class App:
         ttk.Entry(row,textvariable=self.workshop_recipient,width=36).pack(side='left',padx=5)
         ttk.Button(row,text='Сохранить',command=self.save_partial).pack(side='left')
         ttk.Button(instant,text='Тестовое письмо мастерской проверено',command=self.confirm_workshop_test).pack(anchor='w',pady=5)
+        ttk.Label(instant,text='Мастерфото — визитки JPG 9,4 × 5,4 см, 300 dpi. Отправка вложениями сразу после выбора тиража.').pack(anchor='w',pady=8)
+        cardrow=ttk.Frame(instant);cardrow.pack(fill='x',pady=6)
+        ttk.Label(cardrow,text='Почта Мастерфото:').pack(side='left')
+        self.masterphoto_recipient=tk.StringVar(value=self.c.get('masterphoto_recipient',''))
+        ttk.Entry(cardrow,textvariable=self.masterphoto_recipient,width=36).pack(side='left',padx=5)
+        ttk.Button(cardrow,text='Сохранить',command=self.save_partial).pack(side='left')
         ttk.Separator(instant).pack(fill='x',pady=14)
         ttk.Label(instant,text='30×40 — передача оригиналов на другой компьютер.\nОткройте Клаудшоп как администратор → «30×40» → код для основной программы.\nНа компьютере с принтером запускайте START-30X40.cmd и используйте код приёмника.',wraplength=850).pack(anchor='w')
         row=ttk.Frame(instant);row.pack(fill='x',pady=10)
@@ -205,12 +211,13 @@ class App:
         c.update({key:e.get().strip() for key,e in self.entries.items()})
         c['dtf_recipient']=self.dtf_recipient.get().strip()
         c['workshop_recipient']=self.workshop_recipient.get().strip()
+        c['masterphoto_recipient']=self.masterphoto_recipient.get().strip()
         for key,_,_ in FIELDS:
             if require_all and key!='disk_client_id' and not c[key]:raise UserError('Заполните все обязательные поля настроек.')
         if c['api_id'] and (not c['api_id'].isdigit() or int(c['api_id'])<=0):raise UserError('Telegram API ID должен быть числом.')
         if c['api_hash'] and not re.fullmatch(r'[a-fA-F0-9]{32}',c['api_hash']):raise UserError('API hash должен содержать 32 символа из Telegram.')
         if c['bot_token'] and not re.fullmatch(r'\d+:[A-Za-z0-9_-]+',c['bot_token']):raise UserError('Проверьте токен бота.')
-        for key in ['sender','recipient','dtf_recipient','workshop_recipient']:
+        for key in ['sender','recipient','dtf_recipient','workshop_recipient','masterphoto_recipient']:
             if c[key] and not re.fullmatch(r'[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',c[key]):raise UserError('Проверьте почтовые адреса.')
         if c.get('disk_client_id') and not re.fullmatch(r'[a-fA-F0-9]{32}',c['disk_client_id']):raise UserError('Проверьте ClientID приложения Яндекс Диска.')
         if '#access_token=' in c['disk_token']:

@@ -16,6 +16,8 @@ class LayeredExport(unittest.TestCase):
    q.downloaded(r['id'],hashlib.sha256(path.read_bytes()).hexdigest());q.set_copies(r['id'],1,2);bid=q.claim('test@example.invalid',time.time(),manual=True,direction='dtf')
    p1=Placement(f'{r["id"]}:0',2,3,12,8,False);p2=Placement(f'{r["id"]}:1',25,3,8,12,True);layout=Layout(50,30,2,2,(p1,p2));png=Path(tmp)/'sheet.png';render_png(png,layout,{p1.key:path,p2.key:path});png.with_suffix('.layout.json').write_text(json.dumps(asdict(layout)))
    result=export_psd(q,bid,png);self.assertEqual(result.read_bytes()[:6],b'8BPS\0\1')
+   with Image.open(result) as legacy:
+    legacy.load();self.assertEqual(legacy.size,(50,30));self.assertEqual(legacy.convert('RGB').getpixel((2,3)),(255,0,0))
    if PSDImage is None:q.db.close();return
    psd=PSDImage.open(result);self.assertEqual(psd.size,(50,30));self.assertEqual(len(psd),2);self.assertEqual(psd[0].bbox,(25,3,33,15));self.assertEqual(psd[1].bbox,(2,3,14,11));self.assertIn('Принт',psd[0].name)
    self.assertEqual(psd[0].topil().getpixel((0,0)),(255,0,0,100))

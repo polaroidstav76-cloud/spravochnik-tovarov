@@ -21,7 +21,8 @@ DIRECTIONS = {
     'wideformat': {'label': 'Широкоформатная печать', 'enabled': True},
     'dtf': {'label': 'ДТФ-печать', 'enabled': True},
     'workshop': {'label': 'Мастерская', 'enabled': True},
-    'photo30': {'label': '30×40', 'enabled': True},
+    'photo30': {'label': '30×40', 'enabled': False},
+    'masterphoto': {'label': 'Мастерфото', 'enabled': True},
 }
 UPLOAD = 'Загрузить файл'
 BACK = 'Назад'
@@ -134,9 +135,9 @@ class Queue:
         branch=self.user(sender)
         if branch is None: raise UserError('Сначала подключитесь с кодом филиала.')
         name=safe_name(name)
-        formats={'wideformat':{'.tif','.tiff'},'dtf':{'.png','.psd','.tif','.tiff'},'photo30':{'.jpg','.jpeg','.png'}}
+        formats={'wideformat':{'.tif','.tiff'},'dtf':{'.png','.psd','.tif','.tiff'},'photo30':{'.jpg','.jpeg','.png'},'masterphoto':{'.jpg','.jpeg'}}
         if direction in formats and Path(name).suffix.lower() not in formats[direction]:
-            hint={'wideformat':'TIF / TIFF','dtf':'PNG, PSD, TIF / TIFF','photo30':'JPG / JPEG или PNG'}[direction]
+            hint={'wideformat':'TIF / TIFF','dtf':'PNG, PSD, TIF / TIFF','photo30':'JPG / JPEG или PNG','masterphoto':'JPG / JPEG'}[direction]
             raise UserError('Файл не добавлен. Для '+DIRECTIONS[direction]['label']+' нужен '+hint+'. Отправьте оригинал документом.')
         if not 0<size<=MAX_BYTES: raise UserError('Размер файла должен быть от 1 байта до 500 МБ.')
         with self.lock,self.db:
@@ -144,7 +145,7 @@ class Queue:
             if existing:return dict(existing)
             active=self.db.execute("select f.name from files f left join batches b on b.id=f.batch where f.state!='cancelled' and f.direction=? and (f.batch is null or b.state not in ('sent','manual_sent','local_saved','cancelled'))",(direction,))
             key=unicodedata.normalize('NFC',name).casefold()
-            if direction!='dtf' and any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
+            if direction not in ('dtf','masterphoto') and any(unicodedata.normalize('NFC',r[0]).casefold()==key for r in active):
                 raise UserError('Переименуйте файл, так как такой уже существует.')
             next_id=max(int(self.setting('file_id_floor','0')),self.db.execute('select coalesce(max(id),0) from files').fetchone()[0])+1
             self.db.execute('insert or ignore into files(id,chat,message,sender,branch,name,size,received,due,direction) values(?,?,?,?,?,?,?,?,?,?)',

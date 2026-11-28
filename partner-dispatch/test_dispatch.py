@@ -365,12 +365,12 @@ class TestDispatch(unittest.TestCase):
         worker=Worker(self.q,{**CONFIG,'owner_code':'owner','join_code':'staff'},self.logs.append)
         async def check():
             event=Event('/start');await worker.on_message(event)
-            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],[icon+' '+r['label'] for icon,r in zip(('🖨','👕','🛠','🖼'),DIRECTIONS.values())])
+            self.assertEqual([b.button.text for row in event.messages[0][1]['buttons'] for b in row],['🖨 Широкоформатная печать','👕 ДТФ-печать','🛠 Мастерская','Мастерфото','Инструкция по отправке файлов'])
             event=Event(DIRECTIONS['wideformat']['label']);await worker.on_message(event)
             event=Event(BUTTONS[0]);await worker.on_message(event)
             self.assertIn(self.q.waiting()[0]['name'],event.messages[0][0]);self.assertIn('Первый филиал',event.messages[0][0])
             keyboard=event.messages[0][1]['buttons']
-            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'↩️ Отменить последнюю загрузку','📊 Состояние','Главное меню','⬅️ '+BACK])
+            self.assertEqual([b.button.text for row in keyboard for b in row],['📥 '+UPLOAD,'📋 '+BUTTONS[0],'🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2],'↩️ Отменить последнюю загрузку','📊 Состояние','Инструкция по отправке файлов','Главное меню','⬅️ '+BACK])
             event=Event(BUTTONS[2]);await worker.on_message(event)
             button=event.messages[0][1]['buttons'][0][0]
             self.assertTrue(button.type.data.startswith(b'delete:'))
@@ -406,7 +406,7 @@ class TestDispatch(unittest.TestCase):
         self.file();bid=self.q.claim(CONFIG['recipient'],self.now)
         batch=self.q.batch(bid)
         self.assertEqual(batch['test_mode'],1)
-        self.assertTrue(str(email_for(CONFIG,{**batch,'link':'https://example.invalid/zip'},self.q.batch_files(bid))['Subject']).startswith('ТЕСТ'))
+        self.assertNotIn('ТЕСТ',str(email_for(CONFIG,{**batch,'link':'https://example.invalid/zip'},self.q.batch_files(bid))))
         self.q.transition(bid,'collecting','sent')
         self.q.set_setting('first_test_confirmed','1');self.q.set_setting('generation','7')
         self.file(mid=2);second=self.q.claim(CONFIG['recipient'],self.now)
@@ -424,7 +424,7 @@ class TestDispatch(unittest.TestCase):
         class Value:
             def __init__(self,v):self.v=v
             def get(self):return self.v
-        app=object.__new__(App);app.c={};app.dtf_recipient=Value('');app.workshop_recipient=Value('')
+        app=object.__new__(App);app.c={};app.dtf_recipient=Value('');app.workshop_recipient=Value('');app.masterphoto_recipient=Value('')
         app.entries={k:Value('') for k,_,_ in FIELDS}
         app.entries['disk_token']=Value('https://oauth.yandex.ru/verification_code#access_token=fake-token&expires_in=1')
         self.assertEqual(app.config(require_all=False)['disk_token'],'fake-token')

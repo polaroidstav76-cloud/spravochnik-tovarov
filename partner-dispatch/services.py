@@ -174,9 +174,8 @@ def email_for(config,batch,files):
     workshop=batch.get('direction')=='workshop'
     title='Мастерская' if workshop else 'ДТФ-печать' if dtf else 'Широкоформатная печать'
     artifact=files[0]['name'] if workshop else 'Полароид-ДТФ.png' if dtf else 'Полароид.zip'
-    msg['Subject']=('ТЕСТ · ' if batch.get('test_mode',1) else '')+f'Полароид · {title} · {len(files)} файлов · заказ {batch["id"][:8]}'
+    msg['Subject']=f'Полароид · {title} · {len(files)} файлов · заказ {batch["id"][:8]}'
     body=['Здравствуйте!']
-    if batch.get('test_mode',1):body+=['ТЕСТОВАЯ ОТПРАВКА. НЕ ПЕРЕДАВАТЬ В ПРОИЗВОДСТВО.']
     body+=['Отправляем файлы на печать. Скачать можно по ссылке:','',batch['link']]
     if not dtf and not workshop:
         body+=['','Состав заказа:']+[f'• {r["name"]} — {r.get("copies",1)} шт.' for r in files]

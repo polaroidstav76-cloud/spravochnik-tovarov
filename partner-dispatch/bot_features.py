@@ -53,7 +53,7 @@ class BotFeatures:
             lines.append('Заказ: '+labels.get(batch['state'],batch['state']))
             retry=float(self.q.setting('retry_at:'+batch['id'],'0'))
             if batch['state']=='collecting' and retry>time.time():lines.append('Повтор не раньше '+datetime.fromtimestamp(retry,MOSCOW).strftime('%H:%M МСК')+'.')
-        if direction in ('workshop','photo30'):
+        if direction in ('workshop','photo30','masterphoto'):
             if direction=='photo30' and self.q.setting('bridge_connected','0')!='1':lines.append('Основная программа ещё не подключена к приёмнику в Клаудшопе.')
             lines.append('Отправка: автоматически после сохранения, без расписания.')
             return '\n'.join(lines)

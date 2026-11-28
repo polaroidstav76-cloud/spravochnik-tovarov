@@ -7,6 +7,20 @@ from dtf_layout import Print,arrange
 from dtf_render import read_art,inspect_art
 
 def u32(v):return struct.pack('>I',v)
+def packbits(data):
+ out=bytearray();i=0
+ while i<len(data):
+  run=1
+  while run<128 and i+run<len(data) and data[i+run]==data[i]:run+=1
+  if run>=3:out.extend((257-run,data[i]));i+=run;continue
+  start=i;i+=run
+  while i<len(data) and i-start<128:
+   run=1
+   while run<3 and i+run<len(data) and data[i+run]==data[i]:run+=1
+   if run>=3:break
+   i+=min(run,128-(i-start))
+  out.append(i-start-1);out.extend(data[start:i])
+ return bytes(out)
 def export_psd(queue,bid,png):
  rows=queue.batch_files(bid);items=[];sources={};names={}
  for r in rows:
@@ -46,7 +60,7 @@ def export_psd(queue,bid,png):
      for channel,data in zip((0,1,2,-1),parts):rec.write(struct.pack('>h',channel)+length(len(data)))
      name=names[p.key].encode('utf-16-be');unicode_name=u32(len(name)//2)+name
      extra=u32(0)+u32(0)+b'\0'*4+b'8BIMluni'+u32(len(unicode_name))+unicode_name
-     if len(unicode_name)%2:extra+=b'\0'
+     extra+=b'\0'*((-len(unicode_name))%4)
      rec.write(b'8BIMnorm'+bytes([255,0,0,0])+u32(len(extra))+extra)
      for data in parts:ch.write(data)
    layer_size=2+records.stat().st_size+channels.stat().st_size;layer_pad=layer_size%2
@@ -80,11 +94,17 @@ def export_psd(queue,bid,png):
      for source in (records,channels):
       with source.open('rb') as f:shutil.copyfileobj(f,out)
      if layer_pad:out.write(b'\0')
-     out.write(u32(0));out.write(b'\0\2');compressor=zlib.compressobj(6)
-     for f in planes:
-      f.seek(0)
-      while block:=f.read(1024*1024):out.write(compressor.compress(block))
-     out.write(compressor.flush())
+     # RLE composite is understood by Photoshop 2021 and older PSD readers.
+     # A table of per-channel scanline lengths precedes the PackBits rows.
+     out.write(u32(0));out.write(b'\0\1')
+     packed=tmp/'merged-rle';lengths=tmp/'merged-lengths'
+     with packed.open('wb') as body,lengths.open('wb') as table:
+      for f in planes:
+       f.seek(0)
+       for y in range(layout.height):
+        row=packbits(f.read(layout.width));table.write(struct.pack('>I' if large else '>H',len(row)));body.write(row)
+     for source in (lengths,packed):
+      with source.open('rb') as f:shutil.copyfileobj(f,out)
    finally:
     for f in planes:f.close()
   if part.stat().st_size>MAX_BYTES:raise UserError('Послойный макет больше 500 МБ. Разделите заказ на части.')

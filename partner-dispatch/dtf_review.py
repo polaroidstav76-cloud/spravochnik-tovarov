@@ -33,7 +33,7 @@ class DtfReview:
  def checked(self,bid,revision,uid):
   if not self.q.user(uid):raise UserError('Сначала подключитесь как сотрудник.')
   row=self.get(bid);batch=self.q.batch(bid)
-  if not row or not batch or batch['direction']!='dtf' or row['revision']!=revision or row['fingerprint']!=self.fingerprint(bid):raise UserError('Макет изменился. Нажмите «Проверить макет» заново.')
+  if not row or not batch or batch['direction']!='dtf' or row['revision']!=revision or row['fingerprint']!=self.fingerprint(bid):raise UserError('Этот предпросмотр устарел. Откройте актуальное сообщение с предпросмотром ДТФ.')
   if batch['state'] not in ('review','editing'):raise UserError('Отправка уже началась или завершена. Заменить макет сейчас нельзя.')
   return row,batch
  def artifact(self,bid):
@@ -151,9 +151,15 @@ class DtfReview:
   accepted=False
   try:
    await self.w.reply(event,'Получаю исправленный ДТФ-холст. Автоотправка остаётся на паузе.')
-   await self.w.client.download_media(event.message,file=str(temp))
+   key='dtf-replacement:'+row['batch']
+   async def progress(done,total):
+    await self.w.cards.update(key,event.chat_id,'ДТФ · исправленный макет','Загрузка файла…',done,total)
+   await self.w.cards.update(key,event.chat_id,'ДТФ · исправленный макет','Получаю файл…',force=True)
+   await self.w.client.download_media(event.message,file=str(temp),progress_callback=progress)
+   await self.w.cards.update(key,event.chat_id,'🔎 ДТФ · проверка файла','Проверяю PNG, размеры, разрешение и прозрачность… Автоотправка на паузе.',force=True)
    if not temp.is_file() or temp.stat().st_size!=size:raise UserError('Готовый PNG загрузился не полностью. Повторите загрузку; отправка остаётся на паузе.')
    width,height,sha=await asyncio.to_thread(validate_ready,temp)
+   await self.w.cards.update(key,event.chat_id,'🔎 ДТФ · проверка файла','Готовлю предпросмотр исправленного холста…',force=True)
    await asyncio.to_thread(make_preview,temp,destination.with_suffix('.preview.png'))
    with self.q.lock,self.q.db:
     current,batch=self.checked(row['batch'],row['revision'],event.sender_id)
@@ -165,7 +171,11 @@ class DtfReview:
     self.q.db.execute('update dtf_replacement_messages set accepted=1 where chat=? and message=?',(event.chat_id,event.id))
     self.q.set_setting('dtf_layout:'+row['batch'],f'{width/300*2.54:.2f} × {height/300*2.54:.2f} см; готовый макет сотрудника, без повторной раскладки')
    self.q.set_setting('retry_at:'+row['batch'],'0')
+   await self.w.cards.update(key,event.chat_id,'✅ ДТФ · проверка завершена','Готовый холст принят. Передаю на отправку партнёру.',force=True)
    accepted=True;await self.w.reply(event,'Исправленный макет принят. Отправляю партнёру без повторной раскладки.');return True
+  except Exception:
+   await self.w.cards.update('dtf-replacement:'+row['batch'],event.chat_id,'❌ ДТФ · файл не принят','Проверка или загрузка не завершена. Автоотправка остаётся на паузе.',force=True)
+   raise
   finally:
    temp.unlink(missing_ok=True)
    if not accepted:destination.with_suffix('.preview.png').unlink(missing_ok=True)

@@ -18,6 +18,7 @@ from file_formats import validate_content
 from progress_cards import ProgressCards
 from vpn_reminder import VpnReminder
 from dtf_review import DtfReview
+from masterphoto import Masterphoto,INSTRUCTIONS
 from services import Disk, email_for, smtp_connect, check_dedicated_bot
 
 
@@ -25,7 +26,7 @@ class Worker:
     def __init__(self,queue,config,log):
         self.q=queue;self.c=config;self.log=log
         self.client=None;self.running=True;self.loop=None
-        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self);self.q.set_setting('runtime_version','0.13')
+        self.cached={};self.retry_at={};self.tasks=[];self.monitor=Monitoring(queue);self.handoff=Handoff(queue);self.features=BotFeatures(queue);self.local_delivery=LocalDelivery(self);self.cards=ProgressCards(self);self.vpn=VpnReminder(self);self.dtf_review=DtfReview(self);self.masterphoto=Masterphoto(self);self.q.set_setting('runtime_version','0.14')
         with self.q.lock:
             rejected=[r[0] for r in self.q.db.execute("select id from files where state='cancelled' and error is not null")]
         for file_id in rejected:self.q.discard_rejected(file_id)
@@ -50,13 +51,16 @@ class Worker:
             direction=self.direction(event.sender_id)
             def keys(rows):return [[Button.text(label,resize=True,persistent=True) for label in row] for row in rows]
             if not direction:
-                rows=[['🖨 '+DIRECTIONS['wideformat']['label'],'👕 '+DIRECTIONS['dtf']['label']],['🛠 '+DIRECTIONS['workshop']['label'],'🖼 '+DIRECTIONS['photo30']['label']]]
+                rows=[['🖨 '+DIRECTIONS['wideformat']['label'],'👕 '+DIRECTIONS['dtf']['label']],['🛠 '+DIRECTIONS['workshop']['label'],'Мастерфото']]
 
+                rows.append(['Инструкция по отправке файлов'])
                 buttons=keys(rows)
             else:
                 rows=[['📥 '+UPLOAD,'📋 '+BUTTONS[0]],['🚀 '+BUTTONS[1],'🗑 '+BUTTONS[2]],['↩️ '+UNDO,'📊 '+STATUS]]
-                if direction in ('workshop','photo30'):rows=[rows[0],['🗑 '+BUTTONS[2],'📊 '+STATUS]]
-                if direction=='dtf':rows.append(['Количество копий','Проверить макет'])
+                if direction in ('workshop','photo30','masterphoto'):rows=[rows[0],['🗑 '+BUTTONS[2],'📊 '+STATUS]]
+                if direction=='dtf':rows.append(['Количество копий','Инструкция по отправке файлов'])
+                if direction=='masterphoto':rows.insert(0,['Односторонние визитки','Двусторонние визитки'])
+                if direction!='dtf':rows.append(['Инструкция по отправке файлов'])
                 rows.append(['Главное меню','⬅️ '+BACK])
                 buttons=keys(rows)
         await event.respond(text,buttons=buttons,parse_mode=None)
@@ -106,14 +110,18 @@ class Worker:
         if not self.q.user(uid):
             await event.respond('Этот бот принимает файлы только от подключённых сотрудников. Получите код подключения у руководителя.',parse_mode=None);return
         try:
+            if text in ('Инструкция по отправке файлов','/help'):
+                await self.reply(event,INSTRUCTIONS);return
             if event.document and self.direction(uid)=='dtf' and await self.dtf_review.handle_document(event):return
             if text==MANUAL_MENU or text=='/manual':
                 await self.reply(event,'Ручная отправка отключена. Используйте «Отправить сейчас».');return
             if text in ('/start','/menu',BACK,'Главное меню'):
                 self.choose(uid,None)
-                await self.reply(event,'Выберите направление печати. Программа 0.13.');return
+                await self.reply(event,'Выберите направление печати. Программа 0.14.');return
             chosen=next((key for key,value in DIRECTIONS.items() if text==value['label']),None)
             if chosen:
+                if chosen=='masterphoto':
+                    self.choose(uid,chosen);await self.masterphoto.prompt(event);return
                 self.choose(uid,chosen if DIRECTIONS[chosen]['enabled'] else None)
                 if not DIRECTIONS[chosen]['enabled']:
                     await self.reply(event,'ДТФ-печать пока не настроена. Файлы в это направление пока не принимаются. Выберите широкоформатную печать.');return
@@ -121,10 +129,7 @@ class Worker:
             direction=self.direction(uid)
             if not direction:
                 await self.reply(event,'Сначала выберите направление печати. Файл пока не принят.');return
-            if direction=='dtf' and text in ('Проверить макет','/layout'):
-                batch=self.q.active_batch('dtf')
-                if not batch or batch['state'] not in ('review','editing'):await self.reply(event,'Сейчас нет готового макета, ожидающего проверки.');return
-                await self.dtf_review.show(batch['id'],uid);return
+            if direction=='masterphoto' and await self.masterphoto.handle(event,text):return
             if direction=='dtf' and (text=='Количество копий' or text=='/copies'):
                 await self.copies_menu(event);return
             if direction=='dtf' and text.isdigit():
@@ -142,7 +147,7 @@ class Worker:
             elif text==BUTTONS[1] or text=='/send':
                 if direction=='dtf' and not self.c.get('dtf_recipient'):raise UserError('Укажите тестового получателя ДТФ в программе.')
                 if not self.q.setting('owner'):raise UserError('Сначала подключите владельца на основном компьютере.')
-                if direction in ('workshop','photo30'):
+                if direction in ('workshop','photo30','masterphoto'):
                     await self.reply(event,'В этом направлении каждый файл отправляется автоматически после сохранения.');return
                 from telethon import Button
                 token,count=self.features.request(uid,direction)
@@ -177,6 +182,7 @@ class Worker:
         except UserError as e:await self.reply(event,str(e))
 
     def recipient(self,direction):
+        if direction=='masterphoto':return self.c.get('masterphoto_recipient','')
         if direction=='photo30':return 'local:30x40'
         if direction=='workshop':return self.c.get('workshop_recipient','')
         return self.c.get('dtf_recipient','') if direction=='dtf' else self.c['recipient']
@@ -211,6 +217,8 @@ class Worker:
             await event.answer('Нет доступа.',alert=True);return
         try:
             data=event.data.decode()
+            if data.startswith('card:'):
+                await self.masterphoto.callback(event);return
             if data.startswith('dtf:'):
                 try:await self.dtf_review.callback(event)
                 except UserError as e:await self.reply(event,str(e))
@@ -288,7 +296,11 @@ class Worker:
                     with temp.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
                 sha=await asyncio.to_thread(checksum)
                 if self.q.file(r['id'])['state']=='cancelled':continue
-                try:await asyncio.to_thread(validate_content,temp,r['direction'],r['name'])
+                try:
+                    await asyncio.to_thread(validate_content,temp,r['direction'],r['name'])
+                    if r['direction']=='masterphoto':
+                        from masterphoto import validate_card
+                        await asyncio.to_thread(validate_card,temp)
                 except UserError:
                     invalid_art=True;raise
                 if r['direction']=='dtf':
@@ -300,6 +312,7 @@ class Worker:
                 try:
                     prefix='dtf_' if r['direction']=='dtf' else ''
                     schedule='Отправка в выбранные дни в '+self.q.setting(prefix+'dispatch_time','12:00' if prefix else '18:00')+' МСК.' if self.q.setting(prefix+'automatic','0')=='1' else 'Расписание пока выключено.'
+                    if r['direction']=='masterphoto':schedule='После проверки всех сторон выберите тираж в боте.'
                     if r['direction']=='workshop':schedule='Отправка в мастерскую начнётся автоматически, без ожидания расписания.'
                     elif r['direction']=='photo30':schedule='Передаю на компьютер 30×40. О сохранении на нём сообщу отдельно.'
                     if prefix:
@@ -308,6 +321,9 @@ class Worker:
                         if not info['transparent']:schedule+=' Фон исходника непрозрачный и будет сохранён. Для прозрачного фона загрузите PNG с прозрачностью.'
                     await self.cards.update('file:'+str(r['id']),r['chat'],'✅ Сохранён: '+r['name'],schedule,force=True)
                 except Exception:self.log('Не удалось отправить подтверждение загрузки. Файл сохранён.')
+                if r['direction']=='masterphoto':
+                    try:await self.masterphoto.downloaded(r)
+                    except Exception:self.log('Визитки сохранены. Чтобы повторно выбрать тираж, нажмите «Загрузить файл» в разделе Мастерфото.')
             except asyncio.CancelledError:raise
             except Exception as e:
                 reason=str(e) if isinstance(e,UserError) else 'Не удалось скачать файл. Проверьте связь с Telegram.'
@@ -327,6 +343,8 @@ class Worker:
                 if invalid_art:self.q.discard_rejected(r['id'])
 
     async def process_batch(self,b):
+        if b['direction']=='masterphoto':
+            await self.masterphoto.process(b);return
         if b['direction']=='dtf' and b['state'] in ('review','editing'):
             await self.dtf_review.tick(b['id']);return
         if b['direction']=='photo30':
@@ -438,6 +456,7 @@ class Worker:
                 self.q.mark_notified(b['id']);continue
             if b['state']=='sent':
                 text=f'Заказ отправлен на {b["recipient"]}.\nФайлов: {len(self.q.batch_files(b["id"]))}.\nАрхив: {b["link"]}\nПисьмо отправлено.'
+                if b['direction']=='masterphoto':text=f'Мастерфото: визитки отправлены вложениями на {b["recipient"]}. Файлов: {len(self.q.batch_files(b["id"]))}.'
                 if b['direction']=='dtf':text=text.replace('Архив:','Холст ДТФ:')+'\n'+self.q.setting('dtf_layout:'+b['id'])
                 chats={r['chat'] for r in self.q.batch_files(b['id'])}|self.monitor.targets()
             else:
@@ -466,7 +485,7 @@ class Worker:
                 if direction in ('workshop','photo30'):
                     ready=bool(self.c.get('bridge_token')) if direction=='photo30' else bool(self.recipient(direction))
                     if ready:self.q.claim_immediate(self.recipient(direction),time.time(),direction)
-                elif self.q.setting(prefix+'automatic','0')=='1' and self.recipient(direction):self.q.claim(self.recipient(direction),time.time(),direction=direction)
+                elif direction!='masterphoto' and self.q.setting(prefix+'automatic','0')=='1' and self.recipient(direction):self.q.claim(self.recipient(direction),time.time(),direction=direction)
                 b=self.q.active_batch(direction)
                 if b:await self.process_batch(b)
             except asyncio.CancelledError:raise
@@ -505,7 +524,7 @@ class Worker:
             if not me.bot:raise UserError('Нужен отдельный бот, а не личный аккаунт Telegram.')
             self.log('Бот подключён: @'+str(me.username))
             await self.client.catch_up()
-            self.tasks=[asyncio.create_task(self.vpn.run()),asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.watch_loop())]
+            self.tasks=[asyncio.create_task(self.vpn.run()),asyncio.create_task(self.download_loop()),asyncio.create_task(self.schedule_loop()),asyncio.create_task(self.schedule_loop('dtf')),asyncio.create_task(self.schedule_loop('workshop')),asyncio.create_task(self.schedule_loop('photo30')),asyncio.create_task(self.schedule_loop('masterphoto')),asyncio.create_task(self.local_delivery.status_loop()),asyncio.create_task(self.features.broadcast_loop(self)),asyncio.create_task(self.watch_loop())]
             await self.client.run_until_disconnected()
         finally:
             self.running=False
